@@ -1,0 +1,35 @@
+.modal { position: absolute; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; visibility: hidden; transition: visibility 0s var(--tb); }
+.modal.open { visibility: visible; transition-delay: 0s; }
+.scrim { position: absolute; inset: 0; background: rgba(16, 17, 20, .7); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); opacity: 0; transition: opacity var(--tb) var(--ein); }
+.modal.open .scrim { opacity: 1; transition-timing-function: var(--ease); }
+.sheet { position: relative; width: min(1040px, 100%); max-height: calc(100% - 48px); overflow: auto; background: var(--s1); border-radius: var(--rl); opacity: 0; transform: translateY(34px) scale(.97); transition: opacity var(--tb) var(--ein), transform var(--tb) var(--ein); scrollbar-width: thin; scrollbar-color: var(--line) transparent; outline: 0; }
+.modal.open .sheet { opacity: 1; transform: none; transition: opacity var(--tb) var(--ease), transform var(--ts) var(--ease); }
+.sheet.is-swap > *:not(.x) { opacity: 0; transform: translateY(6px); }
+.sheet > * { transition: opacity var(--tf) var(--ein), transform var(--tf) var(--ein); }
+
+.dh { position: relative; height: 350px; overflow: hidden; background: var(--s2); }
+.dh::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, var(--s1) 2%, transparent 65%); }
+.dh .logo, .dh .fbt { position: absolute; z-index: 2; left: 40px; bottom: 26px; margin: 0; }
+.x { position: absolute; z-index: 5; top: 16px; right: 16px; width: 42px; height: 42px; border-radius: 50%; background: rgba(24, 26, 30, .6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: grid; place-items: center; transition: transform var(--tb) var(--ease), background var(--tf); }
+.x:hover { transform: rotate(90deg); background: rgba(24, 26, 30, .85); }
+.db { display: grid; grid-template-columns: 1fr 300px; gap: 40px; padding: 6px 40px 40px; }
+.db h4 { font: 700 12px var(--fb); letter-spacing: .14em; text-transform: uppercase; color: var(--mu); margin: 28px 0 12px; }
+.db h4:first-child { margin-top: 0; }
+.db p { color: #cfd3da; }
+.shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.shots > div { aspect-ratio: 16/9; border-radius: 10px; overflow: hidden; position: relative; transition: transform var(--tb) var(--ease); }
+.shots > div:hover { transform: scale(1.03); }
+.shots svg, .shots img { width: 100%; height: 100%; object-fit: cover; }
+.req { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.req > div { background: var(--s2); border-radius: var(--r); padding: 14px 16px; font-size: 13px; color: var(--mu); }
+.req b { display: block; color: var(--tx); font: 700 14px var(--fd); margin-bottom: 6px; }
+.side { display: flex; flex-direction: column; gap: 12px; }
+.facts { background: var(--s2); border-radius: var(--r); padding: 4px 16px; }
+.facts > div { display: flex; justify-content: space-between; gap: 16px; padding: 11px 0; font-size: 13px; border-bottom: 1px solid var(--line); text-align: right; }
+.facts > div:last-child { border: 0; }
+.facts span { color: var(--mu); text-align: left; }
+.side .sh4 { margin: 14px 0 2px; }
+.sim { display: flex; gap: 10px; align-items: center; background: var(--s2); border-radius: var(--r); padding: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background var(--tf), transform var(--tb) var(--ease); }
+.sim:hover { background: var(--line); transform: translateX(3px); }
+.sim .sa { width: 84px; aspect-ratio: 460/215; border-radius: 6px; overflow: hidden; position: relative; flex: none; }
+.sim .sa svg, .sim .sa img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }

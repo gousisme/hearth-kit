@@ -1,0 +1,691 @@
+{
+  "version": 1,
+  "site": {
+    "name": "Hearth",
+    "mark": "h",
+    "footer": "Hearth · mockup with placeholder data",
+    "user": {
+      "initials": "KT"
+    }
+  },
+  "nav": [
+    {
+      "id": "discover",
+      "label": "Discover",
+      "view": "home"
+    },
+    {
+      "id": "games",
+      "label": "Games",
+      "view": "browse"
+    },
+    {
+      "id": "library",
+      "label": "Library",
+      "view": "browse",
+      "filter": {
+        "saved": true
+      }
+    },
+    {
+      "id": "new",
+      "label": "New",
+      "view": "browse",
+      "filter": {
+        "sort": "new"
+      }
+    }
+  ],
+  "categories": [
+    {
+      "id": "action",
+      "label": "Action"
+    },
+    {
+      "id": "rpg",
+      "label": "RPG"
+    },
+    {
+      "id": "roguelike",
+      "label": "Roguelike"
+    },
+    {
+      "id": "cozy",
+      "label": "Cozy"
+    },
+    {
+      "id": "puzzle",
+      "label": "Puzzle"
+    },
+    {
+      "id": "co-op",
+      "label": "Co-op"
+    },
+    {
+      "id": "indie",
+      "label": "Indie"
+    },
+    {
+      "id": "souls-like",
+      "label": "Souls-like"
+    }
+  ],
+  "hero": [
+    {
+      "gameId": "elden"
+    },
+    {
+      "gameId": "bg3"
+    },
+    {
+      "gameId": "hades"
+    },
+    {
+      "gameId": "hk"
+    },
+    {
+      "gameId": "cp"
+    }
+  ],
+  "featured": [
+    {
+      "gameId": "elden",
+      "kicker": "Editor’s pick",
+      "headline": "Ten places in the Lands Between worth the climb",
+      "image": "hero",
+      "size": "wide"
+    },
+    {
+      "gameId": "stardew",
+      "kicker": "Slow evenings",
+      "headline": "Five cozy games to unwind with",
+      "image": "poster",
+      "size": "narrow"
+    }
+  ],
+  "shelves": [
+    {
+      "id": "top",
+      "title": "Top 10 this week",
+      "style": "ranked",
+      "gameIds": [
+        "elden",
+        "bg3",
+        "hades",
+        "hk",
+        "stardew",
+        "cp",
+        "celeste",
+        "disco"
+      ],
+      "filter": {}
+    },
+    {
+      "id": "new",
+      "title": "New this week",
+      "gameIds": [
+        "sekiro",
+        "celeste",
+        "slay",
+        "disco",
+        "terraria",
+        "portal",
+        "stardew",
+        "ds3"
+      ],
+      "filter": {
+        "sort": "new"
+      }
+    },
+    {
+      "id": "souls",
+      "title": "Souls-like & hard-won",
+      "gameIds": [
+        "ds3",
+        "sekiro",
+        "elden",
+        "hk",
+        "hades",
+        "celeste",
+        "cp"
+      ],
+      "filter": {
+        "category": "souls-like"
+      }
+    },
+    {
+      "id": "cozy",
+      "title": "Cozy corner",
+      "gameIds": [
+        "stardew",
+        "terraria",
+        "portal",
+        "slay",
+        "celeste",
+        "disco"
+      ],
+      "filter": {
+        "category": "cozy"
+      }
+    }
+  ],
+  "games": [
+    {
+      "id": "elden",
+      "title": "Elden Ring",
+      "steamAppId": 1245620,
+      "tagline": "Action RPG",
+      "description": "Rise, Tarnished, and be guided by grace to brandish the power of the Elden Ring across the Lands Between.",
+      "genres": [
+        "Open World",
+        "Souls-like",
+        "Fantasy"
+      ],
+      "categories": [
+        "action",
+        "fantasy",
+        "open-world",
+        "rpg",
+        "souls-like"
+      ],
+      "developer": "FromSoftware",
+      "releaseYear": 2022,
+      "size": "60 GB",
+      "rating": "Very Positive",
+      "hue": 38,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/elden",
+      "sourceUrl": "https://example.com/games/elden"
+    },
+    {
+      "id": "bg3",
+      "title": "Baldur's Gate 3",
+      "steamAppId": 1086940,
+      "tagline": "CRPG",
+      "description": "Gather your party and return to the Forgotten Realms in a tale of fellowship, betrayal and the lure of absolute power.",
+      "genres": [
+        "Party-Based",
+        "Story Rich",
+        "Fantasy"
+      ],
+      "categories": [
+        "fantasy",
+        "party-based",
+        "rpg",
+        "story-rich"
+      ],
+      "developer": "Larian Studios",
+      "releaseYear": 2023,
+      "size": "150 GB",
+      "rating": "Overwhelmingly Positive",
+      "hue": 350,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/bg3",
+      "sourceUrl": "https://example.com/games/bg3"
+    },
+    {
+      "id": "hades",
+      "title": "Hades",
+      "steamAppId": 1145360,
+      "tagline": "Roguelike",
+      "description": "Defy the god of the dead as you hack and slash out of the Underworld in this rogue-like dungeon crawler.",
+      "genres": [
+        "Action",
+        "Indie",
+        "Mythology"
+      ],
+      "categories": [
+        "action",
+        "indie",
+        "mythology",
+        "roguelike"
+      ],
+      "developer": "Supergiant Games",
+      "releaseYear": 2020,
+      "size": "15 GB",
+      "rating": "Overwhelmingly Positive",
+      "hue": 10,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/hades",
+      "sourceUrl": "https://example.com/games/hades"
+    },
+    {
+      "id": "hk",
+      "title": "Hollow Knight",
+      "steamAppId": 367520,
+      "tagline": "Metroidvania",
+      "description": "Descend into a vast, ruined kingdom of insects and heroes in this hand-drawn action adventure.",
+      "genres": [
+        "2D",
+        "Atmospheric",
+        "Indie"
+      ],
+      "categories": [
+        "2d",
+        "atmospheric",
+        "indie"
+      ],
+      "developer": "Team Cherry",
+      "releaseYear": 2017,
+      "size": "9 GB",
+      "rating": "Overwhelmingly Positive",
+      "hue": 215,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/hk",
+      "sourceUrl": "https://example.com/games/hk"
+    },
+    {
+      "id": "cp",
+      "title": "Cyberpunk 2077",
+      "steamAppId": 1091500,
+      "tagline": "Action RPG",
+      "description": "An open-world action-adventure story set in Night City, a megalopolis obsessed with power and body modification.",
+      "genres": [
+        "Open World",
+        "Sci-fi",
+        "Futuristic"
+      ],
+      "categories": [
+        "action",
+        "futuristic",
+        "open-world",
+        "rpg",
+        "sci-fi"
+      ],
+      "developer": "CD PROJEKT RED",
+      "releaseYear": 2020,
+      "size": "70 GB",
+      "rating": "Very Positive",
+      "hue": 55,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/cp",
+      "sourceUrl": "https://example.com/games/cp"
+    },
+    {
+      "id": "stardew",
+      "title": "Stardew Valley",
+      "steamAppId": 413150,
+      "tagline": "Farming Sim",
+      "description": "Inherit your grandfather’s old farm plot and build a new life in the countryside.",
+      "genres": [
+        "Cozy",
+        "Pixel Art",
+        "Co-op"
+      ],
+      "categories": [
+        "co-op",
+        "cozy",
+        "pixel-art"
+      ],
+      "developer": "ConcernedApe",
+      "releaseYear": 2016,
+      "size": "1 GB",
+      "rating": "Overwhelmingly Positive",
+      "hue": 130,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/stardew",
+      "sourceUrl": "https://example.com/games/stardew"
+    },
+    {
+      "id": "celeste",
+      "title": "Celeste",
+      "steamAppId": 504230,
+      "tagline": "Platformer",
+      "description": "Help Madeline survive her inner demons on her journey to the top of Celeste Mountain.",
+      "genres": [
+        "Precision",
+        "Story Rich",
+        "Pixel Art"
+      ],
+      "categories": [
+        "pixel-art",
+        "precision",
+        "story-rich"
+      ],
+      "developer": "Maddy Makes Games",
+      "releaseYear": 2018,
+      "size": "1.2 GB",
+      "rating": "Overwhelmingly Positive",
+      "hue": 300,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/celeste",
+      "sourceUrl": "https://example.com/games/celeste"
+    },
+    {
+      "id": "disco",
+      "title": "Disco Elysium",
+      "steamAppId": 632470,
+      "tagline": "RPG",
+      "description": "A groundbreaking role playing game. You’re a detective with a unique skill system at your disposal.",
+      "genres": [
+        "Detective",
+        "Choices Matter",
+        "Dark"
+      ],
+      "categories": [
+        "choices-matter",
+        "dark",
+        "detective",
+        "rpg"
+      ],
+      "developer": "ZA/UM",
+      "releaseYear": 2019,
+      "size": "20 GB",
+      "rating": "Very Positive",
+      "hue": 25,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/disco",
+      "sourceUrl": "https://example.com/games/disco"
+    },
+    {
+      "id": "ds3",
+      "title": "Dark Souls III",
+      "steamAppId": 374320,
+      "tagline": "Action RPG",
+      "description": "As fires fade and the world falls into ruin, journey into a universe filled with colossal enemies.",
+      "genres": [
+        "Souls-like",
+        "Difficult",
+        "Dark Fantasy"
+      ],
+      "categories": [
+        "action",
+        "dark-fantasy",
+        "difficult",
+        "rpg",
+        "souls-like"
+      ],
+      "developer": "FromSoftware",
+      "releaseYear": 2016,
+      "size": "25 GB",
+      "rating": "Very Positive",
+      "hue": 20,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/ds3",
+      "sourceUrl": "https://example.com/games/ds3"
+    },
+    {
+      "id": "witcher",
+      "title": "The Witcher 3",
+      "steamAppId": 292030,
+      "tagline": "Action RPG",
+      "description": "Become a monster slayer for hire and embark on an epic journey to find the child of prophecy.",
+      "genres": [
+        "Open World",
+        "Story Rich",
+        "Fantasy"
+      ],
+      "categories": [
+        "action",
+        "fantasy",
+        "open-world",
+        "rpg",
+        "story-rich"
+      ],
+      "developer": "CD PROJEKT RED",
+      "releaseYear": 2015,
+      "size": "50 GB",
+      "rating": "Overwhelmingly Positive",
+      "hue": 150,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/witcher",
+      "sourceUrl": "https://example.com/games/witcher"
+    },
+    {
+      "id": "sekiro",
+      "title": "Sekiro: Shadows Die Twice",
+      "steamAppId": 814380,
+      "tagline": "Action",
+      "description": "Carve your own clever path to vengeance in an Sengoku-era Japan reimagined by FromSoftware.",
+      "genres": [
+        "Ninja",
+        "Difficult",
+        "Samurai"
+      ],
+      "categories": [
+        "action",
+        "difficult",
+        "ninja",
+        "samurai"
+      ],
+      "developer": "FromSoftware",
+      "releaseYear": 2019,
+      "size": "25 GB",
+      "rating": "Very Positive",
+      "hue": 5,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/sekiro",
+      "sourceUrl": "https://example.com/games/sekiro"
+    },
+    {
+      "id": "terraria",
+      "title": "Terraria",
+      "steamAppId": 105600,
+      "tagline": "Sandbox",
+      "description": "Dig, fight, explore, build! Nothing is impossible in this action-packed adventure game.",
+      "genres": [
+        "Survival",
+        "Crafting",
+        "Co-op"
+      ],
+      "categories": [
+        "co-op",
+        "crafting",
+        "survival"
+      ],
+      "developer": "Re-Logic",
+      "releaseYear": 2011,
+      "size": "300 MB",
+      "rating": "Overwhelmingly Positive",
+      "hue": 100,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/terraria",
+      "sourceUrl": "https://example.com/games/terraria"
+    },
+    {
+      "id": "slay",
+      "title": "Slay the Spire",
+      "steamAppId": 646570,
+      "tagline": "Deckbuilder",
+      "description": "We fused card games and roguelikes together to make the best single player deckbuilder we could.",
+      "genres": [
+        "Roguelike",
+        "Card Game",
+        "Indie"
+      ],
+      "categories": [
+        "card-game",
+        "indie",
+        "roguelike"
+      ],
+      "developer": "Mega Crit",
+      "releaseYear": 2019,
+      "size": "1 GB",
+      "rating": "Overwhelmingly Positive",
+      "hue": 260,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/slay",
+      "sourceUrl": "https://example.com/games/slay"
+    },
+    {
+      "id": "portal",
+      "title": "Portal 2",
+      "steamAppId": 620,
+      "tagline": "Puzzle",
+      "description": "The “Perpetual Testing Initiative” has been expanded to allow you to design co-op puzzles for you and a friend.",
+      "genres": [
+        "Co-op",
+        "Sci-fi",
+        "Comedy"
+      ],
+      "categories": [
+        "co-op",
+        "comedy",
+        "puzzle",
+        "sci-fi"
+      ],
+      "developer": "Valve",
+      "releaseYear": 2011,
+      "size": "12 GB",
+      "rating": "Overwhelmingly Positive",
+      "hue": 200,
+      "requirements": {
+        "minimum": {
+          "OS": "Windows 10",
+          "CPU": "Core i5-8400",
+          "RAM": "8 GB"
+        },
+        "recommended": {
+          "OS": "Windows 11",
+          "CPU": "Core i7-8700K",
+          "RAM": "16 GB"
+        }
+      },
+      "downloadUrl": "https://example.com/download/portal",
+      "sourceUrl": "https://example.com/games/portal"
+    }
+  ]
+}

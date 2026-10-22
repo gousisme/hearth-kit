@@ -1,0 +1,6 @@
+.bh { display: flex; align-items: baseline; gap: 16px; }
+.bh h1 { font: 800 clamp(32px, 4vw, 52px)/1 var(--fd); letter-spacing: -.03em; }
+.bh .count { color: var(--mu); font-size: 14px; }
+.browse .chips { padding-top: 22px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 28px 18px; margin-top: 30px; }
+.grid .card { width: auto; }

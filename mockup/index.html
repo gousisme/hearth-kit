@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hearth — mockup</title>
+<!-- Standalone mockup: the real kit (dist/) fed with data/sample.json. Open this file directly. -->
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../dist/hearth.css">
+<style>html,body{margin:0;background:#24262b}</style>
+</head><body>
+<script src="../dist/hearth-ui.js"></script>
+<script src="sample-data.js"></script>
+<script>
+  // Light-DOM mount (no `css` option): the page links dist/hearth.css itself. Great for development.
+  window.app = HearthUI.mount({ data: HEARTH_SAMPLE, options: { placeholders: true } });
+</script>
+</body></html>

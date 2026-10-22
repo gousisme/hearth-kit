@@ -1,0 +1,45 @@
+.hero { position: relative; height: min(72vh, 660px); border-radius: var(--rhero); overflow: hidden; background: var(--s1); }
+.slide { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity var(--ts) var(--ease), visibility 0s var(--ts); }
+.slide.on { opacity: 1; visibility: visible; transition-delay: 0s; }
+/* slow push-in on the active slide; transform only, so it stays on the compositor */
+.art { position: absolute; inset: 0; transform: scale(1.07); transition: transform 10s linear; }
+.slide.on .art { transform: scale(1); }
+.hero.static .art { transform: none; transition: none; }
+/* the one functional gradient: darkens art so text stays readable */
+.slide::before { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(0deg, rgba(22, 24, 28, .92), rgba(22, 24, 28, 0) 58%), linear-gradient(90deg, rgba(22, 24, 28, .5), transparent 50%), linear-gradient(180deg, rgba(22, 24, 28, .35), transparent 22%); }
+
+.info { position: absolute; z-index: 2; left: 48px; bottom: 48px; max-width: 560px; }
+.info > * { opacity: 0; transform: translateY(20px); transition: opacity var(--tb) var(--ein), transform var(--tb) var(--ein); }
+.slide.on .info > * { opacity: 1; transform: none; transition: opacity var(--ts) var(--ease), transform var(--ts) var(--ease); }
+.slide.on .info > :nth-child(2) { transition-delay: 90ms; }
+.slide.on .info > :nth-child(3) { transition-delay: 180ms; }
+.slide.on .info > :nth-child(4) { transition-delay: 270ms; }
+.chip-new { display: inline-flex; align-items: center; gap: 8px; background: rgba(24, 26, 30, .55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding: 5px 12px; border-radius: 99px; font: 600 12px var(--fb); margin-bottom: 16px; }
+.chip-new i { width: 7px; height: 7px; border-radius: 50%; background: var(--ac); }
+.logo { max-width: 380px; max-height: 140px; object-fit: contain; object-position: left; margin-bottom: 16px; filter: drop-shadow(0 2px 14px rgba(0, 0, 0, .4)); }
+.fbt { font: 800 clamp(44px, 6vw, 88px)/.9 var(--fd); letter-spacing: -.035em; text-transform: uppercase; margin-bottom: 16px; text-shadow: 0 2px 24px rgba(0, 0, 0, .35); }
+.tags { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-weight: 500; font-size: 14px; margin-bottom: 20px; }
+.tags i { width: 4px; height: 4px; border-radius: 50%; background: var(--tx); opacity: .6; }
+.tags:empty { display: none; }
+.acts { display: flex; gap: 12px; }
+
+/* LOADING LINES (hero progress). Active line widens and fills over --dur; paused with the hero. */
+.segs { position: absolute; z-index: 3; right: 48px; bottom: 62px; display: flex; gap: 8px; align-items: center; }
+.sg { position: relative; flex: none; width: 44px; height: 22px; transition: width var(--tb) var(--ease); }
+.sg::before, .sg i { content: ""; position: absolute; left: 0; right: 0; top: 9px; height: 4px; border-radius: 4px; }
+.sg::before { background: rgba(255, 255, 255, .28); transition: background var(--tf); }
+.sg:hover::before { background: rgba(255, 255, 255, .5); }
+.sg i { background: var(--ac); transform: scaleX(0); transform-origin: left; }
+.sg.on { width: 76px; }
+.sg.on i { animation: hearth-fill var(--dur, 7s) linear forwards; }
+.hero.paused .sg.on i { animation-play-state: paused; }
+.hero.static .sg.on i { animation: none; transform: scaleX(1); }
+@keyframes hearth-fill { to { transform: scaleX(1); } }
+
+/* categories */
+.chips { display: flex; gap: 8px; overflow-x: auto; padding: 30px 0 4px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; padding: 8px 18px; border-radius: 99px; border: 1px solid var(--line); color: var(--mu); font-weight: 500; transition: color var(--tf), border-color var(--tf), background var(--tb) var(--ease), transform var(--tb) var(--ease); }
+.chip:hover { color: var(--tx); border-color: var(--mu); transform: translateY(-2px); }
+.chip.on { background: var(--tx); color: var(--ink); border-color: var(--tx); }
+.chip:active { transform: scale(.96); }

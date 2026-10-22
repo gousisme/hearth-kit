@@ -1,0 +1,23 @@
+/* TOKENS — everything visual that is a decision lives here. Override from options.theme
+   (e.g. theme:{ac:'#ff6b3d', ink:'#1a0b05'}) or edit this file. See docs/02-design-system.md. */
+:host { all: initial; display: block; position: fixed; inset: 0; z-index: 2147483647; }
+
+.hearth {
+  /* surface scale: soft-lifted charcoal, deliberately NOT near-black */
+  --bg: #24262b; --s1: #2c2f36; --s2: #363a43; --line: #454a55;
+  /* text */
+  --tx: #f1f2ee; --mu: #9ea3ad;
+  /* the one accent, and the ink that sits on it */
+  --ac: #c6f432; --ink: #13150a;
+  /* radii */
+  --r: 12px; --rl: 26px; --rhero: 28px;
+  /* motion: three durations, two curves. See docs/03-motion.md */
+  --ease: cubic-bezier(.22, .8, .24, 1);   /* enter / hover  — decelerates */
+  --ein: cubic-bezier(.5, 0, .8, .3);      /* leave          — accelerates */
+  --tf: 160ms; --tb: 320ms; --ts: 700ms;
+  /* type */
+  --fd: 'Bricolage Grotesque', 'Trebuchet MS', system-ui, sans-serif;
+  --fb: 'Instrument Sans', system-ui, sans-serif;
+  /* layout */
+  --max: 1640px; --gut: clamp(20px, 4.6vw, 84px);
+}

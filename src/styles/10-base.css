@@ -1,0 +1,41 @@
+.hearth { position: fixed; inset: 0; overflow: hidden; background: var(--bg); color: var(--tx); font: 400 15px/1.5 var(--fb); -webkit-font-smoothing: antialiased; text-size-adjust: 100%; }
+/* resets use :where() so they have ZERO specificity and every component rule beats them */
+:where(.hearth) *, :where(.hearth) *::before, :where(.hearth) *::after { box-sizing: border-box; }
+:where(.hearth) * { margin: 0; }
+:where(.hearth) button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
+:where(.hearth) img, :where(.hearth) svg { display: block; }
+:where(.hearth) :focus-visible { outline: 2px solid var(--ac); outline-offset: 3px; }
+:where(.hearth) ::selection { background: var(--ac); color: var(--ink); }
+
+/* The scroller. The bar and modal are siblings, so they never scroll with it. */
+.scroll { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: var(--line) transparent; scrollbar-gutter: stable; }
+.scroll.is-locked { overflow: hidden; }
+.bar-slot { display: contents; }
+.page { max-width: var(--max); margin-inline: auto; padding: 22px var(--gut) 56px; transition: opacity var(--tb) var(--ease), transform var(--tb) var(--ease); }
+.page.has-bar { padding-top: 128px; }
+.foot { max-width: var(--max); margin: 0 auto; padding: 0 var(--gut) 40px; color: var(--mu); font-size: 13px; }
+.foot:empty { display: none; }
+
+/* view swap + first load: out = quick fade/sink (ease-in), in = slower rise (ease-out) */
+.page.is-out { opacity: 0; transform: translateY(12px); transition-duration: 200ms; transition-timing-function: var(--ein); }
+
+/* scroll reveal */
+.rv { opacity: 0; transform: translateY(26px); transition: opacity var(--ts) var(--ease), transform var(--ts) var(--ease); transition-delay: calc(var(--i, 0) * 28ms); }
+.rv.in { opacity: 1; transform: none; }
+
+/* artwork: real image fades in over the generated art */
+.layer { position: absolute; inset: 0; }
+.layer > svg { width: 100%; height: 100%; }
+.art-img { opacity: 0; transition: opacity var(--ts) var(--ease); }
+.art-img.is-loaded { opacity: 1; }
+.layer > .art-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* empty states */
+.empty { text-align: center; padding: 72px 0; color: var(--mu); }
+.empty h3 { font: 700 22px var(--fd); color: var(--tx); margin-bottom: 6px; }
+.empty .btn { margin-top: 22px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hearth *, .hearth *::before, .hearth *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
+  .rv { opacity: 1; transform: none; }
+}
