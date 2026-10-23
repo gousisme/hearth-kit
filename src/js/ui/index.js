@@ -5,5 +5,5 @@ import { normalize } from './core/data.js';
 
 export const version = '__HEARTH_VERSION__';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-export const features = { lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true };
+export const features = { lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true };
 export { mount, validate, steam, normalize };

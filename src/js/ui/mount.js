@@ -1,6 +1,7 @@
 import { esc, safeUrl, debounce, delay } from '../shared/util.js';
 import { normalize, addGames } from './core/data.js';
 import { createArt } from './core/art.js';
+import { createEnrich } from './core/enrich.js';
 import { reveal, swap, T, reduced } from './core/motion.js';
 import { heroHtml, initHero } from './components/hero.js';
 import { chipsHtml } from './components/chips.js';
@@ -19,6 +20,7 @@ import { browseHtml, initGrid } from './components/browse.js';
  *           (this is the Tampermonkey path: the original site's CSS can't touch us, and vice versa).
  *           If omitted, the UI renders in the light DOM and expects dist/hearth.css to be linked (mockup/dev path).
  *  options  { autoplay, autoplayMs, placeholders, theme, saved, route, imageLoader,
+ *             resolveDetail(game) → Promise<patch|null> // called once, the first time a game's sheet opens: { description, downloads[{label,href,kind,hint}], password, guide[{title,steps[]}], update{date,version,text}, facts[{label,value}] }
  *             resolveArt(game) → Promise<patch|null>   // called lazily, once per game, right before its first image loads; patch = { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … }
  *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on), onUser(),
  *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game }
@@ -46,6 +48,8 @@ export function mount({ target = document.body, data, css = null, shadow, option
   const active = () => scope.activeElement || document.activeElement;
 
   let D = normalize(data);
+  const enrich = createEnrich({ resolve: opt.resolveDetail });
+  let dlOpen = false;                                // the download panel of the open sheet is unfolded
   const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, game: id => D.byId.get(String(id)) });
   const saved = new Set((opt.saved || []).map(String));
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
@@ -124,7 +128,9 @@ export function mount({ target = document.body, data, css = null, shadow, option
   async function openGame(id) {
     const g = D.byId.get(String(id)); if (!g) return;
     if (openId === g.id && $modal.classList.contains('open')) return;
-    const fill = () => { $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders }); art.hydrate($sheet); $sheet.scrollTop = 0; };
+    if (openId !== g.id) dlOpen = false;
+    enrich.applyCached(g);
+    const fill = () => { $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }); art.hydrate($sheet); $sheet.scrollTop = 0; };
     const sig = () => [g.description, g.developer, g.publisher, g.releaseYear, g.rating].join('|'), s0 = sig();
     if (!$modal.classList.contains('open')) {
       lastFocus = active(); fill();
@@ -134,6 +140,8 @@ export function mount({ target = document.body, data, css = null, shadow, option
     openId = g.id;
     // art/details that were still being resolved when the sheet opened: show them as soon as they arrive (the sheet never waits)
     if (opt.resolveArt) art.settle(g).then(() => { if (openId === g.id && sig() !== s0) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
+    // downloads / how-to-connect / update info are fetched on demand: the sheet opens at once with skeletons and fills in when they arrive
+    if (!enrich.done(g.id)) enrich.get(g).then(() => { if (openId === g.id) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
     opt.onOpen && opt.onOpen(g);
   }
   function closeGame() {
@@ -156,6 +164,11 @@ export function mount({ target = document.body, data, css = null, shadow, option
   /* ── actions ────────────────────────────────────────────────────────────────────────────── */
   function doGet(id, btn) {
     const g = D.byId.get(String(id)); if (!g) return;
+    if (btn && btn.closest('.sheet')) {              // inside the sheet the options unfold under the button instead of a floating menu
+      const box = btn.closest('.getbox');
+      if (box) { dlOpen = !dlOpen; box.classList.toggle('open', dlOpen); btn.setAttribute('aria-expanded', String(dlOpen)); return; }
+      if (g.downloads.length === 1) { window.open(safeUrl(g.downloads[0].href), '_blank', 'noopener'); return; }
+    }
     let r; try { r = opt.onGet && opt.onGet(g, { button: btn }); } catch (e) { console.error('[hearth] onGet failed', e); }
     if (r === false) return;                       // onGet took over (e.g. opened its own menu): no default action and no "Starting…" flash
     if (g.downloadUrl && safeUrl(g.downloadUrl)) window.open(safeUrl(g.downloadUrl), '_blank', 'noopener');
@@ -178,6 +191,10 @@ export function mount({ target = document.body, data, css = null, shadow, option
   const onClick = e => {
     const t = e.target, q = s => t.closest(s);
     let el;
+    if ((el = q('[data-copy]'))) {
+      e.stopPropagation(); const v = el.dataset.copy, em = el.querySelector('em'), done = () => { el.classList.add('ok'); if (em) em.textContent = 'Copied'; setTimeout(() => { el.classList.remove('ok'); if (em) em.textContent = 'Copy'; }, 1400); };
+      try { navigator.clipboard.writeText(v).then(done, () => {}); } catch (err) { /* clipboard blocked: the code is selectable */ } return;
+    }
     if ((el = q('[data-get]'))) { e.stopPropagation(); return doGet(el.dataset.get, el); }
     if ((el = q('[data-wish]'))) return toggleSaved(el.dataset.wish, el);
     if (q('[data-close]')) return closeGame();

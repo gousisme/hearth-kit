@@ -79,3 +79,17 @@ Given an app id, artwork URLs are built from Steam's CDN. `HearthUI.steam` expos
 **Fallback chain per slot** (`candidates()` in `core/art.js`): `art.<slot>` override → Steam URL → (hero only) header → `art.fallback`. While loading the slot is a skeleton; if everything fails it is a flat tile (posters show the title). Logos fall back to the title as text. Optional `options.resolveArt(game)` lets the userscript find Steam ids / art lazily, per card, right before its image loads. A failed image never breaks layout.
 
 **Caveats (verify against the real CDN during development):** Steam has been moving some apps' library assets to hashed sub-paths, so the plain URL above may 404 for certain (typically newer) apps. The fallback chain hides this, but for such a game set `art.poster/hero/logo` explicitly if the site provides art or you can resolve the real URLs. Also, a host page's CSP may block the Steam CDN; see [07-gotchas.md](07-gotchas.md).
+
+
+## Rich detail (optional)
+
+All optional; usually supplied lazily through `options.resolveDetail(game)` so the sheet opens at once and fills in (skeletons meanwhile).
+
+```jsonc
+"downloads": [{ "label": "Online-Fix Hosters", "href": "https://…", "kind": "hosters|drive|fix|torrent", "hint": "Game + fix · direct download" }],
+"password": "online-fix.me",                       // shown under the download list with a Copy button
+"guide": [{ "title": "Join a game", "steps": ["Open the lobby list", "Enter your friend's code"] }],   // "How to connect"
+"update": { "date": "17 Sep 2026, 18:27", "version": "1.5.1.2608", "text": "Game updated to version 1.5.1.2608" },
+"facts": [{ "label": "Released", "value": "4 Aug 2026" }]  // replaces the base fact with the same label, others are appended
+```
+With 2+ `downloads` the Get button in the sheet unfolds them directly beneath itself (one card); with one it opens it; with none it falls back to `options.onGet` / `downloadUrl`.

@@ -38,6 +38,9 @@ const kv = o => {
   return out;
 };
 
+const list = v => (Array.isArray(v) ? v : []);
+const http = u => /^https?:\/\//i.test(str(u));
+
 function coerceGame(g) {
   const art = g.art && typeof g.art === 'object' ? g.art : {};
   const appId = parseInt(g.steamAppId, 10);
@@ -63,6 +66,12 @@ function coerceGame(g) {
     similarIds: strList(g.similarIds),
     downloadUrl: str(g.downloadUrl),
     sourceUrl: str(g.sourceUrl),
+    // — rich detail (all optional; usually filled lazily through options.resolveDetail) —
+    downloads: list(g.downloads).filter(d => d && str(d.label) && http(d.href)).map(d => ({ label: str(d.label), href: str(d.href), kind: str(d.kind), hint: str(d.hint) })),
+    password: str(g.password),
+    guide: list(g.guide).map(s => ({ title: str(s && s.title), steps: strList(s && s.steps) })).filter(s => s.steps.length),
+    update: g.update && typeof g.update === 'object' && (str(g.update.date) || str(g.update.version) || str(g.update.text)) ? { date: str(g.update.date), version: str(g.update.version), text: str(g.update.text) } : null,
+    facts: list(g.facts).filter(f => f && str(f.label) && str(f.value)).map(f => ({ label: str(f.label), value: str(f.value) })),
   };
 }
 
@@ -347,6 +356,34 @@ function createArt({ root: scope, loader = null, resolve = null, game }) {
   };
 }
 
+/* ── src/js/ui/core/enrich.js ── */
+const FIELDS = ['description', 'developer', 'publisher', 'releaseYear', 'size', 'downloads', 'password', 'guide', 'update', 'facts'];
+
+/**
+ * Lazy detail data for the game sheet.
+ *   resolve(game) → Promise<patch|null>  (options.resolveDetail) — called once per game, the first time its sheet opens.
+ *   patch may carry: description, developer, publisher, releaseYear, size, downloads[], password, guide[], update, facts[]
+ * The patch is cached by game id and re-applied to every new copy of the game (the data can be re-normalized).
+ */
+function createEnrich({ resolve }) {
+  const calls = new Map(), patches = new Map();
+  function apply(g, p) {
+    if (!p || typeof p !== 'object') return;
+    const n = coerceGame({ id: g.id, title: g.title, ...p });
+    for (const k of FIELDS) { const v = n[k]; if (Array.isArray(v) ? v.length : v) g[k] = v; }
+  }
+  return {
+    /** true once the patch has arrived (or when there is nothing to wait for) */
+    done: id => !resolve || patches.has(id),
+    applyCached(g) { if (patches.has(g.id)) apply(g, patches.get(g.id)); },
+    get(g) {
+      if (!resolve) return Promise.resolve();
+      if (!calls.has(g.id)) calls.set(g.id, Promise.resolve().then(() => resolve(g)).catch(() => null).then(p => { patches.set(g.id, p); return p; }));
+      return calls.get(g.id).then(p => apply(g, p));
+    },
+  };
+}
+
 /* ── src/js/ui/core/motion.js ── */
 /**
  * MOTION SYSTEM (see docs/03-motion.md)
@@ -405,6 +442,14 @@ const ICON = {
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   next: '<path d="m9 5 7 7-7 7"/>',
   prev: '<path d="m15 5-7 7 7 7"/>',
+  chev: '<path d="m6 9 6 6 6-6"/>',
+  cloud: '<path d="M7 18a4 4 0 0 1-.5-7.97A6 6 0 0 1 18 9.5 4.25 4.25 0 0 1 17.5 18Z"/>',
+  drive: '<rect x="3" y="13" width="18" height="7" rx="2"/><path d="m5 13 2.4-7a2 2 0 0 1 1.9-1.4h5.4a2 2 0 0 1 1.9 1.4L19 13M7 16.5h.01M11 16.5h3"/>',
+  fix: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L3 17.7V21h3.3l6.3-6.3a4 4 0 0 0 5.1-5.4l-2.6 2.6-2.4-.5-.5-2.4Z"/>',
+  torrent: '<path d="M6 3v8a6 6 0 0 0 12 0V3h-4v8a2 2 0 0 1-4 0V3Z"/><path d="M6 7h4M14 7h4"/>',
+  ext: '<path d="M7 17 17 7M8 7h9v9"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
+  check: '<path d="m5 12 5 5 9-10"/>',
 };
 
 function ic(path, size = 18, stroke = 2.4) {
@@ -586,27 +631,52 @@ function searchHtml() {
 
 /* ── src/js/ui/components/detail.js ── */
 const DEMO_REQ = { minimum: { OS: 'Windows 10', CPU: 'Core i5-8400', RAM: '8 GB' }, recommended: { OS: 'Windows 11', CPU: 'Core i7-8700K', RAM: '16 GB' } };
+const KIND_ICON = { hosters: ICON.cloud, drive: ICON.drive, fix: ICON.fix, torrent: ICON.torrent };
+
+/** The download list that opens directly under the Get button (one card, not a floating menu). */
+function getBox(g, { pending, dlOpen }) {
+  const dl = g.downloads, expandable = dl.length > 1 || pending;
+  const label = 'Get game' + (g.size ? ' · ' + g.size : '');
+  if (!expandable) return button(label, { attrs: `data-get="${esc(g.id)}"`, cls: 'w' });
+  const rows = pending && !dl.length
+    ? [1, 2, 3].map(() => '<div class="dl sk"><span class="di"></span><span class="dt"><i></i><i></i></span></div>').join('')
+    : dl.map(d => `<a class="dl" href="${esc(safeUrl(d.href))}" target="_blank" rel="noopener noreferrer"><span class="di">${ic(KIND_ICON[d.kind] || ICON.download, 17)}</span><span class="dt"><b>${esc(d.label)}</b>${d.hint ? `<small>${esc(d.hint)}</small>` : ''}</span><span class="da">${ic(ICON.ext, 15)}</span></a>`).join('');
+  const pw = g.password ? `<div class="pw"><span>Archive password</span><code>${esc(g.password)}</code><button type="button" data-copy="${esc(g.password)}" aria-label="Copy password">${ic(ICON.copy, 14)}<em>Copy</em></button></div>` : '';
+  return `<div class="getbox${dlOpen ? ' open' : ''}">${button(label, { icon: ICON.chev, attrs: `data-get="${esc(g.id)}" aria-expanded="${dlOpen ? 'true' : 'false'}"`, cls: 'w' })}<div class="dlp"><div class="dli"><div class="dlin">${rows}${pw}</div></div></div></div>`;
+}
+
+/** "How to connect": install / launch / join / host, as numbered cards. Skeleton lines while it is being fetched. */
+function guideHtml(g, pending) {
+  if (!g.guide.length) return pending ? '<h4>How to connect</h4><div class="guide"><section class="gsec sk"><i></i><i></i><i></i></section><section class="gsec sk"><i></i><i></i></section></div>' : '';
+  return `<h4>How to connect</h4><div class="guide">${g.guide.map(s => `<section class="gsec">${s.title ? `<h5>${esc(s.title)}</h5>` : ''}<ol>${s.steps.map(t => `<li><span>${esc(t)}</span></li>`).join('')}</ol></section>`).join('')}</div>`;
+}
 
 /** Game detail sheet (rendered into the modal). Sections with no data are omitted. */
-function detailHtml(D, g, { saved = false, placeholders = false } = {}) {
+function detailHtml(D, g, { saved = false, placeholders = false, pending = false, dlOpen = false } = {}) {
   const req = (g.requirements.minimum && Object.keys(g.requirements.minimum).length) || Object.keys(g.requirements.recommended).length ? g.requirements : placeholders ? DEMO_REQ : null;
   const reqBox = (title, o) => (o && Object.keys(o).length ? `<div><b>${title}</b>${Object.entries(o).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join('<br>')}</div>` : '');
   const shots = g.screenshots.map(safeUrl).filter(Boolean);
   const shotsHtml = shots.length
     ? shots.slice(0, 6).map(u => `<div><img src="${esc(u)}" alt="" loading="lazy" decoding="async"></div>`).join('')
     : '';
-  const facts = [['Developer', g.developer], ['Publisher', g.publisher], ['Released', g.releaseYear], ['Reception', g.rating], ['Genre', g.genres[0]], ['Size', g.size]].filter(([, v]) => v);
+  // base facts, in a fixed order; an entry in g.facts with the same label replaces the base value, the rest are appended
+  const base = [['Developer', g.developer], ['Publisher', g.publisher], ['Released', g.releaseYear], ['Reception', g.rating], ['Genre', g.genres[0]], ['Size', g.size]];
+  const extra = g.facts || [];
+  const facts = [...base.map(([k, v]) => [k, (extra.find(f => f.label === k) || {}).value || v]), ...extra.filter(f => !base.some(([k]) => k === f.label)).map(f => [f.label, f.value])].filter(([, v]) => v);
+  const upd = g.update ? `<div class="upd">${g.update.version ? `<span class="v">v${esc(g.update.version.replace(/^v/i, ''))}</span>` : ''}<div><b>${g.update.date ? 'Updated ' + esc(g.update.date) : 'Latest update'}</b>${g.update.text ? `<span>${esc(g.update.text)}</span>` : ''}</div></div>` : '';
   const sim = similar(D, g);
   return `<button class="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>
   <div class="dh">${layer(g, 'hero')}${artImg(g, 'logo', 'logo')}</div>
   <div class="db"><div>
     ${g.description ? `<h4>About</h4><p>${esc(g.description)}</p>` : ''}
+    ${upd}
+    ${guideHtml(g, pending)}
     ${shotsHtml ? `<h4>Screenshots</h4><div class="shots">${shotsHtml}</div>` : ''}
     ${req ? `<h4>System requirements</h4><div class="req">${reqBox('Minimum', req.minimum)}${reqBox('Recommended', req.recommended)}</div>` : ''}
   </div>
-  <aside class="side">${button('Get game' + (g.size ? ' · ' + g.size : ''), { attrs: `data-get="${esc(g.id)}"`, cls: 'w' })}
+  <aside class="side">${getBox(g, { pending, dlOpen })}
     <button class="btn glass alt${saved ? ' on' : ''}" data-wish="${esc(g.id)}">${ic(ICON.heart)}<span>${saved ? 'Saved' : 'Save for later'}</span></button>
-    ${facts.length ? `<div class="facts">${facts.map(([k, v]) => `<div><span>${k}</span>${esc(v)}</div>`).join('')}</div>` : ''}
+    ${facts.length ? `<div class="facts">${facts.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : ''}
     ${sim.length ? `<h4 class="sh4">Similar</h4>${sim.map(x => `<div class="sim" tabindex="0" role="button" data-open="${esc(x.id)}"><div class="sa is-skel">${artImg(x, 'header')}</div>${esc(x.title)}</div>`).join('')}` : ''}
   </aside></div>`;
 }
@@ -691,6 +761,7 @@ function initGrid(root, D, route, savedIds, art, loadMore) {
  *           (this is the Tampermonkey path: the original site's CSS can't touch us, and vice versa).
  *           If omitted, the UI renders in the light DOM and expects dist/hearth.css to be linked (mockup/dev path).
  *  options  { autoplay, autoplayMs, placeholders, theme, saved, route, imageLoader,
+ *             resolveDetail(game) → Promise<patch|null> // called once, the first time a game's sheet opens: { description, downloads[{label,href,kind,hint}], password, guide[{title,steps[]}], update{date,version,text}, facts[{label,value}] }
  *             resolveArt(game) → Promise<patch|null>   // called lazily, once per game, right before its first image loads; patch = { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … }
  *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on), onUser(),
  *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game }
@@ -718,6 +789,8 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   const active = () => scope.activeElement || document.activeElement;
 
   let D = normalize(data);
+  const enrich = createEnrich({ resolve: opt.resolveDetail });
+  let dlOpen = false;                                // the download panel of the open sheet is unfolded
   const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, game: id => D.byId.get(String(id)) });
   const saved = new Set((opt.saved || []).map(String));
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
@@ -796,7 +869,9 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   async function openGame(id) {
     const g = D.byId.get(String(id)); if (!g) return;
     if (openId === g.id && $modal.classList.contains('open')) return;
-    const fill = () => { $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders }); art.hydrate($sheet); $sheet.scrollTop = 0; };
+    if (openId !== g.id) dlOpen = false;
+    enrich.applyCached(g);
+    const fill = () => { $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }); art.hydrate($sheet); $sheet.scrollTop = 0; };
     const sig = () => [g.description, g.developer, g.publisher, g.releaseYear, g.rating].join('|'), s0 = sig();
     if (!$modal.classList.contains('open')) {
       lastFocus = active(); fill();
@@ -806,6 +881,8 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     openId = g.id;
     // art/details that were still being resolved when the sheet opened: show them as soon as they arrive (the sheet never waits)
     if (opt.resolveArt) art.settle(g).then(() => { if (openId === g.id && sig() !== s0) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
+    // downloads / how-to-connect / update info are fetched on demand: the sheet opens at once with skeletons and fills in when they arrive
+    if (!enrich.done(g.id)) enrich.get(g).then(() => { if (openId === g.id) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
     opt.onOpen && opt.onOpen(g);
   }
   function closeGame() {
@@ -828,6 +905,11 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   /* ── actions ────────────────────────────────────────────────────────────────────────────── */
   function doGet(id, btn) {
     const g = D.byId.get(String(id)); if (!g) return;
+    if (btn && btn.closest('.sheet')) {              // inside the sheet the options unfold under the button instead of a floating menu
+      const box = btn.closest('.getbox');
+      if (box) { dlOpen = !dlOpen; box.classList.toggle('open', dlOpen); btn.setAttribute('aria-expanded', String(dlOpen)); return; }
+      if (g.downloads.length === 1) { window.open(safeUrl(g.downloads[0].href), '_blank', 'noopener'); return; }
+    }
     let r; try { r = opt.onGet && opt.onGet(g, { button: btn }); } catch (e) { console.error('[hearth] onGet failed', e); }
     if (r === false) return;                       // onGet took over (e.g. opened its own menu): no default action and no "Starting…" flash
     if (g.downloadUrl && safeUrl(g.downloadUrl)) window.open(safeUrl(g.downloadUrl), '_blank', 'noopener');
@@ -850,6 +932,10 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   const onClick = e => {
     const t = e.target, q = s => t.closest(s);
     let el;
+    if ((el = q('[data-copy]'))) {
+      e.stopPropagation(); const v = el.dataset.copy, em = el.querySelector('em'), done = () => { el.classList.add('ok'); if (em) em.textContent = 'Copied'; setTimeout(() => { el.classList.remove('ok'); if (em) em.textContent = 'Copy'; }, 1400); };
+      try { navigator.clipboard.writeText(v).then(done, () => {}); } catch (err) { /* clipboard blocked: the code is selectable */ } return;
+    }
     if ((el = q('[data-get]'))) { e.stopPropagation(); return doGet(el.dataset.get, el); }
     if ((el = q('[data-wish]'))) return toggleSaved(el.dataset.wish, el);
     if (q('[data-close]')) return closeGame();
@@ -902,7 +988,7 @@ function adopt(scope, css) {
 /* ── src/js/ui/index.js ── */
 const version = '0.2.0';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-const features = { lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true };
+const features = { lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true };
 
 return {mount, validate, steam, normalize, version, features};
 })();

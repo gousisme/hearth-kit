@@ -283,6 +283,56 @@
 .sim .sa { width: 84px; aspect-ratio: 460/215; border-radius: 6px; overflow: hidden; position: relative; flex: none; }
 .sim .sa img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
+/* ── src/styles/62-getbox.css ── */
+/* Download panel: ONE card. The Get button is its header; the list unfolds out of it (no floating menu). */
+.getbox { border-radius: 27px; overflow: hidden; background: var(--s2); }
+.getbox > .btn { width: 100%; border-radius: 0; }
+.getbox > .btn .d svg { transition: transform var(--tb) var(--ease); }
+.getbox.open > .btn .d svg:first-child { transform: rotate(180deg); }
+.getbox:not(.open) > .btn:hover .d svg:first-child { transform: translateY(34px); }
+.getbox.open > .btn:hover .d svg + svg { transform: translateY(-34px); }                 /* keep the chevron still while open */
+.dlp { display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows var(--tb) var(--ease), visibility 0s var(--tb); }
+.getbox.open .dlp { grid-template-rows: 1fr; visibility: visible; transition-delay: 0s; }
+.dli { min-height: 0; overflow: hidden; }
+.dlin { padding: 8px; display: grid; gap: 2px; }
+.dl { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 14px; color: var(--tx); text-decoration: none; transition: background var(--tf), transform var(--tb) var(--ease); }
+a.dl:hover, a.dl:focus-visible { background: var(--line); transform: translateX(2px); outline: 0; }
+.dl .di { width: 36px; height: 36px; flex: none; border-radius: 50%; background: rgba(255, 255, 255, .07); color: var(--ac); display: grid; place-items: center; transition: background var(--tf), color var(--tf); }
+a.dl:hover .di { background: var(--ac); color: var(--ink); }
+.dl .dt { min-width: 0; flex: 1; }
+.dl .dt b { display: block; font: 600 14px/1.25 var(--fb); }
+.dl .dt small { display: block; margin-top: 2px; font-size: 12px; color: var(--mu); }
+.dl .da { color: var(--mu); display: grid; transition: color var(--tf), transform var(--tb) var(--ease); }
+a.dl:hover .da { color: var(--ac); transform: translate(2px, -2px); }
+.dl.sk .dt i { display: block; height: 11px; width: 70%; border-radius: 6px; background: var(--line); animation: hf-pulse 1.3s ease-in-out infinite; }
+.dl.sk .dt i + i { width: 40%; margin-top: 7px; }
+.dl.sk .di { animation: hf-pulse 1.3s ease-in-out infinite; }
+.pw { margin-top: 6px; padding: 9px 10px 9px 14px; border-radius: 12px; background: rgba(0, 0, 0, .2); display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--mu); }
+.pw span { white-space: nowrap; }
+.pw code { white-space: nowrap; font: 700 13px ui-monospace, Menlo, Consolas, monospace; color: var(--tx); user-select: all; }
+.pw button { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 99px; background: var(--s1); color: var(--tx); font: 600 12px var(--fb); transition: background var(--tf), color var(--tf); }
+.pw button:hover { background: var(--line); }
+.pw button.ok { color: var(--ac); }
+.pw button em { font-style: normal; }
+
+/* "How to connect" */
+.guide { display: grid; gap: 12px; }
+.gsec { background: var(--s2); border-radius: 16px; padding: 16px 18px 15px; }
+.gsec h5 { margin: 0 0 11px; display: flex; align-items: center; gap: 9px; font: 700 14px var(--fd); }
+.gsec h5::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ac); }
+.gsec ol { list-style: none; margin: 0; padding: 0; counter-reset: s; display: grid; gap: 10px; }
+.gsec li { counter-increment: s; display: grid; grid-template-columns: 24px 1fr; gap: 11px; font-size: 14px; line-height: 1.5; color: #cfd3da; }
+.gsec li::before { content: counter(s); width: 22px; height: 22px; margin-top: 1px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .08); color: var(--ac); font: 700 12px var(--fb); }
+.gsec.sk i { display: block; height: 12px; margin: 12px 0; border-radius: 6px; background: var(--s1); animation: hf-pulse 1.3s ease-in-out infinite; }
+.gsec.sk i:nth-child(2) { width: 82%; } .gsec.sk i:nth-child(3) { width: 58%; }
+
+/* latest update */
+.upd { margin-top: 18px; display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 14px; background: var(--s2); }
+.upd .v { flex: none; padding: 5px 11px; border-radius: 99px; background: var(--ac); color: var(--ink); font: 700 12px var(--fb); }
+.upd b { display: block; font: 600 13px var(--fb); }
+.upd span:not(.v) { display: block; margin-top: 2px; font-size: 13px; color: var(--mu); }
+@media (prefers-reduced-motion: reduce) { .dl.sk .dt i, .dl.sk .di, .gsec.sk i { animation: none; } }
+
 /* ── src/styles/70-browse.css ── */
 .bh { display: flex; align-items: baseline; gap: 16px; }
 .bh h1 { font: 800 clamp(32px, 4vw, 52px)/1 var(--fd); letter-spacing: -.03em; }

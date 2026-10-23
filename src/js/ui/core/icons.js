@@ -7,6 +7,14 @@ export const ICON = {
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   next: '<path d="m9 5 7 7-7 7"/>',
   prev: '<path d="m15 5-7 7 7 7"/>',
+  chev: '<path d="m6 9 6 6 6-6"/>',
+  cloud: '<path d="M7 18a4 4 0 0 1-.5-7.97A6 6 0 0 1 18 9.5 4.25 4.25 0 0 1 17.5 18Z"/>',
+  drive: '<rect x="3" y="13" width="18" height="7" rx="2"/><path d="m5 13 2.4-7a2 2 0 0 1 1.9-1.4h5.4a2 2 0 0 1 1.9 1.4L19 13M7 16.5h.01M11 16.5h3"/>',
+  fix: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L3 17.7V21h3.3l6.3-6.3a4 4 0 0 0 5.1-5.4l-2.6 2.6-2.4-.5-.5-2.4Z"/>',
+  torrent: '<path d="M6 3v8a6 6 0 0 0 12 0V3h-4v8a2 2 0 0 1-4 0V3Z"/><path d="M6 7h4M14 7h4"/>',
+  ext: '<path d="M7 17 17 7M8 7h9v9"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
+  check: '<path d="m5 12 5 5 9-10"/>',
 };
 
 export function ic(path, size = 18, stroke = 2.4) {
