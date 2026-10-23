@@ -2,7 +2,6 @@ import { esc } from '../../shared/util.js';
 import { card } from './card.js';
 import { chipsHtml } from './chips.js';
 import { filterGames, addGames } from '../core/data.js';
-import { hydrate } from '../core/art.js';
 import { reveal } from '../core/motion.js';
 
 /** The grid renders in chunks: a few hundred cards at once is ~12k DOM nodes and a visible stall on every tab change. */
@@ -21,7 +20,7 @@ export function browseHtml(D, route, savedIds) {
     <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span></div>
     ${f.saved ? '' : chipsHtml(D.categories, f.category || '')}
     ${list.length
-      ? `<div class="grid">${list.slice(0, GRID_CHUNK).map((g, i) => card(g, { i, reveal: true })).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
+      ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
       : `<div class="empty"><h3>${empty[0]}</h3><p>${empty[1]}</p><button class="btn glass alt" data-nav="home">Back to discover</button></div>`}
   </div>`;
 }
@@ -33,7 +32,7 @@ export function browseHtml(D, route, savedIds) {
  *    Returned games are added to the data (and listed if they match the current filter). Resolve to false / [] when there is nothing left.
  *    While it is pending the grid ends in skeleton cards.
  */
-export function initGrid(root, D, route, savedIds, loader, loadMore) {
+export function initGrid(root, D, route, savedIds, art, loadMore) {
   const grid = root.querySelector('.browse .grid'); if (!grid) return () => {};
   const f = route.filter || {}, shown = new Set([...grid.querySelectorAll('.card')].map(c => c.dataset.open)), stops = [];
   let busy = false, done = typeof loadMore !== 'function', dead = false;
@@ -42,13 +41,13 @@ export function initGrid(root, D, route, savedIds, loader, loadMore) {
   if (!more) { more = document.createElement('div'); more.className = 'more'; more.setAttribute('aria-hidden', 'true'); grid.after(more); }
   const add = batch => {
     const tmp = document.createElement('div');
-    tmp.innerHTML = batch.map((g, i) => card(g, { i, reveal: true })).join('');
-    hydrate(tmp, loader); stops.push(reveal(tmp));
-    grid.append(...tmp.childNodes); batch.forEach(g => shown.add(g.id));
+    tmp.innerHTML = batch.map(g => card(g)).join('');
+    const nodes = [...tmp.children]; grid.append(...nodes); batch.forEach(g => shown.add(g.id));
+    art.hydrate(grid); stops.push(reveal(grid));                   // observed once attached, so the cascade starts from what is really on screen
   };
   const skeletons = n => {
     const tmp = document.createElement('div');
-    tmp.innerHTML = Array.from({ length: n }, () => '<div class="card skc" aria-hidden="true"><div class="poster"><div class="layer is-skel"></div></div><div class="skl"></div><div class="skl"></div></div>').join('');
+    tmp.innerHTML = Array.from({ length: n }, () => '<div class="card skc" aria-hidden="true"><div class="poster"><div class="layer is-skel is-busy"></div></div><div class="skl"></div><div class="skl"></div></div>').join('');
     const els = [...tmp.children]; grid.append(...els); return () => els.forEach(e => e.remove());
   };
   const setCount = () => { const c = root.querySelector('.browse .count'); if (c) { const n = list().length; c.textContent = `${n} ${n === 1 ? 'game' : 'games'}`; } };

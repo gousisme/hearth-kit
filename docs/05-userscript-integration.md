@@ -48,7 +48,7 @@ const app = HearthUI.mount({ target, data, css, options });
 app.update(data, { view, filter })   // new data (+ optional route in the same transition)
 app.navigate('home'|'browse', filter) ; app.open(id) ; app.close() ; app.getRoute() ; app.destroy()
 ```
-`options`: `autoplay` (true; forced off under reduced motion), `autoplayMs` (7000), `theme` (token overrides), `saved` (initial saved ids), `placeholders` (demo content for empty sections; mockup only), `imageLoader(url) → Promise<string>`, and hooks **`onGet(game, {button}) → false` cancels the default** (default opens `game.downloadUrl` in a new tab), `onOpen(game)`, `onClose(game)`, `onRoute(route)`, `onSave(game, on)`, `onUser()`.
+`options`: `autoplay` (true; forced off under reduced motion), `autoplayMs` (7000), `theme` (token overrides), `saved` (initial saved ids), `placeholders` (demo content for empty sections; mockup only), `imageLoader(url) → Promise<string>`, `resolveArt(game) → Promise<patch|null>` (lazy per-card art lookup; `app.add(games)` adds games without a re-render), and hooks **`onGet(game, {button}) → false` cancels the default** (default opens `game.downloadUrl` in a new tab), `onOpen(game)`, `onClose(game)`, `onRoute(route)`, `onSave(game, on)`, `onUser()`.
 
 Common customisations: make Get trigger the site's own download (`onGet: g => { document.querySelector(\`[data-id="${g.id}"] .dl\`).click(); return false; }`); persist saved games (`onSave` → `GM_setValue`, `saved: GM_getValue(...)`).
 

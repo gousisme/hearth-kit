@@ -2,7 +2,7 @@
 
 ## Page CSP (Content-Security-Policy)
 Some sites forbid loading from other origins. Symptoms are console errors mentioning *Refused to load / violates the following Content Security Policy directive*.
-- **`img-src` blocks the Steam CDN** → images stay as generated art (the UI degrades gracefully). Try `gmImages: true` in `HearthGlue.run` (fetches through `GM_xmlhttpRequest`, serves `blob:` URLs; needs `@grant GM_xmlhttpRequest` + `@connect cdn.cloudflare.steamstatic.com`). If the CSP also lacks `blob:`/`data:` in `img-src`, this cannot work; fall back to generated art or use the site's own images via `art.*`.
+- **`img-src` blocks the Steam CDN** → cards stay as flat tiles with the title (no artwork). Try `gmImages: true` in `HearthGlue.run` (fetches through `GM_xmlhttpRequest`, serves `blob:` URLs; needs `@grant GM_xmlhttpRequest` + `@connect cdn.cloudflare.steamstatic.com`). If the CSP also lacks `blob:`/`data:` in `img-src`, this cannot work; use the site's own images via `art.*` / `art.fallback`.
 - **`font-src` / `style-src` blocks Google Fonts** → the system fallback stack is used (looks fine, less distinctive). `fonts: 'gm-inline'` inlines fonts as `data:` URIs (needs `font-src data:` allowed). Or set `fonts: 'none'`.
 - **`connect-src`** doesn't affect `GM_xmlhttpRequest` (that's why scrapers use it for cross-origin data) but does affect plain `fetch`.
 - Inline `<style>`/adopted stylesheets inside the shadow root are generally not blocked by `style-src` (constructable stylesheets). If a very strict site does block it, `mount()` falls back to a `<style>` element; if that is blocked too, nothing renders and glue falls back to the original page.
@@ -45,7 +45,7 @@ Some sites forbid loading from other origins. Symptoms are console errors mentio
 
 ## Accessibility and performance
 - Hero autoplay pauses on hover/focus/hidden tab and is **off** under `prefers-reduced-motion`.
-- The first render creates ~100–300 DOM nodes plus generated SVG art per image slot; for catalogues beyond ~1,000 games, scrape and pass a **curated subset** (shelves of ≤ 30) and use `browse` for the rest, or add pagination to the browse view.
+- The first render creates ~100–300 DOM nodes (art slots are lazy: only slots near the viewport load, 8 at a time); for catalogues beyond ~1,000 games, scrape and pass a **curated subset** (shelves of ≤ 30) and use `browse` for the rest, or add pagination to the browse view.
 
 ## Known limitations (v0.1.0)
 - The browse grid renders all matches at once (no virtualisation/pagination).

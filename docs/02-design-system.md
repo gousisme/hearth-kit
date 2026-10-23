@@ -52,7 +52,7 @@ Rule: one accent, used sparingly. If you add a second accent colour you are off-
 - **No prices anywhere.** All actions are Get / Download / Save. There is no price, discount or cart concept in the UI or the data.
 
 ## Artwork rules
-Every image slot is a **stack**: generated key art underneath (a deterministic landscape seeded from the game), the real image fading in on top. A missing or slow image never leaves a hole. A card with no real art shows the title as text on the generated art. If a hero logo fails, the title renders as big uppercase type. Details: [04-data-contract.md](04-data-contract.md#steam-artwork).
+Every image slot is a **skeleton** (a quiet sheen that only runs while the slot is loading) that the real image fades in over. There is no generated art: if nothing loads the slot becomes a flat tile and a card shows the title as text. If a hero logo fails, the title renders as big uppercase type. Details: [04-data-contract.md](04-data-contract.md#steam-artwork).
 
 ## Isolation
 The UI renders in a **Shadow DOM** when `css` is passed to `mount()` (the userscript path), so the original site's CSS cannot affect it and ours cannot leak. Resets use `:where()` (zero specificity) so any component rule beats them. Fonts are the exception: `@font-face` does not work in a shadow root, so glue injects them into the main document.

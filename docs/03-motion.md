@@ -33,7 +33,8 @@ Goal: everything animates **in and out**, nothing pops, 60 fps. The rules below 
 | Modal | scrim fades, sheet rises 34 px + scales .97→1 | reverse (ease-in) |
 | Modal content swap ("Similar") | 160 ms fade/sink out, then in | |
 | Search drop-down | fade + 8 px drop | reverse |
-| Images | fade in over generated art (700 ms) | n/a |
+| Images | fade in over their skeleton (700 ms), at most 2 per frame | n/a |
+| Cards | cascade in as they scroll into view: `reveal()` orders everything that appears in one frame and starts each 40 ms apart (CSS animation `hf-rise`) | n/a |
 | Removing an element | `leave(el)` adds `.is-leaving`, waits `--tb`, removes | |
 
 ## Reduced motion

@@ -1,6 +1,6 @@
 import { esc, safeUrl, debounce, delay } from '../shared/util.js';
-import { normalize } from './core/data.js';
-import { hydrate } from './core/art.js';
+import { normalize, addGames } from './core/data.js';
+import { createArt } from './core/art.js';
 import { reveal, swap, T, reduced } from './core/motion.js';
 import { heroHtml, initHero } from './components/hero.js';
 import { chipsHtml } from './components/chips.js';
@@ -19,10 +19,11 @@ import { browseHtml, initGrid } from './components/browse.js';
  *           (this is the Tampermonkey path: the original site's CSS can't touch us, and vice versa).
  *           If omitted, the UI renders in the light DOM and expects dist/hearth.css to be linked (mockup/dev path).
  *  options  { autoplay, autoplayMs, placeholders, theme, saved, route, imageLoader,
+ *             resolveArt(game) → Promise<patch|null>   // called lazily, once per game, right before its first image loads; patch = { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … }
  *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on), onUser(),
  *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game }
  *
- * app: { el, root, update(data), navigate(view, filter), open(id), close(), getRoute(), destroy() }
+ * app: { el, root, update(data), add(games), navigate(view, filter), open(id), close(), getRoute(), destroy() }
  */
 export function mount({ target = document.body, data, css = null, shadow, options = {} } = {}) {
   const opt = { autoplay: true, autoplayMs: 7000, placeholders: false, theme: null, saved: [], route: null, imageLoader: null, ...options };
@@ -45,6 +46,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
   const active = () => scope.activeElement || document.activeElement;
 
   let D = normalize(data);
+  const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, game: id => D.byId.get(String(id)) });
   const saved = new Set((opt.saved || []).map(String));
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
   let heroCtl, stopReveal, stopShelves, stopGrid, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
@@ -60,20 +62,22 @@ export function mount({ target = document.body, data, css = null, shadow, option
     $page.classList.toggle('has-bar', route.view !== 'home');
     $page.innerHTML = route.view === 'home' ? homeHtml() : browseHtml(D, route, saved);
     $scroll.scrollTop = 0;
-    hydrate($page, opt.imageLoader);
-    stopReveal = reveal($page);
+    art.hydrate($page);
+    stopReveal = reveal($page, { lead: 140 });
     stopShelves = initShelves($page);
-    stopGrid = route.view === 'home' ? null : initGrid($page, D, route, saved, opt.imageLoader, opt.loadMore);
-    heroCtl = initHero($page.querySelector('#hero'), { autoplay: opt.autoplay, ms: opt.autoplayMs });
+    stopGrid = route.view === 'home' ? null : initGrid($page, D, route, saved, art, opt.loadMore);
+    heroCtl = initHero($page.querySelector('#hero'), { autoplay: opt.autoplay, ms: opt.autoplayMs, warm: el => art.warm(el) });
     $foot.textContent = D.site.footer || '';
     syncNav();
   }
 
+  let again = false, waiters = [];
   async function refresh() {
-    if (swapping || destroyed) return;
+    if (destroyed) return;
+    if (swapping) { again = true; return new Promise(r => waiters.push(r)); }      // a swap is running: repaint once more when it ends (the latest data/route wins)
     swapping = true;
-    await swap($page, paint);
-    swapping = false;
+    do { again = false; await swap($page, paint); } while (again && !destroyed);
+    swapping = false; waiters.splice(0).forEach(r => r());                         // every caller resolves after the FINAL repaint
   }
 
   function renderBar() {
@@ -120,13 +124,16 @@ export function mount({ target = document.body, data, css = null, shadow, option
   async function openGame(id) {
     const g = D.byId.get(String(id)); if (!g) return;
     if (openId === g.id && $modal.classList.contains('open')) return;
-    const fill = () => { $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders }); hydrate($sheet, opt.imageLoader); $sheet.scrollTop = 0; };
+    const fill = () => { $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders }); art.hydrate($sheet); $sheet.scrollTop = 0; };
+    const sig = () => [g.description, g.developer, g.publisher, g.releaseYear, g.rating].join('|'), s0 = sig();
     if (!$modal.classList.contains('open')) {
       lastFocus = active(); fill();
       $modal.classList.add('open'); $modal.setAttribute('aria-hidden', 'false'); $scroll.classList.add('is-locked');
       $sheet.focus({ preventScroll: true });
     } else { $sheet.classList.add('is-swap'); await delay(reduced() ? 0 : T.fast); fill(); $sheet.classList.remove('is-swap'); }
     openId = g.id;
+    // art/details that were still being resolved when the sheet opened: show them as soon as they arrive (the sheet never waits)
+    if (opt.resolveArt) art.settle(g).then(() => { if (openId === g.id && sig() !== s0) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
     opt.onOpen && opt.onOpen(g);
   }
   function closeGame() {
@@ -206,10 +213,12 @@ export function mount({ target = document.body, data, css = null, shadow, option
       renderBar();
       return refresh();
     },
+    /** Add games to the running app without a full re-render (e.g. search results). Existing games only gain new search tags. */
+    add(list) { const { added, merged } = addGames(D, list); return (added.length || merged) && route.view === 'browse' ? refresh() : Promise.resolve(); },
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 

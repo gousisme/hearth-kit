@@ -19,13 +19,15 @@
 /* view swap + first load: out = quick fade/sink (ease-in), in = slower rise (ease-out) */
 .page.is-out { opacity: 0; transform: translateY(12px); transition-duration: 200ms; transition-timing-function: var(--ein); }
 
-/* scroll reveal */
-.rv { opacity: 0; transform: translateY(26px); transition: opacity var(--ts) var(--ease), transform var(--ts) var(--ease); transition-delay: calc(var(--i, 0) * 28ms); }
-.rv.in { opacity: 1; transform: none; }
+/* scroll reveal: a CSS animation (not a transition), so it never competes with a card's hover transition.
+   --d is set per element by reveal() to make a cascade. `backwards` holds the start pose during the delay and
+   releases the element to its normal style afterwards (so :hover transforms keep working). */
+.rv { opacity: 0; }
+.rv.in { opacity: 1; animation: hf-rise var(--ts) var(--ease) var(--d, 0ms) backwards; }
+@keyframes hf-rise { from { opacity: 0; transform: translateY(22px) scale(.985); } }
 
-/* artwork: real image fades in over the generated art */
+/* artwork: a slot is a skeleton while loading, then the real image fades in over it. No generated art. */
 .layer { position: absolute; inset: 0; }
-.layer > svg { width: 100%; height: 100%; }
 .art-img { opacity: 0; transition: opacity var(--ts) var(--ease); }
 .art-img.is-loaded { opacity: 1; }
 .layer > .art-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -37,14 +39,20 @@
 
 @media (prefers-reduced-motion: reduce) {
   .hearth *, .hearth *::before, .hearth *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
-  .rv { opacity: 1; transform: none; }
+  .rv { opacity: 1; }
+  .rv.in { animation: none; }
 }
 
-/* skeleton: shown while a real image is still loading (replaces the generated placeholder art) */
-.layer.is-skel { background: linear-gradient(100deg, var(--s1) 30%, var(--s2) 50%, var(--s1) 70%) 0 0 / 220% 100%; animation: hf-sk 1.3s linear infinite; }
-@keyframes hf-sk { to { background-position: -220% 0; } }
+/* skeleton: the sheen is a transformed pseudo-element, so it runs on the compositor (an animated
+   background-position would repaint every skeleton on every frame, which is what made scrolling stutter) */
+.is-skel { position: relative; overflow: hidden; background: var(--s1); }
+.is-skel::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(100deg, transparent 25%, rgba(255, 255, 255, .07) 50%, transparent 75%); transform: translateX(-100%); }
+.is-skel.is-busy::after { animation: hf-sheen 1.5s ease-in-out infinite; }       /* only slots that are loading now (set by createArt) */
+@keyframes hf-sheen { to { transform: translateX(100%); } }
+/* nothing could be loaded: a flat, quiet tile (posters then show the title as text) */
+.layer.is-failed { background: var(--s2); }
 .skc .poster { aspect-ratio: 2 / 3; border-radius: var(--r); overflow: hidden; }
 .skc .skl { height: 12px; margin-top: 12px; border-radius: 6px; width: 78%; background: var(--s1); animation: hf-pulse 1.3s ease-in-out infinite; }
 .skc .skl + .skl { width: 46%; margin-top: 8px; }
 @keyframes hf-pulse { 50% { opacity: .45; } }
-@media (prefers-reduced-motion: reduce) { .layer.is-skel, .skc .skl { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .is-skel::after { display: none; } .skc .skl { animation: none; } }

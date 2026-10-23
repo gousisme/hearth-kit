@@ -322,11 +322,6 @@
           "sourceUrl": {
             "type": "string",
             "pattern": "^https?://"
-          },
-          "hue": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 360
           }
         },
         "additionalProperties": true

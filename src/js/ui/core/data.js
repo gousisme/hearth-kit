@@ -67,9 +67,18 @@ export function similar(D, game, n = 3) {
   return [...explicit, ...auto].slice(0, n);
 }
 
-/** Append games to an already-normalized D (used by the grid's loadMore). Returns the games that were new. */
+/**
+ * Append games to an already-normalized D (used by the grid's loadMore and by app.add()).
+ * Games already present are kept, but any new `genres` (search tags) are merged into them.
+ * Returns { added: [new games], merged: number of existing games that gained genres }.
+ */
 export function addGames(D, list) {
-  const added = [];
-  (Array.isArray(list) ? list : []).filter(g => g && g.id != null && g.title).map(coerceGame).forEach(g => { if (!D.byId.has(g.id)) { D.games.push(g); D.byId.set(g.id, g); added.push(g); } });
-  return added;
+  const added = []; let merged = 0;
+  (Array.isArray(list) ? list : []).filter(g => g && g.id != null && g.title).map(coerceGame).forEach(g => {
+    const ex = D.byId.get(g.id);
+    if (!ex) { D.games.push(g); D.byId.set(g.id, g); added.push(g); return; }
+    const more = g.genres.filter(t => !ex.genres.includes(t));
+    if (more.length) { ex.genres.push(...more); merged++; }
+  });
+  return { added, merged };
 }

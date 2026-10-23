@@ -1,4 +1,4 @@
-/*! hearth-kit v0.1.0 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.2.0 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthUI=(function(){
 'use strict';
 /* ── src/js/shared/util.js ── */
@@ -18,14 +18,6 @@ function safeUrl(u) {
 
 function slug(s) {
   return String(s ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
-
-/** Small stable string hash (unsigned 32-bit). Used to seed generated key art. */
-function hash(s) {
-  let h = 2166136261;
-  s = String(s);
-  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return h >>> 0;
 }
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -56,7 +48,7 @@ function coerceGame(g) {
     id: str(g.id),
     title: str(g.title),
     steamAppId: Number.isFinite(appId) && appId > 0 ? appId : null,
-    art: { poster: str(art.poster), hero: str(art.hero), logo: str(art.logo), header: str(art.header) },
+    art: { poster: str(art.poster), hero: str(art.hero), logo: str(art.logo), header: str(art.header), fallback: str(art.fallback) },
     tagline: str(g.tagline),
     description: str(g.description),
     genres,
@@ -71,7 +63,6 @@ function coerceGame(g) {
     similarIds: strList(g.similarIds),
     downloadUrl: str(g.downloadUrl),
     sourceUrl: str(g.sourceUrl),
-    hue: Number.isFinite(parseFloat(g.hue)) ? parseFloat(g.hue) : null,
   };
 }
 
@@ -91,7 +82,7 @@ function validate(data) {
     else if (ids.has(String(g.id))) errors.push(`${at}: duplicate id "${g.id}"`);
     else ids.add(String(g.id));
     if (!g.title) errors.push(`${at}: missing \`title\``);
-    if (!g.steamAppId && !(g.art && (g.art.poster || g.art.hero))) warnings.push(`${at}: no steamAppId and no art overrides — will use generated key art`);
+    if (!g.steamAppId && !(g.art && (g.art.poster || g.art.hero))) warnings.push(`${at}: no steamAppId and no art overrides — the card will show an empty tile (no artwork)`);
     if (!g.downloadUrl) warnings.push(`${at}: no downloadUrl — "Get" buttons will do nothing unless you set options.onGet`);
     for (const k of ['downloadUrl', 'sourceUrl']) if (g[k] && !/^https?:\/\//i.test(g[k])) errors.push(`${at}: \`${k}\` must be an absolute http(s) URL (got "${g[k]}")`);
   });
@@ -178,19 +169,33 @@ function similar(D, game, n = 3) {
   return [...explicit, ...auto].slice(0, n);
 }
 
-/** Append games to an already-normalized D (used by the grid's loadMore). Returns the games that were new. */
+/**
+ * Append games to an already-normalized D (used by the grid's loadMore and by app.add()).
+ * Games already present are kept, but any new `genres` (search tags) are merged into them.
+ * Returns { added: [new games], merged: number of existing games that gained genres }.
+ */
 function addGames(D, list) {
-  const added = [];
-  (Array.isArray(list) ? list : []).filter(g => g && g.id != null && g.title).map(coerceGame).forEach(g => { if (!D.byId.has(g.id)) { D.games.push(g); D.byId.set(g.id, g); added.push(g); } });
-  return added;
+  const added = []; let merged = 0;
+  (Array.isArray(list) ? list : []).filter(g => g && g.id != null && g.title).map(coerceGame).forEach(g => {
+    const ex = D.byId.get(g.id);
+    if (!ex) { D.games.push(g); D.byId.set(g.id, g); added.push(g); return; }
+    const more = g.genres.filter(t => !ex.genres.includes(t));
+    if (more.length) { ex.genres.push(...more); merged++; }
+  });
+  return { added, merged };
 }
 
 /* ── src/js/ui/core/art.js ── */
 /**
  * ARTWORK
- * Every image slot is a stack:   generated key art (always there)  <  real image (fades in on load).
- * Real images are tried in order (`candidates`); if all fail the generated art simply stays.
- * Logos are the exception: if no logo loads we render the game title as text instead.
+ * An art slot is   <div class="layer is-skel"><img class="art-img" data-g data-kind></div>.
+ *   · while its image is loading (or its source is still being resolved) the slot is a skeleton;
+ *   · when the image arrives it fades in over the skeleton;
+ *   · if nothing loads the slot becomes a flat, quiet tile (`is-failed`; posters then show the title as text).
+ * There is NO generated artwork: a slot is either a skeleton, a real image, or an empty tile.
+ *
+ * Slots are filled lazily by createArt(): only slots near the viewport load, a few at a time, so a page with
+ * hundreds of cards never fires hundreds of requests (or decodes) at once.
  */
 
 const STEAM = 'https://cdn.cloudflare.steamstatic.com/steam/apps/';
@@ -203,114 +208,143 @@ const steam = {
   capsule: id => `${STEAM}${id}/capsule_616x353.jpg`,
 };
 
-/** Ordered list of URLs to try for one art slot. Explicit `art.*` overrides win over Steam. */
+/** Ordered list of URLs to try for one art slot: explicit `art.<kind>` → Steam CDN → `art.fallback` (never for logos). */
 function candidates(game, kind) {
-  const out = [];
-  const own = game.art && game.art[kind];
-  if (own) out.push(own);
+  const out = [], a = game.art || {};
+  if (a[kind]) out.push(a[kind]);
   if (game.steamAppId) {
     out.push(steam[kind](game.steamAppId));
     if (kind === 'hero') out.push(steam.header(game.steamAppId)); // low-res but better than nothing
   }
+  if (kind !== 'logo' && a.fallback) out.push(a.fallback);
   return [...new Set(out.map(safeUrl).filter(Boolean))];
 }
 
-/** <img> that is hydrated later by `hydrate()` (so we can retry, fall back and fade in). */
+/** The <img> of one slot. It has no src: createArt().hydrate() decides when (and from where) it loads. */
 function artImg(game, kind, cls = '') {
-  const list = candidates(game, kind);
-  if (!list.length) return '';
-  return `<img class="art-img ${cls}" alt="${kind === 'logo' ? esc(game.title) : ''}" data-kind="${kind}" data-title="${esc(game.title)}" data-cands="${esc(JSON.stringify(list))}" decoding="async" ${kind === 'logo' ? '' : 'loading="lazy"'}>`;
+  return `<img class="art-img ${cls}" alt="${kind === 'logo' ? esc(game.title) : ''}" data-g="${esc(game.id)}" data-kind="${kind}" data-title="${esc(game.title)}" decoding="async">`;
+}
+
+/** A full-bleed art slot (poster, hero, header…). Starts as a skeleton. */
+function layer(game, kind) {
+  return `<div class="layer is-skel">${artImg(game, kind)}</div>`;
+}
+
+/** Copy what the resolver found into the (normalized) game. Only art and a few descriptive fields may change. */
+function mergeArt(g, p) {
+  if (!p || typeof p !== 'object') return;
+  const n = parseInt(p.steamAppId, 10); if (n > 0) g.steamAppId = n;
+  if (p.art && typeof p.art === 'object') for (const k of ['poster', 'hero', 'logo', 'header', 'fallback']) if (p.art[k]) g.art[k] = String(p.art[k]);
+  for (const k of ['description', 'developer', 'publisher', 'rating']) if (p[k]) g[k] = String(p[k]);
+  if (p.releaseYear && !g.releaseYear) g.releaseYear = parseInt(p.releaseYear, 10) || null;
 }
 
 /**
- * One image slot. While a real image can still load the slot is a shimmering skeleton (cheap, and no
- * placeholder picture flashing behind the art). Generated key art is only built when there is nothing
- * to load, or when every candidate failed (see fail()).
+ * createArt({ root, loader, resolve, game }) → { hydrate(root, {force}), warm(root), settle(game), sweep(), destroy() }
+ *   root          the element that contains every slot (scroll events are caught there: they don't cross a shadow root)
+ *   game(id)      → the current normalized game (the data can be replaced while the app lives)
+ *   resolve(game) → Promise<patch|null>   optional, called once per game right before its first slot loads
+ *                   (patch: { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … })
+ *   loader(url)   → Promise<string>       optional (GM_xmlhttpRequest → blob: URL)
  */
-function layer(game, kind, w, h, key = '') {
-  const real = artImg(game, kind);
-  if (!real) return `<div class="layer">${keyArt(game, w, h, key)}</div>`;
-  return `<div class="layer is-skel" data-g="${esc(game.id)}" data-sa="${esc(game.steamAppId || '')}" data-hue="${game.hue != null ? game.hue : ''}" data-w="${w}" data-h="${h}">${real}</div>`;
-}
+function createArt({ root: scope, loader = null, resolve = null, game }) {
+  const MAX = 8;                                    // images loading at once (resolving art does not count: the resolver batches and limits itself)
+  const pending = new Set(), queue = [], shows = [], patches = new Map();
+  let active = 0, dead = false, timer = 0, last = 0, showRaf = 0;
 
-/**
- * Wire up every un-hydrated <img data-cands> under `root`.
- * `loader(url) -> Promise<string>` (optional) lets the Tampermonkey glue fetch images through
- * GM_xmlhttpRequest when the host page's CSP blocks the Steam CDN.
- */
-function hydrate(root, loader) {
-  root.querySelectorAll('img[data-cands]:not([data-h])').forEach(img => {
-    img.dataset.h = '1';
-    let list = [];
-    try { list = JSON.parse(img.dataset.cands); } catch (e) { /* ignore */ }
-    let i = 0;
-    const next = async () => {
-      if (i >= list.length) return fail(img);
-      const url = list[i++];
-      try { img.src = loader ? await loader(url) : url; } catch (e) { next(); }
-    };
-    img.addEventListener('load', () => { img.classList.add('is-loaded'); const l = img.closest('.layer'); if (l) l.classList.remove('is-skel'); const p = img.closest('.poster'); if (p) p.classList.add('has-img'); });
-    img.addEventListener('error', next);
-    next();
+  const slotOf = img => img.closest('.layer, .sa, .lg') || img;
+  const near = el => { const r = el.getBoundingClientRect(); return r.bottom > -700 && r.top < innerHeight + 700 && r.right > -400 && r.left < innerWidth + 400; };
+
+  function settle(g) {
+    if (!resolve) return Promise.resolve();
+    let p = patches.get(g.id);
+    if (!p) { p = Promise.resolve().then(() => resolve(g)).catch(() => null); patches.set(g.id, p); }
+    return p.then(patch => mergeArt(g, patch));     // merged into every new copy of the game (the data can be re-normalized)
+  }
+
+  const loadUrl = (img, url) => new Promise(res => {
+    const done = v => { img.removeEventListener('load', onl); img.removeEventListener('error', one); res(v); };
+    const onl = () => done(true), one = () => done(false);
+    img.addEventListener('load', onl); img.addEventListener('error', one);
+    Promise.resolve(loader ? loader(url) : url).then(src => { img.src = src; }, () => done(false));
   });
-}
 
-function fail(img) {
-  if (img.dataset.kind === 'logo') {
-    const t = document.createElement('div');
-    t.className = 'fbt';
-    t.textContent = img.dataset.title || '';
-    img.replaceWith(t);
-    return;
+  function succeed(img) {
+    const show = () => {
+      if (!img.isConnected) return;
+      img.classList.add('is-loaded');
+      const l = slotOf(img); l.classList.remove('is-skel');
+      const p = img.closest('.poster'); if (p) p.classList.add('has-img');
+    };
+    // decode first, then reveal at most 2 per frame: the frame that shows an image never pays for its decode,
+    // and a burst of arrivals never uploads a dozen textures in the same frame
+    (img.decode ? img.decode().catch(() => {}) : Promise.resolve()).then(() => { shows.push(show); if (!showRaf) showRaf = requestAnimationFrame(flushShows); });
   }
-  const l = img.closest('.layer');
-  if (l && l.classList.contains('is-skel')) {            // nothing loaded: now (and only now) draw the generated art
-    l.classList.remove('is-skel');
-    l.insertAdjacentHTML('afterbegin', keyArt({ id: l.dataset.g, steamAppId: l.dataset.sa ? +l.dataset.sa : null, hue: l.dataset.hue === '' ? null : +l.dataset.hue }, +l.dataset.w || 400, +l.dataset.h || 600, 'x'));
-  }
-  const p = img.closest('.poster');
-  if (p) p.classList.add('is-fallback');
-  img.remove();
-}
-
-/* ── Generated key art: seeded layered landscape, deterministic per game ───────────────────── */
-function rnd(seed) { let x = seed * 9301 + 49297; return () => ((x = (x * 9301 + 49297) % 233280) / 233280); }
-let svgUid = 0;
-
-function keyArt(g, w, h, key = '') {
-  const hv = g.hue != null ? g.hue : hash(g.id) % 360;
-  const sd = g.steamAppId || hash(g.id);
-  const r = rnd(hv * 7 + (sd % 97)), H = hv, H2 = (H + 40 + r() * 60) % 360, id = 'ka' + svgUid++ + key, m = sd % 4;
-  let L = '', sun = '';
-  const sx = w * (.28 + r() * .44);
-  if (m == 0) {
-    sun = `<circle cx="${sx}" cy="${h * .34}" r="${h * .13}" fill="hsl(${H} 80% 85%)" opacity=".85"/>`;
-    for (let n = 0; n < 4; n++) { const y0 = h * (.45 + n * .14), amp = h * (.16 - n * .02); let p = `M0 ${h}L0 ${y0}`; for (let q = 0; q <= 9; q++) p += `L${q * w / 9} ${y0 - r() * amp}`; L += `<path d="${p}L${w} ${h}Z" fill="hsl(${H} ${28 - n * 3}% ${30 - n * 7}%)"/>`; }
-  } else if (m == 1) {
-    sun = `<circle cx="${sx}" cy="${h * .52}" r="${h * .2}" fill="hsl(${H} 85% 70%)" opacity=".9"/>`;
-    for (let n = 0; n < 3; n++) {
-      const c = Math.round(w / (34 - n * 7)); let x = 0;
-      while (x < w) {
-        const bw = w / c * (.7 + r() * .9), bh = h * (.22 + r() * .3) * (1 + n * .25), y = h * .98 - bh + (2 - n) * h * .04;
-        L += `<rect x="${x}" y="${y}" width="${bw}" height="${h - y}" fill="hsl(${H2} ${22 - n * 4}% ${24 - n * 7}%)"/>`;
-        if (n == 2) for (let q = 0; q < 3; q++) L += `<rect x="${x + bw * (.2 + r() * .5)}" y="${y + bh * (.1 + r() * .7)}" width="${bw * .1}" height="${bw * .14}" fill="hsl(48 90% 70%)" opacity=".7"/>`;
-        x += bw + 1;
-      }
+  function flushShows() { showRaf = 0; for (let n = 0; n < 2 && shows.length; n++) shows.shift()(); if (shows.length) showRaf = requestAnimationFrame(flushShows); }
+  function fail(img) {
+    if (img.dataset.kind === 'logo') {                // no logo: the title as text
+      const t = document.createElement('div'); t.className = 'fbt'; t.textContent = img.dataset.title || '';
+      const l = img.closest('.lg'); if (l) l.classList.remove('is-skel');
+      img.replaceWith(t); return;
     }
-  } else if (m == 2) {
-    sun = `<circle cx="${sx}" cy="${h * .3}" r="${h * .1}" fill="hsl(${H} 70% 90%)" opacity=".8"/>`;
-    for (let n = 0; n < 3; n++) {
-      const base = h * (.6 + n * .14), th = h * (.3 - n * .05), c = Math.round(w / (26 - n * 6)); let p = `M0 ${h}L0 ${base}`;
-      for (let q = 0; q < c; q++) { const x = q * w / c; p += `L${x + w / c * .5} ${base - th * (.5 + r() * .6)}L${x + w / c} ${base}`; }
-      L += `<path d="${p}L${w} ${h}Z" fill="hsl(${H} ${34 - n * 6}% ${26 - n * 8}%)"/><rect y="${base - h * .04}" width="${w}" height="${h * .12}" fill="hsl(${H2} 30% 60%)" opacity=".12"/>`;
-    }
-  } else {
-    sun = `<circle cx="${sx}" cy="${h * .5}" r="${h * .16}" fill="hsl(${H} 90% 82%)"/>`;
-    let p = `M0 ${h * .58}`; for (let q = 0; q <= 5; q++) p += `L${q * w / 5} ${h * (.5 + r() * .07)}`;
-    L += `<path d="${p}L${w} ${h * .6}L0 ${h * .6}Z" fill="hsl(${H2} 20% 22%)"/><rect y="${h * .58}" width="${w}" height="${h * .42}" fill="hsl(${H} 40% 26%)"/>`;
-    for (let q = 0; q < 14; q++) { const y = h * (.6 + q * .028), wd = w * (.1 + r() * .35 * (1 - q / 18)); L += `<rect x="${sx - wd / 2 + (r() - .5) * w * .1}" y="${y}" width="${wd}" height="${h * .006 + q * .5}" rx="2" fill="hsl(${H} 85% 85%)" opacity="${.5 - q * .03}"/>`; }
+    const l = slotOf(img); l.classList.remove('is-skel'); l.classList.add('is-failed');
+    const p = img.closest('.poster'); if (p) p.classList.add('is-fallback');
+    img.remove();
   }
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="s${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="hsl(${H2} 38% 18%)"/><stop offset=".75" stop-color="hsl(${H} 55% 50%)"/></linearGradient><filter id="n${id}"><feTurbulence baseFrequency=".9" numOctaves="2" seed="${Math.round(hv)}"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .08 0"/></filter></defs><rect width="${w}" height="${h}" fill="url(#s${id})"/>${sun}${L}<rect width="${w}" height="${h}" filter="url(#n${id})"/></svg>`;
+
+  /** A near slot: resolve its art first (outside the pool, so every visible game can be batched), then queue the load. */
+  function begin(img) {
+    const g = game(img.dataset.g); if (!g) return fail(img);
+    slotOf(img).classList.add('is-busy');             // only skeletons that are about to load shimmer; the rest stay still (animating 100 offscreen skeletons is not free)
+    settle(g).then(() => { if (dead || !img.isConnected) return; queue.push(img); pump(); });
+  }
+  async function run(img) {
+    if (dead || !img.isConnected) return;
+    if (!near(slotOf(img))) { slotOf(img).classList.remove('is-busy'); pending.add(img); return; }   // scrolled far away while queued: wait for it to come back
+    const g = game(img.dataset.g); if (!g) return fail(img);
+    for (const url of candidates(g, img.dataset.kind)) {
+      if (dead || !img.isConnected) return;
+      if (await loadUrl(img, url)) return succeed(img);
+    }
+    fail(img);
+  }
+  function pump() {
+    while (active < MAX && queue.length) { const img = queue.shift(); active++; run(img).catch(() => {}).finally(() => { active--; pump(); }); }
+  }
+
+  /** Queue every registered slot that is on (or close to) the screen, topmost first. */
+  function sweep() {
+    if (dead) return; last = Date.now();
+    const hit = [];
+    pending.forEach(img => {
+      if (!img.isConnected) return pending.delete(img);
+      const r = slotOf(img).getBoundingClientRect();
+      if (r.bottom > -700 && r.top < innerHeight + 700 && r.right > -400 && r.left < innerWidth + 400) hit.push([r.top, r.left, img]);
+    });
+    hit.sort((a, b) => a[0] - b[0] || a[1] - b[1]).forEach(([, , img]) => { pending.delete(img); begin(img); });
+  }
+  function later() {
+    if (timer || dead) return;
+    timer = setTimeout(() => { timer = 0; sweep(); }, Math.max(40, 90 - (Date.now() - last)));
+  }
+
+  const onScroll = () => later();
+  addEventListener('resize', onScroll);
+  scope.addEventListener('scroll', onScroll, { capture: true, passive: true });   // scroll doesn't bubble: capture catches the page AND every row
+
+  return {
+    settle, sweep,
+    /** Register every un-hydrated slot under `root`. Slots of hero slides that are not showing wait for warm(). */
+    hydrate(root, { force = false } = {}) {
+      root.querySelectorAll('img.art-img[data-g]:not([data-h])').forEach(img => {
+        if (!force && img.closest('.slide:not(.on)')) return;
+        img.dataset.h = '1'; pending.add(img);
+      });
+      sweep();
+    },
+    warm(root) { if (root) this.hydrate(root, { force: true }); },
+    destroy() { dead = true; clearTimeout(timer); cancelAnimationFrame(showRaf); shows.length = 0; pending.clear(); queue.length = 0; removeEventListener('resize', onScroll); scope.removeEventListener('scroll', onScroll, { capture: true }); },
+  };
 }
 
 /* ── src/js/ui/core/motion.js ── */
@@ -325,11 +359,22 @@ const T = { fast: 160, base: 320, slow: 700, swap: 200 };
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const ms = n => (reduced() ? 0 : n);
 
-/** Fade/slide `.rv` elements in once they scroll into view. Returns a disconnect fn. */
-function reveal(root) {
+/**
+ * Rise-and-fade `.rv` elements in as they scroll into view, as a cascade: everything that becomes visible in the same
+ * frame is ordered top→bottom, left→right and started 40 ms apart (capped), so a full screen of cards ripples in
+ * instead of popping. `lead` delays the first batch (used while the page itself is still fading in).
+ * The motion is a CSS *animation* (`.rv.in`), so it never fights the cards' hover transitions. Returns a disconnect fn.
+ */
+function reveal(root, { lead = 0 } = {}) {
   const els = [...root.querySelectorAll('.rv:not(.in)')];
   if (!('IntersectionObserver' in window)) { els.forEach(e => e.classList.add('in')); return () => {}; }
-  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: .08 });
+  let first = true;
+  const io = new IntersectionObserver(es => {
+    const hit = es.filter(e => e.isIntersecting).map(e => ({ el: e.target, r: e.boundingClientRect })).sort((a, b) => a.r.top - b.r.top || a.r.left - b.r.left);
+    if (!hit.length) return;
+    const base = first ? lead : 0; first = false;
+    hit.forEach(({ el }, n) => { el.style.setProperty('--d', (base + Math.min(n, 12) * 40) + 'ms'); el.classList.add('in'); io.unobserve(el); });
+  }, { threshold: .05 });
   els.forEach(e => io.observe(e));
   return () => io.disconnect();
 }
@@ -388,10 +433,10 @@ function heroHtml(slides) {
   const slide = ({ game: g, eyebrow }, i) => {
     const meta = [g.genres[0], g.releaseYear, g.size, g.rating].filter(Boolean).map(v => `<span>${esc(v)}</span>`).join('<i></i>');
     return `<article class="slide${i ? '' : ' on'}" aria-roledescription="slide" ${i ? 'aria-hidden="true"' : ''}>
-      <div class="art">${layer(g, 'hero', 1600, 800, 'h')}</div>
+      <div class="art">${layer(g, 'hero')}</div>
       <div class="info">
         <div class="chip-new"><i></i>${esc(eyebrow)}${g.tagline ? ' · ' + esc(g.tagline) : ''}</div>
-        <div class="lg">${artImg(g, 'logo', 'logo') || `<div class="fbt">${esc(g.title)}</div>`}</div>
+        <div class="lg is-skel">${artImg(g, 'logo', 'logo')}</div>
         <div class="tags">${meta}</div>
         <div class="acts">${button('Get game', { attrs: `data-get="${esc(g.id)}"` })}${glassButton('Details', `data-open="${esc(g.id)}"`)}</div>
       </div></article>`;
@@ -404,7 +449,7 @@ function heroHtml(slides) {
  * Behaviour: crossfade slides, progress lines, autoplay that pauses on hover / focus / hidden tab /
  * scrolled-away, remaining-time-aware resume, swipe on touch. Autoplay is off under reduced motion.
  */
-function initHero(hero, { autoplay = true, ms = 7000 } = {}) {
+function initHero(hero, { autoplay = true, ms = 7000, warm = null } = {}) {
   if (!hero) return { destroy() {}, go() {} };
   const slides = [...hero.querySelectorAll('.slide')], segs = [...hero.querySelectorAll('.sg')];
   const auto = autoplay && !reduced() && slides.length > 1;
@@ -421,12 +466,15 @@ function initHero(hero, { autoplay = true, ms = 7000 } = {}) {
     n = (n + slides.length) % slides.length;
     if (n === i) return;
     slides[i].classList.remove('on'); slides[i].setAttribute('aria-hidden', 'true'); segs[i] && (segs[i].classList.remove('on'), segs[i].removeAttribute('aria-current'));
-    i = n;
+    i = n; warmNear();
     slides[i].classList.add('on'); slides[i].removeAttribute('aria-hidden');
     if (segs[i]) { void segs[i].offsetWidth; segs[i].classList.add('on'); segs[i].setAttribute('aria-current', 'true'); }
     left = ms; t0 = 0; run();
   }
 
+  // only the first slide loads with the page; the next one is fetched while the first is showing, never all five at once
+  const warmNear = () => { if (!warm || slides.length < 2) return; warm(slides[i]); warm(slides[(i + 1) % slides.length]); };
+  const warmTimer = setTimeout(warmNear, 1200);
   segs.forEach((b, k) => b.addEventListener('click', () => go(k)));
   const mouse = e => e.pointerType === 'mouse';
   hero.addEventListener('pointerenter', e => mouse(e) && hold('hover', true));
@@ -442,7 +490,7 @@ function initHero(hero, { autoplay = true, ms = 7000 } = {}) {
   if ('IntersectionObserver' in window) { io = new IntersectionObserver(([e]) => hold('offscreen', !e.isIntersecting), { threshold: .25 }); io.observe(hero); }
 
   run();
-  return { go, destroy() { clearTimeout(timer); document.removeEventListener('visibilitychange', vis); io && io.disconnect(); } };
+  return { go, destroy() { clearTimeout(timer); clearTimeout(warmTimer); document.removeEventListener('visibilitychange', vis); io && io.disconnect(); } };
 }
 
 /* ── src/js/ui/components/chips.js ── */
@@ -461,9 +509,9 @@ function featuredHtml(items) {
   const tile = (f, i) => {
     const g = f.game, kind = f.image || (i === 0 ? 'hero' : 'poster');
     return `<article class="fc" tabindex="0" role="button" aria-label="${esc(f.headline || g.title)}" data-open="${esc(g.id)}">
-      ${layer(g, kind, kind === 'hero' ? 1600 : 400, kind === 'hero' ? 900 : 600, 'f')}
+      ${layer(g, kind)}
       <div class="t">${f.kicker ? `<small>${esc(f.kicker)}</small>` : ''}<h3>${esc(f.headline || g.title)}</h3></div>
-      <div class="st gl"><div class="pm">${layer(g, 'poster', 104, 104, 'p')}</div>
+      <div class="st gl"><div class="pm">${layer(g, 'poster')}</div>
         <div><b>${esc(g.title)}</b><span>${esc([g.tagline || g.genres[0], g.size].filter(Boolean).join(' · '))}</span></div>
         ${button('Get', { attrs: `data-get="${esc(g.id)}"`, cls: 'sm' })}</div></article>`;
   };
@@ -472,11 +520,11 @@ function featuredHtml(items) {
 
 /* ── src/js/ui/components/card.js ── */
 /** Poster card. `rank` (1..n) renders the big outlined number used by the "Top 10" shelf. */
-function card(g, { rank = 0, i = 0, reveal = false } = {}) {
+function card(g, { rank = 0 } = {}) {
   const meta = [g.tagline || g.genres[0], g.size].filter(Boolean).join(' · ');
-  return `<div class="card${rank ? ' rank' : ''}${reveal ? ' rv' : ''}" tabindex="0" role="button" aria-label="${esc(g.title)}" data-open="${esc(g.id)}" ${reveal ? `style="--i:${Math.min(i, 14)}"` : ''}>
+  return `<div class="card rv${rank ? ' rank' : ''}" tabindex="0" role="button" aria-label="${esc(g.title)}" data-open="${esc(g.id)}">
     ${rank ? `<div class="n" aria-hidden="true">${rank}</div>` : ''}
-    <div class="poster">${layer(g, 'poster', 400, 600)}<div class="pt">${esc(g.title)}</div><div class="go">${button('Get', { attrs: `data-get="${esc(g.id)}"`, cls: 'sm w' })}</div></div>
+    <div class="poster">${layer(g, 'poster')}<div class="pt">${esc(g.title)}</div><div class="go">${button('Get', { attrs: `data-get="${esc(g.id)}"`, cls: 'sm w' })}</div></div>
     <h3>${esc(g.title)}</h3><p>${esc(meta)}</p></div>`;
 }
 
@@ -484,8 +532,8 @@ function card(g, { rank = 0, i = 0, reveal = false } = {}) {
 /** A horizontally scrolling row of cards with a heading and a "See all" link. */
 function shelfHtml(s) {
   const ranked = s.style === 'ranked';
-  return `<section class="shelf rv" data-shelf="${esc(s.id)}">
-    <div class="sh-h"><h2>${esc(s.title)}</h2>${s.filter ? `<button class="more" data-more="${esc(s.id)}">See all</button>` : ''}</div>
+  return `<section class="shelf" data-shelf="${esc(s.id)}">
+    <div class="sh-h rv"><h2>${esc(s.title)}</h2>${s.filter ? `<button class="more" data-more="${esc(s.id)}">See all</button>` : ''}</div>
     <div class="rw"><button class="nx pv is-end" aria-label="Scroll back" tabindex="-1">${ic(ICON.prev, 20, 2.6)}</button>
       <div class="row">${s.games.slice(0, ranked ? 10 : 30).map((g, i) => card(g, { rank: ranked ? i + 1 : 0 })).join('')}</div>
       <button class="nx" aria-label="Scroll forward" tabindex="-1">${ic(ICON.next, 20, 2.6)}</button></div></section>`;
@@ -545,12 +593,12 @@ function detailHtml(D, g, { saved = false, placeholders = false } = {}) {
   const reqBox = (title, o) => (o && Object.keys(o).length ? `<div><b>${title}</b>${Object.entries(o).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join('<br>')}</div>` : '');
   const shots = g.screenshots.map(safeUrl).filter(Boolean);
   const shotsHtml = shots.length
-    ? shots.slice(0, 6).map(u => `<div><img src="${esc(u)}" alt="" loading="lazy"></div>`).join('')
-    : placeholders ? [1, 2, 3].map(i => `<div>${keyArt({ ...g, hue: (g.hue ?? 0) + i * 9 }, 320, 180, 's' + i)}</div>`).join('') : '';
+    ? shots.slice(0, 6).map(u => `<div><img src="${esc(u)}" alt="" loading="lazy" decoding="async"></div>`).join('')
+    : '';
   const facts = [['Developer', g.developer], ['Publisher', g.publisher], ['Released', g.releaseYear], ['Reception', g.rating], ['Genre', g.genres[0]], ['Size', g.size]].filter(([, v]) => v);
   const sim = similar(D, g);
   return `<button class="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>
-  <div class="dh">${layer(g, 'hero', 1600, 800, 'd')}${artImg(g, 'logo', 'logo') || `<div class="fbt">${esc(g.title)}</div>`}</div>
+  <div class="dh">${layer(g, 'hero')}${artImg(g, 'logo', 'logo')}</div>
   <div class="db"><div>
     ${g.description ? `<h4>About</h4><p>${esc(g.description)}</p>` : ''}
     ${shotsHtml ? `<h4>Screenshots</h4><div class="shots">${shotsHtml}</div>` : ''}
@@ -559,7 +607,7 @@ function detailHtml(D, g, { saved = false, placeholders = false } = {}) {
   <aside class="side">${button('Get game' + (g.size ? ' · ' + g.size : ''), { attrs: `data-get="${esc(g.id)}"`, cls: 'w' })}
     <button class="btn glass alt${saved ? ' on' : ''}" data-wish="${esc(g.id)}">${ic(ICON.heart)}<span>${saved ? 'Saved' : 'Save for later'}</span></button>
     ${facts.length ? `<div class="facts">${facts.map(([k, v]) => `<div><span>${k}</span>${esc(v)}</div>`).join('')}</div>` : ''}
-    ${sim.length ? `<h4 class="sh4">Similar</h4>${sim.map(x => `<div class="sim" tabindex="0" role="button" data-open="${esc(x.id)}"><div class="sa">${keyArt(x, 230, 108, 'm')}${artImg(x, 'header')}</div>${esc(x.title)}</div>`).join('')}` : ''}
+    ${sim.length ? `<h4 class="sh4">Similar</h4>${sim.map(x => `<div class="sim" tabindex="0" role="button" data-open="${esc(x.id)}"><div class="sa is-skel">${artImg(x, 'header')}</div>${esc(x.title)}</div>`).join('')}` : ''}
   </aside></div>`;
 }
 
@@ -580,7 +628,7 @@ function browseHtml(D, route, savedIds) {
     <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span></div>
     ${f.saved ? '' : chipsHtml(D.categories, f.category || '')}
     ${list.length
-      ? `<div class="grid">${list.slice(0, GRID_CHUNK).map((g, i) => card(g, { i, reveal: true })).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
+      ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
       : `<div class="empty"><h3>${empty[0]}</h3><p>${empty[1]}</p><button class="btn glass alt" data-nav="home">Back to discover</button></div>`}
   </div>`;
 }
@@ -592,7 +640,7 @@ function browseHtml(D, route, savedIds) {
  *    Returned games are added to the data (and listed if they match the current filter). Resolve to false / [] when there is nothing left.
  *    While it is pending the grid ends in skeleton cards.
  */
-function initGrid(root, D, route, savedIds, loader, loadMore) {
+function initGrid(root, D, route, savedIds, art, loadMore) {
   const grid = root.querySelector('.browse .grid'); if (!grid) return () => {};
   const f = route.filter || {}, shown = new Set([...grid.querySelectorAll('.card')].map(c => c.dataset.open)), stops = [];
   let busy = false, done = typeof loadMore !== 'function', dead = false;
@@ -601,13 +649,13 @@ function initGrid(root, D, route, savedIds, loader, loadMore) {
   if (!more) { more = document.createElement('div'); more.className = 'more'; more.setAttribute('aria-hidden', 'true'); grid.after(more); }
   const add = batch => {
     const tmp = document.createElement('div');
-    tmp.innerHTML = batch.map((g, i) => card(g, { i, reveal: true })).join('');
-    hydrate(tmp, loader); stops.push(reveal(tmp));
-    grid.append(...tmp.childNodes); batch.forEach(g => shown.add(g.id));
+    tmp.innerHTML = batch.map(g => card(g)).join('');
+    const nodes = [...tmp.children]; grid.append(...nodes); batch.forEach(g => shown.add(g.id));
+    art.hydrate(grid); stops.push(reveal(grid));                   // observed once attached, so the cascade starts from what is really on screen
   };
   const skeletons = n => {
     const tmp = document.createElement('div');
-    tmp.innerHTML = Array.from({ length: n }, () => '<div class="card skc" aria-hidden="true"><div class="poster"><div class="layer is-skel"></div></div><div class="skl"></div><div class="skl"></div></div>').join('');
+    tmp.innerHTML = Array.from({ length: n }, () => '<div class="card skc" aria-hidden="true"><div class="poster"><div class="layer is-skel is-busy"></div></div><div class="skl"></div><div class="skl"></div></div>').join('');
     const els = [...tmp.children]; grid.append(...els); return () => els.forEach(e => e.remove());
   };
   const setCount = () => { const c = root.querySelector('.browse .count'); if (c) { const n = list().length; c.textContent = `${n} ${n === 1 ? 'game' : 'games'}`; } };
@@ -643,10 +691,11 @@ function initGrid(root, D, route, savedIds, loader, loadMore) {
  *           (this is the Tampermonkey path: the original site's CSS can't touch us, and vice versa).
  *           If omitted, the UI renders in the light DOM and expects dist/hearth.css to be linked (mockup/dev path).
  *  options  { autoplay, autoplayMs, placeholders, theme, saved, route, imageLoader,
+ *             resolveArt(game) → Promise<patch|null>   // called lazily, once per game, right before its first image loads; patch = { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … }
  *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on), onUser(),
  *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game }
  *
- * app: { el, root, update(data), navigate(view, filter), open(id), close(), getRoute(), destroy() }
+ * app: { el, root, update(data), add(games), navigate(view, filter), open(id), close(), getRoute(), destroy() }
  */
 function mount({ target = document.body, data, css = null, shadow, options = {} } = {}) {
   const opt = { autoplay: true, autoplayMs: 7000, placeholders: false, theme: null, saved: [], route: null, imageLoader: null, ...options };
@@ -669,6 +718,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   const active = () => scope.activeElement || document.activeElement;
 
   let D = normalize(data);
+  const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, game: id => D.byId.get(String(id)) });
   const saved = new Set((opt.saved || []).map(String));
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
   let heroCtl, stopReveal, stopShelves, stopGrid, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
@@ -684,20 +734,22 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     $page.classList.toggle('has-bar', route.view !== 'home');
     $page.innerHTML = route.view === 'home' ? homeHtml() : browseHtml(D, route, saved);
     $scroll.scrollTop = 0;
-    hydrate($page, opt.imageLoader);
-    stopReveal = reveal($page);
+    art.hydrate($page);
+    stopReveal = reveal($page, { lead: 140 });
     stopShelves = initShelves($page);
-    stopGrid = route.view === 'home' ? null : initGrid($page, D, route, saved, opt.imageLoader, opt.loadMore);
-    heroCtl = initHero($page.querySelector('#hero'), { autoplay: opt.autoplay, ms: opt.autoplayMs });
+    stopGrid = route.view === 'home' ? null : initGrid($page, D, route, saved, art, opt.loadMore);
+    heroCtl = initHero($page.querySelector('#hero'), { autoplay: opt.autoplay, ms: opt.autoplayMs, warm: el => art.warm(el) });
     $foot.textContent = D.site.footer || '';
     syncNav();
   }
 
+  let again = false, waiters = [];
   async function refresh() {
-    if (swapping || destroyed) return;
+    if (destroyed) return;
+    if (swapping) { again = true; return new Promise(r => waiters.push(r)); }      // a swap is running: repaint once more when it ends (the latest data/route wins)
     swapping = true;
-    await swap($page, paint);
-    swapping = false;
+    do { again = false; await swap($page, paint); } while (again && !destroyed);
+    swapping = false; waiters.splice(0).forEach(r => r());                         // every caller resolves after the FINAL repaint
   }
 
   function renderBar() {
@@ -744,13 +796,16 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   async function openGame(id) {
     const g = D.byId.get(String(id)); if (!g) return;
     if (openId === g.id && $modal.classList.contains('open')) return;
-    const fill = () => { $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders }); hydrate($sheet, opt.imageLoader); $sheet.scrollTop = 0; };
+    const fill = () => { $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders }); art.hydrate($sheet); $sheet.scrollTop = 0; };
+    const sig = () => [g.description, g.developer, g.publisher, g.releaseYear, g.rating].join('|'), s0 = sig();
     if (!$modal.classList.contains('open')) {
       lastFocus = active(); fill();
       $modal.classList.add('open'); $modal.setAttribute('aria-hidden', 'false'); $scroll.classList.add('is-locked');
       $sheet.focus({ preventScroll: true });
     } else { $sheet.classList.add('is-swap'); await delay(reduced() ? 0 : T.fast); fill(); $sheet.classList.remove('is-swap'); }
     openId = g.id;
+    // art/details that were still being resolved when the sheet opened: show them as soon as they arrive (the sheet never waits)
+    if (opt.resolveArt) art.settle(g).then(() => { if (openId === g.id && sig() !== s0) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
     opt.onOpen && opt.onOpen(g);
   }
   function closeGame() {
@@ -830,10 +885,12 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
       renderBar();
       return refresh();
     },
+    /** Add games to the running app without a full re-render (e.g. search results). Existing games only gain new search tags. */
+    add(list) { const { added, merged } = addGames(D, list); return (added.length || merged) && route.view === 'browse' ? refresh() : Promise.resolve(); },
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 
@@ -843,9 +900,9 @@ function adopt(scope, css) {
 }
 
 /* ── src/js/ui/index.js ── */
-const version = '0.1.0';
+const version = '0.2.0';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-const features = { lazyGrid: true, skeletons: true, loadMore: true };
+const features = { lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true };
 
 return {mount, validate, steam, normalize, version, features};
 })();

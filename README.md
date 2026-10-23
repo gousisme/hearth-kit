@@ -4,7 +4,7 @@
 
 - Auto-rolling hero with transparent game logos and loading-line progress
 - Shelves, ranked "Top 10", editorial tiles, category chips, search, library, detail sheet
-- Steam artwork (poster · hero · logo) from an app id, with generated-art fallbacks
+- Steam artwork (poster · hero · logo) from an app id, loaded lazily with skeletons while loading (no generated art)
 - Motion on everything, in and out, 60 fps, `prefers-reduced-motion` respected
 - Shadow-DOM isolated, SPA-aware, falls back to the original page if anything fails
 - Free games only: **no prices** anywhere, Get/Save actions instead

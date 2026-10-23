@@ -24,7 +24,7 @@ export function coerceGame(g) {
     id: str(g.id),
     title: str(g.title),
     steamAppId: Number.isFinite(appId) && appId > 0 ? appId : null,
-    art: { poster: str(art.poster), hero: str(art.hero), logo: str(art.logo), header: str(art.header) },
+    art: { poster: str(art.poster), hero: str(art.hero), logo: str(art.logo), header: str(art.header), fallback: str(art.fallback) },
     tagline: str(g.tagline),
     description: str(g.description),
     genres,
@@ -39,7 +39,6 @@ export function coerceGame(g) {
     similarIds: strList(g.similarIds),
     downloadUrl: str(g.downloadUrl),
     sourceUrl: str(g.sourceUrl),
-    hue: Number.isFinite(parseFloat(g.hue)) ? parseFloat(g.hue) : null,
   };
 }
 
@@ -59,7 +58,7 @@ export function validate(data) {
     else if (ids.has(String(g.id))) errors.push(`${at}: duplicate id "${g.id}"`);
     else ids.add(String(g.id));
     if (!g.title) errors.push(`${at}: missing \`title\``);
-    if (!g.steamAppId && !(g.art && (g.art.poster || g.art.hero))) warnings.push(`${at}: no steamAppId and no art overrides — will use generated key art`);
+    if (!g.steamAppId && !(g.art && (g.art.poster || g.art.hero))) warnings.push(`${at}: no steamAppId and no art overrides — the card will show an empty tile (no artwork)`);
     if (!g.downloadUrl) warnings.push(`${at}: no downloadUrl — "Get" buttons will do nothing unless you set options.onGet`);
     for (const k of ['downloadUrl', 'sourceUrl']) if (g[k] && !/^https?:\/\//i.test(g[k])) errors.push(`${at}: \`${k}\` must be an absolute http(s) URL (got "${g[k]}")`);
   });

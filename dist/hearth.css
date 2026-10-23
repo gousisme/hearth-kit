@@ -1,4 +1,4 @@
-/*! hearth-kit v0.1.0 — DO NOT EDIT, edit src/styles/ and run `npm run build` */
+/*! hearth-kit v0.2.0 — DO NOT EDIT, edit src/styles/ and run `npm run build` */
 
 /* ── src/styles/00-tokens.css ── */
 /* TOKENS — everything visual that is a decision lives here. Override from options.theme
@@ -47,13 +47,15 @@
 /* view swap + first load: out = quick fade/sink (ease-in), in = slower rise (ease-out) */
 .page.is-out { opacity: 0; transform: translateY(12px); transition-duration: 200ms; transition-timing-function: var(--ein); }
 
-/* scroll reveal */
-.rv { opacity: 0; transform: translateY(26px); transition: opacity var(--ts) var(--ease), transform var(--ts) var(--ease); transition-delay: calc(var(--i, 0) * 28ms); }
-.rv.in { opacity: 1; transform: none; }
+/* scroll reveal: a CSS animation (not a transition), so it never competes with a card's hover transition.
+   --d is set per element by reveal() to make a cascade. `backwards` holds the start pose during the delay and
+   releases the element to its normal style afterwards (so :hover transforms keep working). */
+.rv { opacity: 0; }
+.rv.in { opacity: 1; animation: hf-rise var(--ts) var(--ease) var(--d, 0ms) backwards; }
+@keyframes hf-rise { from { opacity: 0; transform: translateY(22px) scale(.985); } }
 
-/* artwork: real image fades in over the generated art */
+/* artwork: a slot is a skeleton while loading, then the real image fades in over it. No generated art. */
 .layer { position: absolute; inset: 0; }
-.layer > svg { width: 100%; height: 100%; }
 .art-img { opacity: 0; transition: opacity var(--ts) var(--ease); }
 .art-img.is-loaded { opacity: 1; }
 .layer > .art-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -65,17 +67,23 @@
 
 @media (prefers-reduced-motion: reduce) {
   .hearth *, .hearth *::before, .hearth *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
-  .rv { opacity: 1; transform: none; }
+  .rv { opacity: 1; }
+  .rv.in { animation: none; }
 }
 
-/* skeleton: shown while a real image is still loading (replaces the generated placeholder art) */
-.layer.is-skel { background: linear-gradient(100deg, var(--s1) 30%, var(--s2) 50%, var(--s1) 70%) 0 0 / 220% 100%; animation: hf-sk 1.3s linear infinite; }
-@keyframes hf-sk { to { background-position: -220% 0; } }
+/* skeleton: the sheen is a transformed pseudo-element, so it runs on the compositor (an animated
+   background-position would repaint every skeleton on every frame, which is what made scrolling stutter) */
+.is-skel { position: relative; overflow: hidden; background: var(--s1); }
+.is-skel::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(100deg, transparent 25%, rgba(255, 255, 255, .07) 50%, transparent 75%); transform: translateX(-100%); }
+.is-skel.is-busy::after { animation: hf-sheen 1.5s ease-in-out infinite; }       /* only slots that are loading now (set by createArt) */
+@keyframes hf-sheen { to { transform: translateX(100%); } }
+/* nothing could be loaded: a flat, quiet tile (posters then show the title as text) */
+.layer.is-failed { background: var(--s2); }
 .skc .poster { aspect-ratio: 2 / 3; border-radius: var(--r); overflow: hidden; }
 .skc .skl { height: 12px; margin-top: 12px; border-radius: 6px; width: 78%; background: var(--s1); animation: hf-pulse 1.3s ease-in-out infinite; }
 .skc .skl + .skl { width: 46%; margin-top: 8px; }
 @keyframes hf-pulse { 50% { opacity: .45; } }
-@media (prefers-reduced-motion: reduce) { .layer.is-skel, .skc .skl { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .is-skel::after { display: none; } .skc .skl { animation: none; } }
 
 /* ── src/styles/20-buttons.css ── */
 /* PRIMARY: lime pill + arrow disc. Hover: arrows swap (slide), gap opens. Press: squash. */
@@ -155,6 +163,9 @@
 .slide.on .info > :nth-child(4) { transition-delay: 270ms; }
 .chip-new { display: inline-flex; align-items: center; gap: 8px; background: rgba(24, 26, 30, .55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding: 5px 12px; border-radius: 99px; font: 600 12px var(--fb); margin-bottom: 16px; }
 .chip-new i { width: 7px; height: 7px; border-radius: 50%; background: var(--ac); }
+.lg { position: relative; min-height: 112px; display: flex; align-items: flex-end; margin-bottom: 16px; }   /* reserves the logo's height so the text doesn't jump when it loads */
+.lg.is-skel { max-width: 300px; border-radius: 14px; }
+.lg .logo, .lg .fbt { margin-bottom: 0; }
 .logo { max-width: 380px; max-height: 140px; object-fit: contain; object-position: left; margin-bottom: 16px; filter: drop-shadow(0 2px 14px rgba(0, 0, 0, .4)); }
 .fbt { font: 800 clamp(44px, 6vw, 88px)/.9 var(--fd); letter-spacing: -.035em; text-transform: uppercase; margin-bottom: 16px; text-shadow: 0 2px 24px rgba(0, 0, 0, .35); }
 .tags { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-weight: 500; font-size: 14px; margin-bottom: 20px; }
@@ -214,9 +225,9 @@
 .nx:active { transform: scale(.92) !important; }
 
 /* cards */
-.card { flex: none; width: 210px; scroll-snap-align: start; cursor: pointer; transition: transform var(--tb) var(--ease), opacity var(--ts) var(--ease); }
+.card { flex: none; width: 210px; scroll-snap-align: start; cursor: pointer; transition: transform var(--tb) var(--ease); }
 .poster { position: relative; aspect-ratio: 2/3; border-radius: var(--r); overflow: hidden; background: var(--s1); }
-.poster .layer > svg, .poster .layer > .art-img { transition: transform var(--ts) var(--ease), opacity var(--ts) var(--ease); }
+.poster .layer > .art-img { transition: transform var(--ts) var(--ease), opacity var(--ts) var(--ease); }
 .card:hover { transform: translateY(-6px); }
 .card:hover .poster .layer > * { transform: scale(1.06); }
 /* title text over the poster only when there is no real art (Steam posters carry their own logo) */
@@ -255,9 +266,9 @@
 .db h4:first-child { margin-top: 0; }
 .db p { color: #cfd3da; }
 .shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.shots > div { aspect-ratio: 16/9; border-radius: 10px; overflow: hidden; position: relative; transition: transform var(--tb) var(--ease); }
+.shots > div { aspect-ratio: 16/9; border-radius: 10px; overflow: hidden; position: relative; background: var(--s2); transition: transform var(--tb) var(--ease); }
 .shots > div:hover { transform: scale(1.03); }
-.shots svg, .shots img { width: 100%; height: 100%; object-fit: cover; }
+.shots img { width: 100%; height: 100%; object-fit: cover; }
 .req { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .req > div { background: var(--s2); border-radius: var(--r); padding: 14px 16px; font-size: 13px; color: var(--mu); }
 .req b { display: block; color: var(--tx); font: 700 14px var(--fd); margin-bottom: 6px; }
@@ -270,7 +281,7 @@
 .sim { display: flex; gap: 10px; align-items: center; background: var(--s2); border-radius: var(--r); padding: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background var(--tf), transform var(--tb) var(--ease); }
 .sim:hover { background: var(--line); transform: translateX(3px); }
 .sim .sa { width: 84px; aspect-ratio: 460/215; border-radius: 6px; overflow: hidden; position: relative; flex: none; }
-.sim .sa svg, .sim .sa img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.sim .sa img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
 /* ── src/styles/70-browse.css ── */
 .bh { display: flex; align-items: baseline; gap: 16px; }

@@ -192,7 +192,6 @@
       "releaseYear": 2022,
       "size": "60 GB",
       "rating": "Very Positive",
-      "hue": 38,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",
@@ -229,7 +228,6 @@
       "releaseYear": 2023,
       "size": "150 GB",
       "rating": "Overwhelmingly Positive",
-      "hue": 350,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",
@@ -266,7 +264,6 @@
       "releaseYear": 2020,
       "size": "15 GB",
       "rating": "Overwhelmingly Positive",
-      "hue": 10,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",
@@ -302,7 +299,6 @@
       "releaseYear": 2017,
       "size": "9 GB",
       "rating": "Overwhelmingly Positive",
-      "hue": 215,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",
@@ -340,7 +336,6 @@
       "releaseYear": 2020,
       "size": "70 GB",
       "rating": "Very Positive",
-      "hue": 55,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",
@@ -376,7 +371,6 @@
       "releaseYear": 2016,
       "size": "1 GB",
       "rating": "Overwhelmingly Positive",
-      "hue": 130,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",
@@ -412,7 +406,6 @@
       "releaseYear": 2018,
       "size": "1.2 GB",
       "rating": "Overwhelmingly Positive",
-      "hue": 300,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",
@@ -449,7 +442,6 @@
       "releaseYear": 2019,
       "size": "20 GB",
       "rating": "Very Positive",
-      "hue": 25,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",
@@ -487,7 +479,6 @@
       "releaseYear": 2016,
       "size": "25 GB",
       "rating": "Very Positive",
-      "hue": 20,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",
@@ -525,7 +516,6 @@
       "releaseYear": 2015,
       "size": "50 GB",
       "rating": "Overwhelmingly Positive",
-      "hue": 150,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",
@@ -562,7 +552,6 @@
       "releaseYear": 2019,
       "size": "25 GB",
       "rating": "Very Positive",
-      "hue": 5,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",
@@ -598,7 +587,6 @@
       "releaseYear": 2011,
       "size": "300 MB",
       "rating": "Overwhelmingly Positive",
-      "hue": 100,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",
@@ -634,7 +622,6 @@
       "releaseYear": 2019,
       "size": "1 GB",
       "rating": "Overwhelmingly Positive",
-      "hue": 260,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",
@@ -671,7 +658,6 @@
       "releaseYear": 2011,
       "size": "12 GB",
       "rating": "Overwhelmingly Positive",
-      "hue": 200,
       "requirements": {
         "minimum": {
           "OS": "Windows 10",

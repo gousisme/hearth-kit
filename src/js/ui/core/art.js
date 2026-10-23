@@ -1,10 +1,15 @@
-import { esc, safeUrl, hash } from '../../shared/util.js';
+import { esc, safeUrl } from '../../shared/util.js';
 
 /**
  * ARTWORK
- * Every image slot is a stack:   generated key art (always there)  <  real image (fades in on load).
- * Real images are tried in order (`candidates`); if all fail the generated art simply stays.
- * Logos are the exception: if no logo loads we render the game title as text instead.
+ * An art slot is   <div class="layer is-skel"><img class="art-img" data-g data-kind></div>.
+ *   · while its image is loading (or its source is still being resolved) the slot is a skeleton;
+ *   · when the image arrives it fades in over the skeleton;
+ *   · if nothing loads the slot becomes a flat, quiet tile (`is-failed`; posters then show the title as text).
+ * There is NO generated artwork: a slot is either a skeleton, a real image, or an empty tile.
+ *
+ * Slots are filled lazily by createArt(): only slots near the viewport load, a few at a time, so a page with
+ * hundreds of cards never fires hundreds of requests (or decodes) at once.
  */
 
 const STEAM = 'https://cdn.cloudflare.steamstatic.com/steam/apps/';
@@ -17,112 +22,141 @@ export const steam = {
   capsule: id => `${STEAM}${id}/capsule_616x353.jpg`,
 };
 
-/** Ordered list of URLs to try for one art slot. Explicit `art.*` overrides win over Steam. */
+/** Ordered list of URLs to try for one art slot: explicit `art.<kind>` → Steam CDN → `art.fallback` (never for logos). */
 export function candidates(game, kind) {
-  const out = [];
-  const own = game.art && game.art[kind];
-  if (own) out.push(own);
+  const out = [], a = game.art || {};
+  if (a[kind]) out.push(a[kind]);
   if (game.steamAppId) {
     out.push(steam[kind](game.steamAppId));
     if (kind === 'hero') out.push(steam.header(game.steamAppId)); // low-res but better than nothing
   }
+  if (kind !== 'logo' && a.fallback) out.push(a.fallback);
   return [...new Set(out.map(safeUrl).filter(Boolean))];
 }
 
-/** <img> that is hydrated later by `hydrate()` (so we can retry, fall back and fade in). */
+/** The <img> of one slot. It has no src: createArt().hydrate() decides when (and from where) it loads. */
 export function artImg(game, kind, cls = '') {
-  const list = candidates(game, kind);
-  if (!list.length) return '';
-  return `<img class="art-img ${cls}" alt="${kind === 'logo' ? esc(game.title) : ''}" data-kind="${kind}" data-title="${esc(game.title)}" data-cands="${esc(JSON.stringify(list))}" decoding="async" ${kind === 'logo' ? '' : 'loading="lazy"'}>`;
+  return `<img class="art-img ${cls}" alt="${kind === 'logo' ? esc(game.title) : ''}" data-g="${esc(game.id)}" data-kind="${kind}" data-title="${esc(game.title)}" decoding="async">`;
+}
+
+/** A full-bleed art slot (poster, hero, header…). Starts as a skeleton. */
+export function layer(game, kind) {
+  return `<div class="layer is-skel">${artImg(game, kind)}</div>`;
+}
+
+/** Copy what the resolver found into the (normalized) game. Only art and a few descriptive fields may change. */
+function mergeArt(g, p) {
+  if (!p || typeof p !== 'object') return;
+  const n = parseInt(p.steamAppId, 10); if (n > 0) g.steamAppId = n;
+  if (p.art && typeof p.art === 'object') for (const k of ['poster', 'hero', 'logo', 'header', 'fallback']) if (p.art[k]) g.art[k] = String(p.art[k]);
+  for (const k of ['description', 'developer', 'publisher', 'rating']) if (p[k]) g[k] = String(p[k]);
+  if (p.releaseYear && !g.releaseYear) g.releaseYear = parseInt(p.releaseYear, 10) || null;
 }
 
 /**
- * One image slot. While a real image can still load the slot is a shimmering skeleton (cheap, and no
- * placeholder picture flashing behind the art). Generated key art is only built when there is nothing
- * to load, or when every candidate failed (see fail()).
+ * createArt({ root, loader, resolve, game }) → { hydrate(root, {force}), warm(root), settle(game), sweep(), destroy() }
+ *   root          the element that contains every slot (scroll events are caught there: they don't cross a shadow root)
+ *   game(id)      → the current normalized game (the data can be replaced while the app lives)
+ *   resolve(game) → Promise<patch|null>   optional, called once per game right before its first slot loads
+ *                   (patch: { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … })
+ *   loader(url)   → Promise<string>       optional (GM_xmlhttpRequest → blob: URL)
  */
-export function layer(game, kind, w, h, key = '') {
-  const real = artImg(game, kind);
-  if (!real) return `<div class="layer">${keyArt(game, w, h, key)}</div>`;
-  return `<div class="layer is-skel" data-g="${esc(game.id)}" data-sa="${esc(game.steamAppId || '')}" data-hue="${game.hue != null ? game.hue : ''}" data-w="${w}" data-h="${h}">${real}</div>`;
-}
+export function createArt({ root: scope, loader = null, resolve = null, game }) {
+  const MAX = 8;                                    // images loading at once (resolving art does not count: the resolver batches and limits itself)
+  const pending = new Set(), queue = [], shows = [], patches = new Map();
+  let active = 0, dead = false, timer = 0, last = 0, showRaf = 0;
 
-/**
- * Wire up every un-hydrated <img data-cands> under `root`.
- * `loader(url) -> Promise<string>` (optional) lets the Tampermonkey glue fetch images through
- * GM_xmlhttpRequest when the host page's CSP blocks the Steam CDN.
- */
-export function hydrate(root, loader) {
-  root.querySelectorAll('img[data-cands]:not([data-h])').forEach(img => {
-    img.dataset.h = '1';
-    let list = [];
-    try { list = JSON.parse(img.dataset.cands); } catch (e) { /* ignore */ }
-    let i = 0;
-    const next = async () => {
-      if (i >= list.length) return fail(img);
-      const url = list[i++];
-      try { img.src = loader ? await loader(url) : url; } catch (e) { next(); }
-    };
-    img.addEventListener('load', () => { img.classList.add('is-loaded'); const l = img.closest('.layer'); if (l) l.classList.remove('is-skel'); const p = img.closest('.poster'); if (p) p.classList.add('has-img'); });
-    img.addEventListener('error', next);
-    next();
+  const slotOf = img => img.closest('.layer, .sa, .lg') || img;
+  const near = el => { const r = el.getBoundingClientRect(); return r.bottom > -700 && r.top < innerHeight + 700 && r.right > -400 && r.left < innerWidth + 400; };
+
+  function settle(g) {
+    if (!resolve) return Promise.resolve();
+    let p = patches.get(g.id);
+    if (!p) { p = Promise.resolve().then(() => resolve(g)).catch(() => null); patches.set(g.id, p); }
+    return p.then(patch => mergeArt(g, patch));     // merged into every new copy of the game (the data can be re-normalized)
+  }
+
+  const loadUrl = (img, url) => new Promise(res => {
+    const done = v => { img.removeEventListener('load', onl); img.removeEventListener('error', one); res(v); };
+    const onl = () => done(true), one = () => done(false);
+    img.addEventListener('load', onl); img.addEventListener('error', one);
+    Promise.resolve(loader ? loader(url) : url).then(src => { img.src = src; }, () => done(false));
   });
-}
 
-function fail(img) {
-  if (img.dataset.kind === 'logo') {
-    const t = document.createElement('div');
-    t.className = 'fbt';
-    t.textContent = img.dataset.title || '';
-    img.replaceWith(t);
-    return;
+  function succeed(img) {
+    const show = () => {
+      if (!img.isConnected) return;
+      img.classList.add('is-loaded');
+      const l = slotOf(img); l.classList.remove('is-skel');
+      const p = img.closest('.poster'); if (p) p.classList.add('has-img');
+    };
+    // decode first, then reveal at most 2 per frame: the frame that shows an image never pays for its decode,
+    // and a burst of arrivals never uploads a dozen textures in the same frame
+    (img.decode ? img.decode().catch(() => {}) : Promise.resolve()).then(() => { shows.push(show); if (!showRaf) showRaf = requestAnimationFrame(flushShows); });
   }
-  const l = img.closest('.layer');
-  if (l && l.classList.contains('is-skel')) {            // nothing loaded: now (and only now) draw the generated art
-    l.classList.remove('is-skel');
-    l.insertAdjacentHTML('afterbegin', keyArt({ id: l.dataset.g, steamAppId: l.dataset.sa ? +l.dataset.sa : null, hue: l.dataset.hue === '' ? null : +l.dataset.hue }, +l.dataset.w || 400, +l.dataset.h || 600, 'x'));
-  }
-  const p = img.closest('.poster');
-  if (p) p.classList.add('is-fallback');
-  img.remove();
-}
-
-/* ── Generated key art: seeded layered landscape, deterministic per game ───────────────────── */
-function rnd(seed) { let x = seed * 9301 + 49297; return () => ((x = (x * 9301 + 49297) % 233280) / 233280); }
-let svgUid = 0;
-
-export function keyArt(g, w, h, key = '') {
-  const hv = g.hue != null ? g.hue : hash(g.id) % 360;
-  const sd = g.steamAppId || hash(g.id);
-  const r = rnd(hv * 7 + (sd % 97)), H = hv, H2 = (H + 40 + r() * 60) % 360, id = 'ka' + svgUid++ + key, m = sd % 4;
-  let L = '', sun = '';
-  const sx = w * (.28 + r() * .44);
-  if (m == 0) {
-    sun = `<circle cx="${sx}" cy="${h * .34}" r="${h * .13}" fill="hsl(${H} 80% 85%)" opacity=".85"/>`;
-    for (let n = 0; n < 4; n++) { const y0 = h * (.45 + n * .14), amp = h * (.16 - n * .02); let p = `M0 ${h}L0 ${y0}`; for (let q = 0; q <= 9; q++) p += `L${q * w / 9} ${y0 - r() * amp}`; L += `<path d="${p}L${w} ${h}Z" fill="hsl(${H} ${28 - n * 3}% ${30 - n * 7}%)"/>`; }
-  } else if (m == 1) {
-    sun = `<circle cx="${sx}" cy="${h * .52}" r="${h * .2}" fill="hsl(${H} 85% 70%)" opacity=".9"/>`;
-    for (let n = 0; n < 3; n++) {
-      const c = Math.round(w / (34 - n * 7)); let x = 0;
-      while (x < w) {
-        const bw = w / c * (.7 + r() * .9), bh = h * (.22 + r() * .3) * (1 + n * .25), y = h * .98 - bh + (2 - n) * h * .04;
-        L += `<rect x="${x}" y="${y}" width="${bw}" height="${h - y}" fill="hsl(${H2} ${22 - n * 4}% ${24 - n * 7}%)"/>`;
-        if (n == 2) for (let q = 0; q < 3; q++) L += `<rect x="${x + bw * (.2 + r() * .5)}" y="${y + bh * (.1 + r() * .7)}" width="${bw * .1}" height="${bw * .14}" fill="hsl(48 90% 70%)" opacity=".7"/>`;
-        x += bw + 1;
-      }
+  function flushShows() { showRaf = 0; for (let n = 0; n < 2 && shows.length; n++) shows.shift()(); if (shows.length) showRaf = requestAnimationFrame(flushShows); }
+  function fail(img) {
+    if (img.dataset.kind === 'logo') {                // no logo: the title as text
+      const t = document.createElement('div'); t.className = 'fbt'; t.textContent = img.dataset.title || '';
+      const l = img.closest('.lg'); if (l) l.classList.remove('is-skel');
+      img.replaceWith(t); return;
     }
-  } else if (m == 2) {
-    sun = `<circle cx="${sx}" cy="${h * .3}" r="${h * .1}" fill="hsl(${H} 70% 90%)" opacity=".8"/>`;
-    for (let n = 0; n < 3; n++) {
-      const base = h * (.6 + n * .14), th = h * (.3 - n * .05), c = Math.round(w / (26 - n * 6)); let p = `M0 ${h}L0 ${base}`;
-      for (let q = 0; q < c; q++) { const x = q * w / c; p += `L${x + w / c * .5} ${base - th * (.5 + r() * .6)}L${x + w / c} ${base}`; }
-      L += `<path d="${p}L${w} ${h}Z" fill="hsl(${H} ${34 - n * 6}% ${26 - n * 8}%)"/><rect y="${base - h * .04}" width="${w}" height="${h * .12}" fill="hsl(${H2} 30% 60%)" opacity=".12"/>`;
-    }
-  } else {
-    sun = `<circle cx="${sx}" cy="${h * .5}" r="${h * .16}" fill="hsl(${H} 90% 82%)"/>`;
-    let p = `M0 ${h * .58}`; for (let q = 0; q <= 5; q++) p += `L${q * w / 5} ${h * (.5 + r() * .07)}`;
-    L += `<path d="${p}L${w} ${h * .6}L0 ${h * .6}Z" fill="hsl(${H2} 20% 22%)"/><rect y="${h * .58}" width="${w}" height="${h * .42}" fill="hsl(${H} 40% 26%)"/>`;
-    for (let q = 0; q < 14; q++) { const y = h * (.6 + q * .028), wd = w * (.1 + r() * .35 * (1 - q / 18)); L += `<rect x="${sx - wd / 2 + (r() - .5) * w * .1}" y="${y}" width="${wd}" height="${h * .006 + q * .5}" rx="2" fill="hsl(${H} 85% 85%)" opacity="${.5 - q * .03}"/>`; }
+    const l = slotOf(img); l.classList.remove('is-skel'); l.classList.add('is-failed');
+    const p = img.closest('.poster'); if (p) p.classList.add('is-fallback');
+    img.remove();
   }
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="s${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="hsl(${H2} 38% 18%)"/><stop offset=".75" stop-color="hsl(${H} 55% 50%)"/></linearGradient><filter id="n${id}"><feTurbulence baseFrequency=".9" numOctaves="2" seed="${Math.round(hv)}"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .08 0"/></filter></defs><rect width="${w}" height="${h}" fill="url(#s${id})"/>${sun}${L}<rect width="${w}" height="${h}" filter="url(#n${id})"/></svg>`;
+
+  /** A near slot: resolve its art first (outside the pool, so every visible game can be batched), then queue the load. */
+  function begin(img) {
+    const g = game(img.dataset.g); if (!g) return fail(img);
+    slotOf(img).classList.add('is-busy');             // only skeletons that are about to load shimmer; the rest stay still (animating 100 offscreen skeletons is not free)
+    settle(g).then(() => { if (dead || !img.isConnected) return; queue.push(img); pump(); });
+  }
+  async function run(img) {
+    if (dead || !img.isConnected) return;
+    if (!near(slotOf(img))) { slotOf(img).classList.remove('is-busy'); pending.add(img); return; }   // scrolled far away while queued: wait for it to come back
+    const g = game(img.dataset.g); if (!g) return fail(img);
+    for (const url of candidates(g, img.dataset.kind)) {
+      if (dead || !img.isConnected) return;
+      if (await loadUrl(img, url)) return succeed(img);
+    }
+    fail(img);
+  }
+  function pump() {
+    while (active < MAX && queue.length) { const img = queue.shift(); active++; run(img).catch(() => {}).finally(() => { active--; pump(); }); }
+  }
+
+  /** Queue every registered slot that is on (or close to) the screen, topmost first. */
+  function sweep() {
+    if (dead) return; last = Date.now();
+    const hit = [];
+    pending.forEach(img => {
+      if (!img.isConnected) return pending.delete(img);
+      const r = slotOf(img).getBoundingClientRect();
+      if (r.bottom > -700 && r.top < innerHeight + 700 && r.right > -400 && r.left < innerWidth + 400) hit.push([r.top, r.left, img]);
+    });
+    hit.sort((a, b) => a[0] - b[0] || a[1] - b[1]).forEach(([, , img]) => { pending.delete(img); begin(img); });
+  }
+  function later() {
+    if (timer || dead) return;
+    timer = setTimeout(() => { timer = 0; sweep(); }, Math.max(40, 90 - (Date.now() - last)));
+  }
+
+  const onScroll = () => later();
+  addEventListener('resize', onScroll);
+  scope.addEventListener('scroll', onScroll, { capture: true, passive: true });   // scroll doesn't bubble: capture catches the page AND every row
+
+  return {
+    settle, sweep,
+    /** Register every un-hydrated slot under `root`. Slots of hero slides that are not showing wait for warm(). */
+    hydrate(root, { force = false } = {}) {
+      root.querySelectorAll('img.art-img[data-g]:not([data-h])').forEach(img => {
+        if (!force && img.closest('.slide:not(.on)')) return;
+        img.dataset.h = '1'; pending.add(img);
+      });
+      sweep();
+    },
+    warm(root) { if (root) this.hydrate(root, { force: true }); },
+    destroy() { dead = true; clearTimeout(timer); cancelAnimationFrame(showRaf); shows.length = 0; pending.clear(); queue.length = 0; removeEventListener('resize', onScroll); scope.removeEventListener('scroll', onScroll, { capture: true }); },
+  };
 }

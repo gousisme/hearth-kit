@@ -57,7 +57,7 @@ This is **the** interface between a scraper and the UI. A scraper only has to re
   "similarIds": ["bg3"],               // optional; otherwise computed from shared genres
   "downloadUrl": "https://…",          // absolute http(s). What "Get" opens (new tab) unless options.onGet handles it
   "sourceUrl": "https://…",            // the game's page on the original site
-  "hue": 38                            // 0–360, tints the generated fallback art; default derived from id
+  "art.fallback": "https://…"          // optional last-resort image (e.g. the site's own thumbnail), tried after Steam; never used for logos
 }
 ```
 
@@ -76,6 +76,6 @@ Given an app id, artwork URLs are built from Steam's CDN. `HearthUI.steam` expos
 
 **Getting the app id:** from a Steam link on the page (`HearthScrape.steamAppId(url)` parses `store.steampowered.com/app/<id>/…`), from the site's own data, or by searching Steam by title (ask the user if neither exists). A game with no id still renders, using generated art.
 
-**Fallback chain per slot** (`candidates()` in `core/art.js`): `art.<slot>` override → Steam URL → (hero only) header → generated key art. Logos fall back to the title as text. A failed image never breaks layout.
+**Fallback chain per slot** (`candidates()` in `core/art.js`): `art.<slot>` override → Steam URL → (hero only) header → `art.fallback`. While loading the slot is a skeleton; if everything fails it is a flat tile (posters show the title). Logos fall back to the title as text. Optional `options.resolveArt(game)` lets the userscript find Steam ids / art lazily, per card, right before its image loads. A failed image never breaks layout.
 
 **Caveats (verify against the real CDN during development):** Steam has been moving some apps' library assets to hashed sub-paths, so the plain URL above may 404 for certain (typically newer) apps. The fallback chain hides this, but for such a game set `art.poster/hero/logo` explicitly if the site provides art or you can resolve the real URLs. Also, a host page's CSP may block the Steam CDN; see [07-gotchas.md](07-gotchas.md).

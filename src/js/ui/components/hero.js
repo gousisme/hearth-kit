@@ -1,5 +1,5 @@
 import { esc } from '../../shared/util.js';
-import { layer } from '../core/art.js';
+import { layer, artImg } from '../core/art.js';
 import { reduced } from '../core/motion.js';
 import { button, glassButton } from './button.js';
 
@@ -9,10 +9,10 @@ export function heroHtml(slides) {
   const slide = ({ game: g, eyebrow }, i) => {
     const meta = [g.genres[0], g.releaseYear, g.size, g.rating].filter(Boolean).map(v => `<span>${esc(v)}</span>`).join('<i></i>');
     return `<article class="slide${i ? '' : ' on'}" aria-roledescription="slide" ${i ? 'aria-hidden="true"' : ''}>
-      <div class="art">${layer(g, 'hero', 1600, 800, 'h')}</div>
+      <div class="art">${layer(g, 'hero')}</div>
       <div class="info">
         <div class="chip-new"><i></i>${esc(eyebrow)}${g.tagline ? ' · ' + esc(g.tagline) : ''}</div>
-        <div class="lg">${artImg(g, 'logo', 'logo') || `<div class="fbt">${esc(g.title)}</div>`}</div>
+        <div class="lg is-skel">${artImg(g, 'logo', 'logo')}</div>
         <div class="tags">${meta}</div>
         <div class="acts">${button('Get game', { attrs: `data-get="${esc(g.id)}"` })}${glassButton('Details', `data-open="${esc(g.id)}"`)}</div>
       </div></article>`;
@@ -25,7 +25,7 @@ export function heroHtml(slides) {
  * Behaviour: crossfade slides, progress lines, autoplay that pauses on hover / focus / hidden tab /
  * scrolled-away, remaining-time-aware resume, swipe on touch. Autoplay is off under reduced motion.
  */
-export function initHero(hero, { autoplay = true, ms = 7000 } = {}) {
+export function initHero(hero, { autoplay = true, ms = 7000, warm = null } = {}) {
   if (!hero) return { destroy() {}, go() {} };
   const slides = [...hero.querySelectorAll('.slide')], segs = [...hero.querySelectorAll('.sg')];
   const auto = autoplay && !reduced() && slides.length > 1;
@@ -42,12 +42,15 @@ export function initHero(hero, { autoplay = true, ms = 7000 } = {}) {
     n = (n + slides.length) % slides.length;
     if (n === i) return;
     slides[i].classList.remove('on'); slides[i].setAttribute('aria-hidden', 'true'); segs[i] && (segs[i].classList.remove('on'), segs[i].removeAttribute('aria-current'));
-    i = n;
+    i = n; warmNear();
     slides[i].classList.add('on'); slides[i].removeAttribute('aria-hidden');
     if (segs[i]) { void segs[i].offsetWidth; segs[i].classList.add('on'); segs[i].setAttribute('aria-current', 'true'); }
     left = ms; t0 = 0; run();
   }
 
+  // only the first slide loads with the page; the next one is fetched while the first is showing, never all five at once
+  const warmNear = () => { if (!warm || slides.length < 2) return; warm(slides[i]); warm(slides[(i + 1) % slides.length]); };
+  const warmTimer = setTimeout(warmNear, 1200);
   segs.forEach((b, k) => b.addEventListener('click', () => go(k)));
   const mouse = e => e.pointerType === 'mouse';
   hero.addEventListener('pointerenter', e => mouse(e) && hold('hover', true));
@@ -63,5 +66,5 @@ export function initHero(hero, { autoplay = true, ms = 7000 } = {}) {
   if ('IntersectionObserver' in window) { io = new IntersectionObserver(([e]) => hold('offscreen', !e.isIntersecting), { threshold: .25 }); io.observe(hero); }
 
   run();
-  return { go, destroy() { clearTimeout(timer); document.removeEventListener('visibilitychange', vis); io && io.disconnect(); } };
+  return { go, destroy() { clearTimeout(timer); clearTimeout(warmTimer); document.removeEventListener('visibilitychange', vis); io && io.disconnect(); } };
 }

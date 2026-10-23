@@ -31,7 +31,7 @@
     const games = S.qa('TODO: selector for one game card/row').map(el => S.game({
       id: S.attr(el, 'data-id') || S.slug(S.text('TODO: title selector', el)),   // must be STABLE across page loads
       title: S.text('TODO: title selector', el),
-      steamAppId: S.steamAppId(S.attr('TODO: a[href*="steampowered"]', 'href', el)),   // or null → generated art
+      steamAppId: S.steamAppId(S.attr('TODO: a[href*="steampowered"]', 'href', el)),   // or null → no Steam art (use art.fallback)
       genres: S.text('TODO', el).split(','),
       size: S.text('TODO', el),
       downloadUrl: S.abs(S.attr('TODO: download link', 'href', el)),          // absolute http(s)

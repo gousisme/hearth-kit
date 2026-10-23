@@ -28,9 +28,9 @@
 .nx:active { transform: scale(.92) !important; }
 
 /* cards */
-.card { flex: none; width: 210px; scroll-snap-align: start; cursor: pointer; transition: transform var(--tb) var(--ease), opacity var(--ts) var(--ease); }
+.card { flex: none; width: 210px; scroll-snap-align: start; cursor: pointer; transition: transform var(--tb) var(--ease); }
 .poster { position: relative; aspect-ratio: 2/3; border-radius: var(--r); overflow: hidden; background: var(--s1); }
-.poster .layer > svg, .poster .layer > .art-img { transition: transform var(--ts) var(--ease), opacity var(--ts) var(--ease); }
+.poster .layer > .art-img { transition: transform var(--ts) var(--ease), opacity var(--ts) var(--ease); }
 .card:hover { transform: translateY(-6px); }
 .card:hover .poster .layer > * { transform: scale(1.06); }
 /* title text over the poster only when there is no real art (Steam posters carry their own logo) */
