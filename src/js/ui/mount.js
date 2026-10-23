@@ -8,7 +8,7 @@ import { featuredHtml } from './components/featured.js';
 import { shelfHtml, initShelves } from './components/shelf.js';
 import { barHtml, searchHtml, navActive } from './components/nav.js';
 import { detailHtml } from './components/detail.js';
-import { browseHtml } from './components/browse.js';
+import { browseHtml, initGrid } from './components/browse.js';
 
 /**
  * mount({ target, data, css, shadow, options })  →  app
@@ -46,7 +46,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
   let D = normalize(data);
   const saved = new Set((opt.saved || []).map(String));
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
-  let heroCtl, stopReveal, stopShelves, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
+  let heroCtl, stopReveal, stopShelves, stopGrid, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
 
   /* ── render ─────────────────────────────────────────────────────────────────────────────── */
   function homeHtml() {
@@ -55,13 +55,14 @@ export function mount({ target = document.body, data, css = null, shadow, option
   }
 
   function paint() {
-    heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves();
+    heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid();
     $page.classList.toggle('has-bar', route.view !== 'home');
     $page.innerHTML = route.view === 'home' ? homeHtml() : browseHtml(D, route, saved);
     $scroll.scrollTop = 0;
     hydrate($page, opt.imageLoader);
     stopReveal = reveal($page);
     stopShelves = initShelves($page);
+    stopGrid = route.view === 'home' ? null : initGrid($page, D, route, saved, opt.imageLoader);
     heroCtl = initHero($page.querySelector('#hero'), { autoplay: opt.autoplay, ms: opt.autoplayMs });
     $foot.textContent = D.site.footer || '';
     syncNav();
@@ -148,7 +149,8 @@ export function mount({ target = document.body, data, css = null, shadow, option
   function doGet(id, btn) {
     const g = D.byId.get(String(id)); if (!g) return;
     let r; try { r = opt.onGet && opt.onGet(g, { button: btn }); } catch (e) { console.error('[hearth] onGet failed', e); }
-    if (r !== false && g.downloadUrl && safeUrl(g.downloadUrl)) window.open(safeUrl(g.downloadUrl), '_blank', 'noopener');
+    if (r === false) return;                       // onGet took over (e.g. opened its own menu): no default action and no "Starting…" flash
+    if (g.downloadUrl && safeUrl(g.downloadUrl)) window.open(safeUrl(g.downloadUrl), '_blank', 'noopener');
     const bl = btn && btn.querySelector('.bl');
     if (bl && !btn.dataset.busy) { btn.dataset.busy = '1'; const t = bl.textContent; bl.textContent = 'Starting…'; setTimeout(() => { bl.textContent = t; delete btn.dataset.busy; }, 1600); }
   }
@@ -206,7 +208,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 

@@ -546,6 +546,9 @@ function detailHtml(D, g, { saved = false, placeholders = false } = {}) {
 }
 
 /* ── src/js/ui/components/browse.js ── */
+/** The grid renders in chunks: a few hundred cards at once is ~12k DOM nodes and a visible stall on every tab change. */
+const GRID_CHUNK = 24;
+
 /** Grid view for category filters, search, "Library" and "See all". */
 function browseHtml(D, route, savedIds) {
   const f = route.filter || {};
@@ -559,9 +562,34 @@ function browseHtml(D, route, savedIds) {
     <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span></div>
     ${f.saved ? '' : chipsHtml(D.categories, f.category || '')}
     ${list.length
-      ? `<div class="grid">${list.map((g, i) => card(g, { i, reveal: true })).join('')}</div>`
+      ? `<div class="grid">${list.slice(0, GRID_CHUNK).map((g, i) => card(g, { i, reveal: true })).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
       : `<div class="empty"><h3>${empty[0]}</h3><p>${empty[1]}</p><button class="btn glass alt" data-nav="home">Back to discover</button></div>`}
   </div>`;
+}
+
+/**
+ * Lazy-load the rest of the grid. Call after the browse HTML is in the DOM; returns a cleanup fn.
+ * Appends GRID_CHUNK cards each time the sentinel (.more) comes within ~700px of the viewport.
+ */
+function initGrid(root, D, route, savedIds, loader) {
+  const more = root.querySelector('.browse .more'), grid = root.querySelector('.browse .grid');
+  if (!more || !grid) return () => {};
+  const list = filterGames(D, route.filter || {}, savedIds), stops = [];
+  let at = GRID_CHUNK;
+  const add = batch => {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = batch.map((g, i) => card(g, { i, reveal: true })).join('');
+    hydrate(tmp, loader); stops.push(reveal(tmp));
+    grid.append(...tmp.childNodes);
+  };
+  if (!('IntersectionObserver' in window)) { add(list.slice(at)); more.remove(); return () => stops.forEach(s => s()); }
+  const io = new IntersectionObserver(es => {
+    if (!es.some(e => e.isIntersecting)) return;
+    const batch = list.slice(at, at + GRID_CHUNK); at += batch.length; add(batch);
+    if (at >= list.length) { io.disconnect(); more.remove(); } else { io.unobserve(more); io.observe(more); }   // re-check: the sentinel may still be on screen
+  }, { rootMargin: '700px 0px' });
+  io.observe(more);
+  return () => { io.disconnect(); stops.forEach(s => s()); };
 }
 
 /* ── src/js/ui/mount.js ── */
@@ -601,7 +629,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   let D = normalize(data);
   const saved = new Set((opt.saved || []).map(String));
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
-  let heroCtl, stopReveal, stopShelves, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
+  let heroCtl, stopReveal, stopShelves, stopGrid, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
 
   /* ── render ─────────────────────────────────────────────────────────────────────────────── */
   function homeHtml() {
@@ -610,13 +638,14 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   }
 
   function paint() {
-    heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves();
+    heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid();
     $page.classList.toggle('has-bar', route.view !== 'home');
     $page.innerHTML = route.view === 'home' ? homeHtml() : browseHtml(D, route, saved);
     $scroll.scrollTop = 0;
     hydrate($page, opt.imageLoader);
     stopReveal = reveal($page);
     stopShelves = initShelves($page);
+    stopGrid = route.view === 'home' ? null : initGrid($page, D, route, saved, opt.imageLoader);
     heroCtl = initHero($page.querySelector('#hero'), { autoplay: opt.autoplay, ms: opt.autoplayMs });
     $foot.textContent = D.site.footer || '';
     syncNav();
@@ -703,7 +732,8 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   function doGet(id, btn) {
     const g = D.byId.get(String(id)); if (!g) return;
     let r; try { r = opt.onGet && opt.onGet(g, { button: btn }); } catch (e) { console.error('[hearth] onGet failed', e); }
-    if (r !== false && g.downloadUrl && safeUrl(g.downloadUrl)) window.open(safeUrl(g.downloadUrl), '_blank', 'noopener');
+    if (r === false) return;                       // onGet took over (e.g. opened its own menu): no default action and no "Starting…" flash
+    if (g.downloadUrl && safeUrl(g.downloadUrl)) window.open(safeUrl(g.downloadUrl), '_blank', 'noopener');
     const bl = btn && btn.querySelector('.bl');
     if (bl && !btn.dataset.busy) { btn.dataset.busy = '1'; const t = bl.textContent; bl.textContent = 'Starting…'; setTimeout(() => { bl.textContent = t; delete btn.dataset.busy; }, 1600); }
   }
@@ -761,7 +791,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 
@@ -772,7 +802,9 @@ function adopt(scope, css) {
 
 /* ── src/js/ui/index.js ── */
 const version = '0.1.0';
+/** Capability flags, so userscripts can adapt to the kit they were loaded with. */
+const features = { lazyGrid: true };
 
-return {mount, validate, steam, normalize, version};
+return {mount, validate, steam, normalize, version, features};
 })();
 if(typeof window!=='undefined')window.HearthUI=HearthUI;

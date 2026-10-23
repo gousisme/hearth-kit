@@ -4,3 +4,5 @@
 .browse .chips { padding-top: 22px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 28px 18px; margin-top: 30px; }
 .grid .card { width: auto; }
+
+.more { height: 1px; margin-top: 1px; }
