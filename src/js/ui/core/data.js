@@ -66,3 +66,10 @@ export function similar(D, game, n = 3) {
   const auto = D.games.filter(x => x.id !== game.id && !explicit.includes(x) && x.genres.some(t => game.genres.includes(t)));
   return [...explicit, ...auto].slice(0, n);
 }
+
+/** Append games to an already-normalized D (used by the grid's loadMore). Returns the games that were new. */
+export function addGames(D, list) {
+  const added = [];
+  (Array.isArray(list) ? list : []).filter(g => g && g.id != null && g.title).map(coerceGame).forEach(g => { if (!D.byId.has(g.id)) { D.games.push(g); D.byId.set(g.id, g); added.push(g); } });
+  return added;
+}

@@ -1,7 +1,7 @@
 import { esc } from '../../shared/util.js';
 import { card } from './card.js';
 import { chipsHtml } from './chips.js';
-import { filterGames } from '../core/data.js';
+import { filterGames, addGames } from '../core/data.js';
 import { hydrate } from '../core/art.js';
 import { reveal } from '../core/motion.js';
 
@@ -28,25 +28,48 @@ export function browseHtml(D, route, savedIds) {
 
 /**
  * Lazy-load the rest of the grid. Call after the browse HTML is in the DOM; returns a cleanup fn.
- * Appends GRID_CHUNK cards each time the sentinel (.more) comes within ~700px of the viewport.
+ *  · appends GRID_CHUNK cards whenever the sentinel (.more) comes within ~700px of the viewport (they fade in one after another);
+ *  · when every local game is shown and `loadMore` was given, asks it for more:  loadMore({ view, filter }) → Promise<game[] | false>.
+ *    Returned games are added to the data (and listed if they match the current filter). Resolve to false / [] when there is nothing left.
+ *    While it is pending the grid ends in skeleton cards.
  */
-export function initGrid(root, D, route, savedIds, loader) {
-  const more = root.querySelector('.browse .more'), grid = root.querySelector('.browse .grid');
-  if (!more || !grid) return () => {};
-  const list = filterGames(D, route.filter || {}, savedIds), stops = [];
-  let at = GRID_CHUNK;
+export function initGrid(root, D, route, savedIds, loader, loadMore) {
+  const grid = root.querySelector('.browse .grid'); if (!grid) return () => {};
+  const f = route.filter || {}, shown = new Set([...grid.querySelectorAll('.card')].map(c => c.dataset.open)), stops = [];
+  let busy = false, done = typeof loadMore !== 'function', dead = false;
+  const list = () => filterGames(D, f, savedIds), pending = () => list().filter(g => !shown.has(g.id));
+  let more = root.querySelector('.browse .more');
+  if (!more) { more = document.createElement('div'); more.className = 'more'; more.setAttribute('aria-hidden', 'true'); grid.after(more); }
   const add = batch => {
     const tmp = document.createElement('div');
     tmp.innerHTML = batch.map((g, i) => card(g, { i, reveal: true })).join('');
     hydrate(tmp, loader); stops.push(reveal(tmp));
-    grid.append(...tmp.childNodes);
+    grid.append(...tmp.childNodes); batch.forEach(g => shown.add(g.id));
   };
-  if (!('IntersectionObserver' in window)) { add(list.slice(at)); more.remove(); return () => stops.forEach(s => s()); }
-  const io = new IntersectionObserver(es => {
-    if (!es.some(e => e.isIntersecting)) return;
-    const batch = list.slice(at, at + GRID_CHUNK); at += batch.length; add(batch);
-    if (at >= list.length) { io.disconnect(); more.remove(); } else { io.unobserve(more); io.observe(more); }   // re-check: the sentinel may still be on screen
-  }, { rootMargin: '700px 0px' });
+  const skeletons = n => {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = Array.from({ length: n }, () => '<div class="card skc" aria-hidden="true"><div class="poster"><div class="layer is-skel"></div></div><div class="skl"></div><div class="skl"></div></div>').join('');
+    const els = [...tmp.children]; grid.append(...els); return () => els.forEach(e => e.remove());
+  };
+  const setCount = () => { const c = root.querySelector('.browse .count'); if (c) { const n = list().length; c.textContent = `${n} ${n === 1 ? 'game' : 'games'}`; } };
+  const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) step(); }, { rootMargin: '700px 0px' }) : null;
+  async function step() {
+    if (busy || dead) return; busy = true;
+    try {
+      const p = pending();
+      if (p.length) add(p.slice(0, GRID_CHUNK));
+      else if (!done) {
+        const clear = skeletons(6); let got = false;
+        try { got = await loadMore({ view: route.view, filter: { ...f } }); } catch (e) { console.error('[hearth] loadMore failed', e); }
+        clear(); if (dead) return;
+        if (Array.isArray(got) && got.length) { addGames(D, got); setCount(); } else done = true;
+      }
+    } finally { busy = false; }
+    if (dead) return;
+    if (done && !pending().length) { io && io.disconnect(); more.remove(); return; }
+    if (io) { io.unobserve(more); io.observe(more); }        // re-check: the sentinel may still be on screen
+  }
+  if (!io) { add(pending()); more.remove(); return () => stops.forEach(s => s()); }
   io.observe(more);
-  return () => { io.disconnect(); stops.forEach(s => s()); };
+  return () => { dead = true; io.disconnect(); stops.forEach(s => s()); };
 }

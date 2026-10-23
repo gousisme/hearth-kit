@@ -178,6 +178,13 @@ function similar(D, game, n = 3) {
   return [...explicit, ...auto].slice(0, n);
 }
 
+/** Append games to an already-normalized D (used by the grid's loadMore). Returns the games that were new. */
+function addGames(D, list) {
+  const added = [];
+  (Array.isArray(list) ? list : []).filter(g => g && g.id != null && g.title).map(coerceGame).forEach(g => { if (!D.byId.has(g.id)) { D.games.push(g); D.byId.set(g.id, g); added.push(g); } });
+  return added;
+}
+
 /* ── src/js/ui/core/art.js ── */
 /**
  * ARTWORK
@@ -215,9 +222,15 @@ function artImg(game, kind, cls = '') {
   return `<img class="art-img ${cls}" alt="${kind === 'logo' ? esc(game.title) : ''}" data-kind="${kind}" data-title="${esc(game.title)}" data-cands="${esc(JSON.stringify(list))}" decoding="async" ${kind === 'logo' ? '' : 'loading="lazy"'}>`;
 }
 
-/** Generated art + real image stacked in a .layer. */
+/**
+ * One image slot. While a real image can still load the slot is a shimmering skeleton (cheap, and no
+ * placeholder picture flashing behind the art). Generated key art is only built when there is nothing
+ * to load, or when every candidate failed (see fail()).
+ */
 function layer(game, kind, w, h, key = '') {
-  return `<div class="layer">${keyArt(game, w, h, key)}${artImg(game, kind)}</div>`;
+  const real = artImg(game, kind);
+  if (!real) return `<div class="layer">${keyArt(game, w, h, key)}</div>`;
+  return `<div class="layer is-skel" data-g="${esc(game.id)}" data-sa="${esc(game.steamAppId || '')}" data-hue="${game.hue != null ? game.hue : ''}" data-w="${w}" data-h="${h}">${real}</div>`;
 }
 
 /**
@@ -236,7 +249,7 @@ function hydrate(root, loader) {
       const url = list[i++];
       try { img.src = loader ? await loader(url) : url; } catch (e) { next(); }
     };
-    img.addEventListener('load', () => { img.classList.add('is-loaded'); const p = img.closest('.poster'); if (p) p.classList.add('has-img'); });
+    img.addEventListener('load', () => { img.classList.add('is-loaded'); const l = img.closest('.layer'); if (l) l.classList.remove('is-skel'); const p = img.closest('.poster'); if (p) p.classList.add('has-img'); });
     img.addEventListener('error', next);
     next();
   });
@@ -249,6 +262,11 @@ function fail(img) {
     t.textContent = img.dataset.title || '';
     img.replaceWith(t);
     return;
+  }
+  const l = img.closest('.layer');
+  if (l && l.classList.contains('is-skel')) {            // nothing loaded: now (and only now) draw the generated art
+    l.classList.remove('is-skel');
+    l.insertAdjacentHTML('afterbegin', keyArt({ id: l.dataset.g, steamAppId: l.dataset.sa ? +l.dataset.sa : null, hue: l.dataset.hue === '' ? null : +l.dataset.hue }, +l.dataset.w || 400, +l.dataset.h || 600, 'x'));
   }
   const p = img.closest('.poster');
   if (p) p.classList.add('is-fallback');
@@ -370,7 +388,7 @@ function heroHtml(slides) {
   const slide = ({ game: g, eyebrow }, i) => {
     const meta = [g.genres[0], g.releaseYear, g.size, g.rating].filter(Boolean).map(v => `<span>${esc(v)}</span>`).join('<i></i>');
     return `<article class="slide${i ? '' : ' on'}" aria-roledescription="slide" ${i ? 'aria-hidden="true"' : ''}>
-      <div class="art"><div class="layer">${keyArt(g, 1600, 800, 'h')}${artImg(g, 'hero')}</div></div>
+      <div class="art">${layer(g, 'hero', 1600, 800, 'h')}</div>
       <div class="info">
         <div class="chip-new"><i></i>${esc(eyebrow)}${g.tagline ? ' · ' + esc(g.tagline) : ''}</div>
         <div class="lg">${artImg(g, 'logo', 'logo') || `<div class="fbt">${esc(g.title)}</div>`}</div>
@@ -569,27 +587,50 @@ function browseHtml(D, route, savedIds) {
 
 /**
  * Lazy-load the rest of the grid. Call after the browse HTML is in the DOM; returns a cleanup fn.
- * Appends GRID_CHUNK cards each time the sentinel (.more) comes within ~700px of the viewport.
+ *  · appends GRID_CHUNK cards whenever the sentinel (.more) comes within ~700px of the viewport (they fade in one after another);
+ *  · when every local game is shown and `loadMore` was given, asks it for more:  loadMore({ view, filter }) → Promise<game[] | false>.
+ *    Returned games are added to the data (and listed if they match the current filter). Resolve to false / [] when there is nothing left.
+ *    While it is pending the grid ends in skeleton cards.
  */
-function initGrid(root, D, route, savedIds, loader) {
-  const more = root.querySelector('.browse .more'), grid = root.querySelector('.browse .grid');
-  if (!more || !grid) return () => {};
-  const list = filterGames(D, route.filter || {}, savedIds), stops = [];
-  let at = GRID_CHUNK;
+function initGrid(root, D, route, savedIds, loader, loadMore) {
+  const grid = root.querySelector('.browse .grid'); if (!grid) return () => {};
+  const f = route.filter || {}, shown = new Set([...grid.querySelectorAll('.card')].map(c => c.dataset.open)), stops = [];
+  let busy = false, done = typeof loadMore !== 'function', dead = false;
+  const list = () => filterGames(D, f, savedIds), pending = () => list().filter(g => !shown.has(g.id));
+  let more = root.querySelector('.browse .more');
+  if (!more) { more = document.createElement('div'); more.className = 'more'; more.setAttribute('aria-hidden', 'true'); grid.after(more); }
   const add = batch => {
     const tmp = document.createElement('div');
     tmp.innerHTML = batch.map((g, i) => card(g, { i, reveal: true })).join('');
     hydrate(tmp, loader); stops.push(reveal(tmp));
-    grid.append(...tmp.childNodes);
+    grid.append(...tmp.childNodes); batch.forEach(g => shown.add(g.id));
   };
-  if (!('IntersectionObserver' in window)) { add(list.slice(at)); more.remove(); return () => stops.forEach(s => s()); }
-  const io = new IntersectionObserver(es => {
-    if (!es.some(e => e.isIntersecting)) return;
-    const batch = list.slice(at, at + GRID_CHUNK); at += batch.length; add(batch);
-    if (at >= list.length) { io.disconnect(); more.remove(); } else { io.unobserve(more); io.observe(more); }   // re-check: the sentinel may still be on screen
-  }, { rootMargin: '700px 0px' });
+  const skeletons = n => {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = Array.from({ length: n }, () => '<div class="card skc" aria-hidden="true"><div class="poster"><div class="layer is-skel"></div></div><div class="skl"></div><div class="skl"></div></div>').join('');
+    const els = [...tmp.children]; grid.append(...els); return () => els.forEach(e => e.remove());
+  };
+  const setCount = () => { const c = root.querySelector('.browse .count'); if (c) { const n = list().length; c.textContent = `${n} ${n === 1 ? 'game' : 'games'}`; } };
+  const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) step(); }, { rootMargin: '700px 0px' }) : null;
+  async function step() {
+    if (busy || dead) return; busy = true;
+    try {
+      const p = pending();
+      if (p.length) add(p.slice(0, GRID_CHUNK));
+      else if (!done) {
+        const clear = skeletons(6); let got = false;
+        try { got = await loadMore({ view: route.view, filter: { ...f } }); } catch (e) { console.error('[hearth] loadMore failed', e); }
+        clear(); if (dead) return;
+        if (Array.isArray(got) && got.length) { addGames(D, got); setCount(); } else done = true;
+      }
+    } finally { busy = false; }
+    if (dead) return;
+    if (done && !pending().length) { io && io.disconnect(); more.remove(); return; }
+    if (io) { io.unobserve(more); io.observe(more); }        // re-check: the sentinel may still be on screen
+  }
+  if (!io) { add(pending()); more.remove(); return () => stops.forEach(s => s()); }
   io.observe(more);
-  return () => { io.disconnect(); stops.forEach(s => s()); };
+  return () => { dead = true; io.disconnect(); stops.forEach(s => s()); };
 }
 
 /* ── src/js/ui/mount.js ── */
@@ -602,7 +643,8 @@ function initGrid(root, D, route, savedIds, loader) {
  *           (this is the Tampermonkey path: the original site's CSS can't touch us, and vice versa).
  *           If omitted, the UI renders in the light DOM and expects dist/hearth.css to be linked (mockup/dev path).
  *  options  { autoplay, autoplayMs, placeholders, theme, saved, route, imageLoader,
- *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on), onUser() }
+ *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on), onUser(),
+ *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game }
  *
  * app: { el, root, update(data), navigate(view, filter), open(id), close(), getRoute(), destroy() }
  */
@@ -645,7 +687,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     hydrate($page, opt.imageLoader);
     stopReveal = reveal($page);
     stopShelves = initShelves($page);
-    stopGrid = route.view === 'home' ? null : initGrid($page, D, route, saved, opt.imageLoader);
+    stopGrid = route.view === 'home' ? null : initGrid($page, D, route, saved, opt.imageLoader, opt.loadMore);
     heroCtl = initHero($page.querySelector('#hero'), { autoplay: opt.autoplay, ms: opt.autoplayMs });
     $foot.textContent = D.site.footer || '';
     syncNav();
@@ -803,7 +845,7 @@ function adopt(scope, css) {
 /* ── src/js/ui/index.js ── */
 const version = '0.1.0';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-const features = { lazyGrid: true };
+const features = { lazyGrid: true, skeletons: true, loadMore: true };
 
 return {mount, validate, steam, normalize, version, features};
 })();

@@ -19,7 +19,8 @@ import { browseHtml, initGrid } from './components/browse.js';
  *           (this is the Tampermonkey path: the original site's CSS can't touch us, and vice versa).
  *           If omitted, the UI renders in the light DOM and expects dist/hearth.css to be linked (mockup/dev path).
  *  options  { autoplay, autoplayMs, placeholders, theme, saved, route, imageLoader,
- *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on), onUser() }
+ *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on), onUser(),
+ *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game }
  *
  * app: { el, root, update(data), navigate(view, filter), open(id), close(), getRoute(), destroy() }
  */
@@ -62,7 +63,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     hydrate($page, opt.imageLoader);
     stopReveal = reveal($page);
     stopShelves = initShelves($page);
-    stopGrid = route.view === 'home' ? null : initGrid($page, D, route, saved, opt.imageLoader);
+    stopGrid = route.view === 'home' ? null : initGrid($page, D, route, saved, opt.imageLoader, opt.loadMore);
     heroCtl = initHero($page.querySelector('#hero'), { autoplay: opt.autoplay, ms: opt.autoplayMs });
     $foot.textContent = D.site.footer || '';
     syncNav();

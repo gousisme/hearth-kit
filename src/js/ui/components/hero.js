@@ -1,5 +1,5 @@
 import { esc } from '../../shared/util.js';
-import { artImg, keyArt } from '../core/art.js';
+import { layer } from '../core/art.js';
 import { reduced } from '../core/motion.js';
 import { button, glassButton } from './button.js';
 
@@ -9,7 +9,7 @@ export function heroHtml(slides) {
   const slide = ({ game: g, eyebrow }, i) => {
     const meta = [g.genres[0], g.releaseYear, g.size, g.rating].filter(Boolean).map(v => `<span>${esc(v)}</span>`).join('<i></i>');
     return `<article class="slide${i ? '' : ' on'}" aria-roledescription="slide" ${i ? 'aria-hidden="true"' : ''}>
-      <div class="art"><div class="layer">${keyArt(g, 1600, 800, 'h')}${artImg(g, 'hero')}</div></div>
+      <div class="art">${layer(g, 'hero', 1600, 800, 'h')}</div>
       <div class="info">
         <div class="chip-new"><i></i>${esc(eyebrow)}${g.tagline ? ' · ' + esc(g.tagline) : ''}</div>
         <div class="lg">${artImg(g, 'logo', 'logo') || `<div class="fbt">${esc(g.title)}</div>`}</div>

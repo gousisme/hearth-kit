@@ -68,6 +68,15 @@
   .rv { opacity: 1; transform: none; }
 }
 
+/* skeleton: shown while a real image is still loading (replaces the generated placeholder art) */
+.layer.is-skel { background: linear-gradient(100deg, var(--s1) 30%, var(--s2) 50%, var(--s1) 70%) 0 0 / 220% 100%; animation: hf-sk 1.3s linear infinite; }
+@keyframes hf-sk { to { background-position: -220% 0; } }
+.skc .poster { aspect-ratio: 2 / 3; border-radius: var(--r); overflow: hidden; }
+.skc .skl { height: 12px; margin-top: 12px; border-radius: 6px; width: 78%; background: var(--s1); animation: hf-pulse 1.3s ease-in-out infinite; }
+.skc .skl + .skl { width: 46%; margin-top: 8px; }
+@keyframes hf-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .layer.is-skel, .skc .skl { animation: none; } }
+
 /* ── src/styles/20-buttons.css ── */
 /* PRIMARY: lime pill + arrow disc. Hover: arrows swap (slide), gap opens. Press: squash. */
 .btn { display: inline-flex; align-items: center; gap: 12px; padding: 6px 6px 6px 24px; border-radius: 99px; background: var(--ac); color: var(--ink); font: 700 15px var(--fd); transition: gap var(--tb) var(--ease), transform var(--tf) var(--ease), background var(--tf); }

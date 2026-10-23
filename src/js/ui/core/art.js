@@ -36,9 +36,15 @@ export function artImg(game, kind, cls = '') {
   return `<img class="art-img ${cls}" alt="${kind === 'logo' ? esc(game.title) : ''}" data-kind="${kind}" data-title="${esc(game.title)}" data-cands="${esc(JSON.stringify(list))}" decoding="async" ${kind === 'logo' ? '' : 'loading="lazy"'}>`;
 }
 
-/** Generated art + real image stacked in a .layer. */
+/**
+ * One image slot. While a real image can still load the slot is a shimmering skeleton (cheap, and no
+ * placeholder picture flashing behind the art). Generated key art is only built when there is nothing
+ * to load, or when every candidate failed (see fail()).
+ */
 export function layer(game, kind, w, h, key = '') {
-  return `<div class="layer">${keyArt(game, w, h, key)}${artImg(game, kind)}</div>`;
+  const real = artImg(game, kind);
+  if (!real) return `<div class="layer">${keyArt(game, w, h, key)}</div>`;
+  return `<div class="layer is-skel" data-g="${esc(game.id)}" data-sa="${esc(game.steamAppId || '')}" data-hue="${game.hue != null ? game.hue : ''}" data-w="${w}" data-h="${h}">${real}</div>`;
 }
 
 /**
@@ -57,7 +63,7 @@ export function hydrate(root, loader) {
       const url = list[i++];
       try { img.src = loader ? await loader(url) : url; } catch (e) { next(); }
     };
-    img.addEventListener('load', () => { img.classList.add('is-loaded'); const p = img.closest('.poster'); if (p) p.classList.add('has-img'); });
+    img.addEventListener('load', () => { img.classList.add('is-loaded'); const l = img.closest('.layer'); if (l) l.classList.remove('is-skel'); const p = img.closest('.poster'); if (p) p.classList.add('has-img'); });
     img.addEventListener('error', next);
     next();
   });
@@ -70,6 +76,11 @@ function fail(img) {
     t.textContent = img.dataset.title || '';
     img.replaceWith(t);
     return;
+  }
+  const l = img.closest('.layer');
+  if (l && l.classList.contains('is-skel')) {            // nothing loaded: now (and only now) draw the generated art
+    l.classList.remove('is-skel');
+    l.insertAdjacentHTML('afterbegin', keyArt({ id: l.dataset.g, steamAppId: l.dataset.sa ? +l.dataset.sa : null, hue: l.dataset.hue === '' ? null : +l.dataset.hue }, +l.dataset.w || 400, +l.dataset.h || 600, 'x'));
   }
   const p = img.closest('.poster');
   if (p) p.classList.add('is-fallback');
