@@ -1,4 +1,4 @@
-/*! hearth-kit v0.3.0 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.4.0 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthUI=(function(){
 'use strict';
 /* ── src/js/shared/util.js ── */
@@ -41,6 +41,18 @@ const kv = o => {
 const list = v => (Array.isArray(v) ? v : []);
 const http = u => /^https?:\/\//i.test(str(u));
 
+/** Media strip items: { type:'image'|'video'|'embed', thumb, src, sources:[{src,type}], title }. Items without a usable thumbnail or source are dropped. */
+function coerceMedia(v) {
+  return list(v).map(m => {
+    if (!m || typeof m !== 'object') return null;
+    const type = m.type === 'video' || m.type === 'embed' ? m.type : 'image';
+    const thumb = http(m.thumb) ? str(m.thumb) : '', src = http(m.src) ? str(m.src) : '';
+    const sources = list(m.sources).filter(s => s && http(s.src)).map(s => ({ src: str(s.src), type: str(s.type) }));
+    if (!thumb || (type === 'image' ? !(src || thumb) : type === 'video' ? !sources.length : !src)) return null;
+    return { type, thumb, src: src || thumb, sources, title: str(m.title) };
+  }).filter(Boolean).slice(0, 16);
+}
+
 function coerceGame(g) {
   const art = g.art && typeof g.art === 'object' ? g.art : {};
   const appId = parseInt(g.steamAppId, 10);
@@ -66,6 +78,8 @@ function coerceGame(g) {
     similarIds: strList(g.similarIds),
     downloadUrl: str(g.downloadUrl),
     sourceUrl: str(g.sourceUrl),
+    steamUrl: http(g.steamUrl) ? str(g.steamUrl) : '',
+    media: coerceMedia(g.media),
     // — rich detail (all optional; usually filled lazily through options.resolveDetail) —
     downloads: list(g.downloads).filter(d => d && str(d.label) && http(d.href)).map(d => ({ label: str(d.label), href: str(d.href), kind: str(d.kind), hint: str(d.hint) })),
     password: str(g.password),
@@ -370,28 +384,39 @@ function createArt({ root: scope, loader = null, resolve = null, game, onMiss = 
 }
 
 /* ── src/js/ui/core/enrich.js ── */
-const FIELDS = ['description', 'developer', 'publisher', 'releaseYear', 'size', 'downloads', 'password', 'guide', 'update', 'facts'];
+const FIELDS = ['description', 'developer', 'publisher', 'releaseYear', 'size', 'downloads', 'password', 'guide', 'update', 'facts', 'steamUrl', 'media'];
+const ART_KEYS = ['poster', 'hero', 'logo', 'header', 'fallback'];
 
 /**
  * Lazy detail data for the game sheet.
- *   resolve(game) → Promise<patch|null>  (options.resolveDetail) — called once per game, the first time its sheet opens.
- *   patch may carry: description, developer, publisher, releaseYear, size, downloads[], password, guide[], update, facts[]
- * The patch is cached by game id and re-applied to every new copy of the game (the data can be re-normalized).
+ *   resolve(game, push) → Promise<patch|null>  (options.resolveDetail) — called once per game, the first time its sheet opens.
+ *   `push(partialPatch)` is optional: call it as often as you like to show data early (the sheet re-renders each time);
+ *   the returned patch is the final one and the sheet stops showing skeletons.
+ *   patch may carry: description, developer, publisher, releaseYear, size, downloads[], password, guide[], update, facts[], steamUrl, media[],
+ *   and (new) steamAppId + art{poster,hero,logo,header,fallback}, which are merged into the game so its artwork can be found late.
+ * Patches are cached by game id and re-applied to every new copy of the game (the data can be re-normalized).
  */
 function createEnrich({ resolve }) {
-  const calls = new Map(), patches = new Map();
+  const calls = new Map(), patches = new Map(), parts = new Map(), listeners = new Map();
   function apply(g, p) {
     if (!p || typeof p !== 'object') return;
     const n = coerceGame({ id: g.id, title: g.title, ...p });
     for (const k of FIELDS) { const v = n[k]; if (Array.isArray(v) ? v.length : v) g[k] = v; }
+    if (n.steamAppId) g.steamAppId = n.steamAppId;
+    for (const k of ART_KEYS) if (n.art[k]) g.art[k] = n.art[k];
   }
   return {
-    /** true once the patch has arrived (or when there is nothing to wait for) */
+    /** true once the final patch has arrived (or when there is nothing to wait for) */
     done: id => !resolve || patches.has(id),
-    applyCached(g) { if (patches.has(g.id)) apply(g, patches.get(g.id)); },
-    get(g) {
+    applyCached(g) { apply(g, parts.get(g.id)); apply(g, patches.get(g.id)); },
+    /** `onPush` is called (with the game id) whenever a partial patch arrives; the latest listener per game wins. */
+    get(g, onPush) {
       if (!resolve) return Promise.resolve();
-      if (!calls.has(g.id)) calls.set(g.id, Promise.resolve().then(() => resolve(g)).catch(() => null).then(p => { patches.set(g.id, p); return p; }));
+      if (onPush) listeners.set(g.id, onPush);
+      if (!calls.has(g.id)) {
+        const push = p => { if (!p || typeof p !== 'object' || patches.has(g.id)) return; parts.set(g.id, { ...(parts.get(g.id) || {}), ...p }); const l = listeners.get(g.id); l && l(g.id); };
+        calls.set(g.id, Promise.resolve().then(() => resolve(g, push)).catch(() => null).then(p => { patches.set(g.id, p); return p; }));
+      }
       return calls.get(g.id).then(p => apply(g, p));
     },
   };
@@ -465,6 +490,8 @@ const ICON = {
   check: '<path d="m5 12 5 5 9-10"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6"/>',
   bookmark: '<path d="M6 4h12v16l-6-4-6 4Z"/>',
+  play: '<path d="M8 5.5v13l11-6.5Z"/>',
+  steam: '<circle cx="15.5" cy="8.5" r="3.5"/><circle cx="8" cy="16" r="2.4"/><path d="m3 14.2 3.6 1.5M10 14.7l3.4-3.2M12.3 18.2A7 7 0 1 0 5 12"/>',
   logout: '<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M16 8l4 4-4 4M20 12H9"/>',
 };
 
@@ -650,6 +677,29 @@ function searchHtml() {
   return `<div class="searchbox gl" role="search"><span class="si">${ic(ICON.search, 18)}</span><input type="search" placeholder="Search games, genres, studios…" aria-label="Search games" autocomplete="off" spellcheck="false"><button class="sx" data-search-clear aria-label="Clear search">${ic(ICON.close, 14)}</button></div>`;
 }
 
+/* ── src/js/ui/components/media.js ── */
+/** The media strip (trailers + screenshots) under the sheet's header. Skeleton tiles while the details are still loading and a Steam id is known. */
+function mediaHtml(g, { pending = false } = {}) {
+  const items = g.media || [];
+  if (!items.length) return pending && (g.steamAppId || g.steamUrl) ? `<div class="media"><div class="mstrip">${'<i class="mt sk"></i>'.repeat(3)}</div></div>` : '';
+  const tiles = items.map((m, i) => `<button type="button" class="mt${m.type === 'image' ? '' : ' vid'}" data-media="${i}" aria-label="${esc(m.title || (m.type === 'image' ? 'Screenshot ' + (i + 1) : 'Trailer'))}"><img src="${esc(safeUrl(m.thumb))}" alt="" loading="lazy" decoding="async" draggable="false">${m.type === 'image' ? '' : `<span class="pb">${ic(ICON.play, 18, 2)}</span>`}</button>`).join('');
+  return `<div class="media"><div class="mstrip" tabindex="0" aria-label="Trailers and screenshots">${tiles}</div></div>`;
+}
+
+/** Full-size viewer for one media item. Lives in the modal (outside the sheet) so a sheet re-render never closes it. */
+function lightboxInner(items, i) {
+  const m = items[i]; if (!m) return '';
+  let body;
+  if (m.type === 'video') body = `<video controls autoplay playsinline poster="${esc(safeUrl(m.thumb))}">${m.sources.map(s => `<source src="${esc(safeUrl(s.src))}"${s.type ? ` type="${esc(s.type)}"` : ''}>`).join('')}</video><div class="lb-err" hidden>This video can’t be played here.</div>`;
+  else if (m.type === 'embed') body = `<iframe src="${esc(safeUrl(m.src))}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  else body = `<img src="${esc(safeUrl(m.src))}" alt="" decoding="async">`;
+  const many = items.length > 1;
+  return `<button type="button" class="lb-x" data-lb-close aria-label="Close">${ic(ICON.close, 18)}</button>
+    ${many ? `<button type="button" class="lb-n lb-p" data-lb-step="-1" aria-label="Previous">${ic(ICON.prev, 22)}</button><button type="button" class="lb-n lb-nx" data-lb-step="1" aria-label="Next">${ic(ICON.next, 22)}</button>` : ''}
+    <div class="lb-m">${body}</div>
+    <div class="lb-c">${many ? `${i + 1} / ${items.length}` : ''}</div>`;
+}
+
 /* ── src/js/ui/components/detail.js ── */
 const DEMO_REQ = { minimum: { OS: 'Windows 10', CPU: 'Core i5-8400', RAM: '8 GB' }, recommended: { OS: 'Windows 11', CPU: 'Core i7-8700K', RAM: '16 GB' } };
 const KIND_ICON = { hosters: ICON.cloud, drive: ICON.drive, fix: ICON.fix, torrent: ICON.torrent };
@@ -674,6 +724,14 @@ function guideHtml(g, pending) {
   return `<h4>How to connect</h4><div class="guide">${g.guide.map(s => `<section class="gsec">${s.title ? `<h5>${esc(s.title)}</h5>` : ''}<ol>${s.steps.map(t => `<li><span>${esc(t)}</span></li>`).join('')}</ol></section>`).join('')}</div>`;
 }
 
+/** Save-for-later, plus an "Open Steam" button next to it when the game has a Steam page link (the Save label shrinks to make room). */
+function actsHtml(g, saved) {
+  const steam = safeUrl(g.steamUrl), off = steam ? 'Save' : 'Save for later';
+  const wish = `<button class="btn glass alt${saved ? ' on' : ''}" data-wish="${esc(g.id)}" data-off="${off}" aria-label="${saved ? 'Saved' : 'Save for later'}">${ic(ICON.heart)}<span>${saved ? 'Saved' : off}</span></button>`;
+  if (!steam) return wish;
+  return `<div class="acts">${wish}<a class="btn glass alt" href="${esc(steam)}" target="_blank" rel="noopener noreferrer">${ic(ICON.steam)}<span>Open Steam</span></a></div>`;
+}
+
 /** Game detail sheet (rendered into the modal). Sections with no data are omitted. */
 function detailHtml(D, g, { saved = false, placeholders = false, pending = false, dlOpen = false } = {}) {
   const req = (g.requirements.minimum && Object.keys(g.requirements.minimum).length) || Object.keys(g.requirements.recommended).length ? g.requirements : placeholders ? DEMO_REQ : null;
@@ -691,6 +749,7 @@ function detailHtml(D, g, { saved = false, placeholders = false, pending = false
   return `<button class="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>
   <div class="dh">${layer(g, 'hero')}${logoSlot(g)}</div>
   <div class="db"><div>
+    ${mediaHtml(g, { pending })}
     ${g.description ? `<h4>About</h4><p>${esc(g.description)}</p>` : ''}
     ${upd}
     ${guideHtml(g, pending)}
@@ -698,7 +757,7 @@ function detailHtml(D, g, { saved = false, placeholders = false, pending = false
     ${req ? `<h4>System requirements</h4><div class="req">${reqBox('Minimum', req.minimum)}${reqBox('Recommended', req.recommended)}</div>` : ''}
   </div>
   <aside class="side">${getBox(g, { pending, dlOpen })}
-    <button class="btn glass alt${saved ? ' on' : ''}" data-wish="${esc(g.id)}">${ic(ICON.heart)}<span>${saved ? 'Saved' : 'Save for later'}</span></button>
+    ${actsHtml(g, saved)}
     ${facts.length ? `<div class="facts">${facts.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : ''}
     ${sim.length ? `<h4 class="sh4">Similar</h4>${sim.map(x => `<div class="sim" tabindex="0" role="button" data-open="${esc(x.id)}"><div class="sa is-skel">${artImg(x, 'header')}</div>${esc(x.title)}</div>`).join('')}` : ''}
   </aside></div>`;
@@ -812,7 +871,7 @@ function initGrid(root, D, route, savedIds, art, loadMore) {
  *           (this is the Tampermonkey path: the original site's CSS can't touch us, and vice versa).
  *           If omitted, the UI renders in the light DOM and expects dist/hearth.css to be linked (mockup/dev path).
  *  options  { autoplay, autoplayMs, placeholders, theme, saved, route, imageLoader,
- *             resolveDetail(game) → Promise<patch|null> // called once, the first time a game's sheet opens: { description, downloads[{label,href,kind,hint}], password, guide[{title,steps[]}], update{date,version,text}, facts[{label,value}] }
+ *             resolveDetail(game, push) → Promise<patch|null> // called once, the first time a game's sheet opens: { description, downloads[{label,href,kind,hint}], password, guide[{title,steps[]}], update{date,version,text}, facts[{label,value}], steamUrl, media[{type,thumb,src,sources,title}], steamAppId, art{} }; call push(partial) to show data early
  *             resolveArt(game) → Promise<patch|null>   // called lazily, once per game, right before its first image loads; patch = { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … }
  *             resolveProfile(user) → Promise<profile|null>  // called when the avatar is first clicked: { name, avatarUrl, badge, stats[{label,value}], facts[{label,value}], links[{label,href,hint,kind}] }
  *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on),
@@ -833,12 +892,12 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   if (opt.theme) Object.entries(opt.theme).forEach(([k, v]) => root.style.setProperty('--' + k, v));
   root.innerHTML = `<div class="bar-slot"></div>
     <div class="scroll"><div class="top"></div><main class="page is-out"></main><footer class="foot"></footer></div>
-    <div class="modal" aria-hidden="true"><div class="scrim" data-close></div><div class="sheet" role="dialog" aria-modal="true" tabindex="-1"></div></div>`;
+    <div class="modal" aria-hidden="true"><div class="scrim" data-close></div><div class="sheet" role="dialog" aria-modal="true" tabindex="-1"></div><div class="lb" aria-hidden="true" role="dialog" aria-label="Media viewer"></div></div>`;
   scope.appendChild(root);
   target.appendChild(host);
 
   const $bar = root.querySelector('.bar-slot'), $top = root.querySelector('.top'), $scroll = root.querySelector('.scroll'), $page = root.querySelector('.page'),
-    $foot = root.querySelector('.foot'), $modal = root.querySelector('.modal'), $sheet = root.querySelector('.sheet');
+    $foot = root.querySelector('.foot'), $modal = root.querySelector('.modal'), $sheet = root.querySelector('.sheet'), $lb = root.querySelector('.lb');
   const active = () => scope.activeElement || document.activeElement;
 
   let D = normalize(data);
@@ -928,7 +987,11 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     if (openId !== g.id) dlOpen = false;
     profileOpen = false;
     enrich.applyCached(g);
-    const fill = () => { $sheet.classList.remove('is-profile'); $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }); art.hydrate($sheet); $sheet.scrollTop = 0; };
+    const fill = () => {
+      const old = $sheet.querySelector('.mstrip'), sl = old ? old.scrollLeft : 0;
+      $sheet.classList.remove('is-profile'); $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }); art.hydrate($sheet); $sheet.scrollTop = 0;
+      const ns = sl && $sheet.querySelector('.mstrip'); if (ns) ns.scrollLeft = sl;       // a re-render (details arriving) keeps the strip where the person scrolled it
+    };
     const sig = () => [g.description, g.developer, g.publisher, g.releaseYear, g.rating].join('|'), s0 = sig();
     if (!$modal.classList.contains('open')) {
       lastFocus = active(); fill();
@@ -939,7 +1002,9 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     // art/details that were still being resolved when the sheet opened: show them as soon as they arrive (the sheet never waits)
     if (opt.resolveArt) art.settle(g).then(() => { if (openId === g.id && sig() !== s0) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
     // downloads / how-to-connect / update info are fetched on demand: the sheet opens at once with skeletons and fills in when they arrive
-    if (!enrich.done(g.id)) enrich.get(g).then(() => { if (openId === g.id) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
+    // (a resolver may also push partial patches: the sheet shows each one as it arrives)
+    const refill = () => { if (openId === g.id) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } };
+    if (!enrich.done(g.id)) enrich.get(g, () => { enrich.applyCached(g); refill(); }).then(refill);
     opt.onOpen && opt.onOpen(g);
   }
   /** The avatar: the kit's own account sheet (opens at once with what is known, fills in from options.resolveProfile). */
@@ -962,6 +1027,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   }
   function closeGame() {
     if (!$modal.classList.contains('open')) return;
+    lbHide();
     $modal.classList.remove('open'); $modal.setAttribute('aria-hidden', 'true'); $scroll.classList.remove('is-locked');
     const was = D.byId.get(openId);
     openId = null; profileOpen = false;
@@ -991,10 +1057,30 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     const bl = btn && btn.querySelector('.bl');
     if (bl && !btn.dataset.busy) { btn.dataset.busy = '1'; const t = bl.textContent; bl.textContent = 'Starting…'; setTimeout(() => { bl.textContent = t; delete btn.dataset.busy; }, 1600); }
   }
+  /* ── media viewer ── */
+  let lbI = -1, dragMoved = false;
+  function lbShow(i) {
+    const g = D.byId.get(openId), items = (g && g.media) || []; if (!items[i]) return;
+    lbI = i; $lb.innerHTML = lightboxInner(items, i); $lb.classList.add('open'); $lb.setAttribute('aria-hidden', 'false');
+    const v = $lb.querySelector('video');
+    if (v) { const s = v.querySelectorAll('source'); s[s.length - 1].addEventListener('error', () => { v.hidden = true; $lb.querySelector('.lb-err').hidden = false; }); }   // every source failed (e.g. blocked by the page's CSP)
+    const x = $lb.querySelector('.lb-x'); x && x.focus({ preventScroll: true });
+  }
+  function lbHide() {
+    if (lbI < 0) return; lbI = -1;
+    $lb.classList.remove('open'); $lb.setAttribute('aria-hidden', 'true'); $lb.innerHTML = '';       // also stops a playing video / embed
+    $sheet.focus({ preventScroll: true });
+  }
+  function lbStep(d) { const g = D.byId.get(openId), n = (g && g.media && g.media.length) || 0; if (n > 1 && lbI >= 0) lbShow((lbI + d + n) % n); }
+  let drag = null;                                     // mouse drag-to-scroll on the media strip
+  $sheet.addEventListener('pointerdown', e => { const s = e.pointerType === 'mouse' && !e.button && e.target.closest && e.target.closest('.mstrip'); if (s) { drag = { s, x: e.clientX, l: s.scrollLeft }; dragMoved = false; } });
+  root.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x; if (Math.abs(dx) > 5) { dragMoved = true; drag.s.scrollLeft = drag.l - dx; } });
+  root.addEventListener('pointerup', () => { drag = null; setTimeout(() => { dragMoved = false; }, 0); });
+
   function toggleSaved(id, btn) {
     const g = D.byId.get(String(id)); if (!g) return;
     const on = !saved.has(g.id); on ? saved.add(g.id) : saved.delete(g.id);
-    btn.classList.toggle('on', on); btn.querySelector('span').textContent = on ? 'Saved' : 'Save for later';
+    btn.classList.toggle('on', on); btn.querySelector('span').textContent = on ? 'Saved' : (btn.dataset.off || 'Save for later'); btn.setAttribute('aria-label', on ? 'Saved' : 'Save for later');
     opt.onSave && opt.onSave(g, on);
   }
   function navTo(item) {
@@ -1011,6 +1097,10 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
       e.stopPropagation(); const v = el.dataset.copy, em = el.querySelector('em'), done = () => { el.classList.add('ok'); if (em) em.textContent = 'Copied'; setTimeout(() => { el.classList.remove('ok'); if (em) em.textContent = 'Copy'; }, 1400); };
       try { navigator.clipboard.writeText(v).then(done, () => {}); } catch (err) { /* clipboard blocked: the code is selectable */ } return;
     }
+    if (q('[data-lb-close]')) return lbHide();
+    if ((el = q('[data-lb-step]'))) return lbStep(+el.dataset.lbStep);
+    if (t === $lb) return lbHide();                                  // the dark area around the media
+    if ((el = q('[data-media]'))) return dragMoved ? undefined : lbShow(+el.dataset.media);
     if ((el = q('[data-get]'))) { e.stopPropagation(); return doGet(el.dataset.get, el); }
     if ((el = q('[data-wish]'))) return toggleSaved(el.dataset.wish, el);
     if (q('[data-close]')) return closeGame();
@@ -1024,6 +1114,12 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     if ((el = q('[data-open]'))) return openGame(el.dataset.open);
   };
   const onKey = e => {
+    if (lbI >= 0) {                                                  // the media viewer is on top of everything
+      if (e.key === 'Escape') { e.preventDefault(); return lbHide(); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); return lbStep(1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); return lbStep(-1); }
+      if (e.key === 'Tab') { e.preventDefault(); const x = $lb.querySelector('.lb-x'); return x && x.focus(); }
+    }
     if (e.key === 'Escape') { if ($modal.classList.contains('open')) return closeGame(); if ($search && searchOpen()) return closeSearch(); }
     if (e.key === 'Tab' && $modal.classList.contains('open')) return trapTab(e);
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-open][role="button"]')) { e.preventDefault(); openGame(e.target.dataset.open); }
@@ -1061,9 +1157,9 @@ function adopt(scope, css) {
 }
 
 /* ── src/js/ui/index.js ── */
-const version = '0.3.0';
+const version = '0.4.0';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-const features = { lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true };
+const features = { lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true };
 
 return {mount, validate, steam, normalize, version, features};
 })();

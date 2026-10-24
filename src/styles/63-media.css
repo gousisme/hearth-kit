@@ -1,0 +1,40 @@
+/* Media strip (trailers + screenshots) in the detail sheet, its viewer, and the Save / Open Steam row */
+.media { margin: 0 0 26px; }
+.mstrip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 12px; scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: var(--line) transparent; cursor: grab; outline: 0; overscroll-behavior-x: contain; }
+.mstrip:active { cursor: grabbing; }
+.mstrip::-webkit-scrollbar { height: 6px; }
+.mstrip::-webkit-scrollbar-track { background: transparent; }
+.mstrip::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; }
+.mt { position: relative; flex: none; width: 216px; aspect-ratio: 16/9; border-radius: 12px; overflow: hidden; background: var(--s2); scroll-snap-align: start; padding: 0; transition: transform var(--tb) var(--ease), box-shadow var(--tb) var(--ease); }
+.mt:hover { transform: scale(1.03); }
+.mt:focus-visible { box-shadow: 0 0 0 2px var(--ac); outline: 0; }
+.mt img { width: 100%; height: 100%; object-fit: cover; display: block; user-select: none; -webkit-user-drag: none; }
+.mt .pb { position: absolute; inset: 0; margin: auto; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: rgba(20, 22, 26, .62); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #fff; transition: transform var(--tb) var(--ease), background var(--tf); }
+.mt .pb svg { fill: currentColor; margin-left: 2px; }
+.mt.vid:hover .pb { transform: scale(1.12); background: var(--ac); color: var(--ink); }
+.mt.sk { background: linear-gradient(100deg, var(--s2) 30%, var(--line) 50%, var(--s2) 70%) 0 0 / 220% 100%; animation: mt-sh 1.4s linear infinite; }
+@keyframes mt-sh { to { background-position: -120% 0; } }
+@media (prefers-reduced-motion: reduce) { .mt.sk { animation: none; } .mt, .mt .pb { transition: none; } }
+
+.lb { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: 56px 72px; background: rgba(12, 13, 16, .92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); opacity: 0; visibility: hidden; transition: opacity var(--tb) var(--ease), visibility 0s var(--tb); }
+.lb.open { opacity: 1; visibility: visible; transition-delay: 0s; }
+.lb-m { width: min(1280px, 100%); max-height: 100%; display: grid; place-items: center; }
+.lb-m img, .lb-m video { max-width: 100%; max-height: calc(100vh - 140px); border-radius: 14px; background: #000; display: block; }
+.lb-m iframe { width: 100%; aspect-ratio: 16/9; max-height: calc(100vh - 140px); border: 0; border-radius: 14px; background: #000; }
+.lb-err { color: var(--mu); font-size: 14px; padding: 40px; }
+.lb-x, .lb-n { position: absolute; z-index: 2; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .12); color: #fff; transition: background var(--tf), transform var(--tb) var(--ease); }
+.lb-x:hover, .lb-n:hover { background: rgba(255, 255, 255, .26); }
+.lb-x { top: 16px; right: 16px; }
+.lb-x:hover { transform: rotate(90deg); }
+.lb-n { top: 50%; margin-top: -23px; }
+.lb-p { left: 16px; }
+.lb-nx { right: 16px; }
+.lb-c { position: absolute; left: 0; right: 0; bottom: 20px; text-align: center; font: 600 13px var(--fb); color: var(--mu); letter-spacing: .06em; }
+
+/* Save (shrinks) + Open Steam, side by side */
+.acts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.acts .btn.glass { padding: 0 12px; gap: 8px; white-space: nowrap; font-size: 14px; }
+.acts .btn.glass:hover { gap: 8px; }
+.acts .btn.glass svg { flex: none; }
+.btn.glass.alt.on span { color: inherit; }
+@media (max-width: 820px) { .mt { width: 168px; } .lb { padding: 56px 12px; } .lb-p { left: 6px; } .lb-nx { right: 6px; } }

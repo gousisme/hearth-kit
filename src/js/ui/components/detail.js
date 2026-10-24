@@ -3,6 +3,7 @@ import { layer, artImg, logoSlot } from '../core/art.js';
 import { ic, ICON } from '../core/icons.js';
 import { similar } from '../core/data.js';
 import { button } from './button.js';
+import { mediaHtml } from './media.js';
 
 const DEMO_REQ = { minimum: { OS: 'Windows 10', CPU: 'Core i5-8400', RAM: '8 GB' }, recommended: { OS: 'Windows 11', CPU: 'Core i7-8700K', RAM: '16 GB' } };
 const KIND_ICON = { hosters: ICON.cloud, drive: ICON.drive, fix: ICON.fix, torrent: ICON.torrent };
@@ -27,6 +28,14 @@ function guideHtml(g, pending) {
   return `<h4>How to connect</h4><div class="guide">${g.guide.map(s => `<section class="gsec">${s.title ? `<h5>${esc(s.title)}</h5>` : ''}<ol>${s.steps.map(t => `<li><span>${esc(t)}</span></li>`).join('')}</ol></section>`).join('')}</div>`;
 }
 
+/** Save-for-later, plus an "Open Steam" button next to it when the game has a Steam page link (the Save label shrinks to make room). */
+function actsHtml(g, saved) {
+  const steam = safeUrl(g.steamUrl), off = steam ? 'Save' : 'Save for later';
+  const wish = `<button class="btn glass alt${saved ? ' on' : ''}" data-wish="${esc(g.id)}" data-off="${off}" aria-label="${saved ? 'Saved' : 'Save for later'}">${ic(ICON.heart)}<span>${saved ? 'Saved' : off}</span></button>`;
+  if (!steam) return wish;
+  return `<div class="acts">${wish}<a class="btn glass alt" href="${esc(steam)}" target="_blank" rel="noopener noreferrer">${ic(ICON.steam)}<span>Open Steam</span></a></div>`;
+}
+
 /** Game detail sheet (rendered into the modal). Sections with no data are omitted. */
 export function detailHtml(D, g, { saved = false, placeholders = false, pending = false, dlOpen = false } = {}) {
   const req = (g.requirements.minimum && Object.keys(g.requirements.minimum).length) || Object.keys(g.requirements.recommended).length ? g.requirements : placeholders ? DEMO_REQ : null;
@@ -44,6 +53,7 @@ export function detailHtml(D, g, { saved = false, placeholders = false, pending 
   return `<button class="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>
   <div class="dh">${layer(g, 'hero')}${logoSlot(g)}</div>
   <div class="db"><div>
+    ${mediaHtml(g, { pending })}
     ${g.description ? `<h4>About</h4><p>${esc(g.description)}</p>` : ''}
     ${upd}
     ${guideHtml(g, pending)}
@@ -51,7 +61,7 @@ export function detailHtml(D, g, { saved = false, placeholders = false, pending 
     ${req ? `<h4>System requirements</h4><div class="req">${reqBox('Minimum', req.minimum)}${reqBox('Recommended', req.recommended)}</div>` : ''}
   </div>
   <aside class="side">${getBox(g, { pending, dlOpen })}
-    <button class="btn glass alt${saved ? ' on' : ''}" data-wish="${esc(g.id)}">${ic(ICON.heart)}<span>${saved ? 'Saved' : 'Save for later'}</span></button>
+    ${actsHtml(g, saved)}
     ${facts.length ? `<div class="facts">${facts.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : ''}
     ${sim.length ? `<h4 class="sh4">Similar</h4>${sim.map(x => `<div class="sim" tabindex="0" role="button" data-open="${esc(x.id)}"><div class="sa is-skel">${artImg(x, 'header')}</div>${esc(x.title)}</div>`).join('')}` : ''}
   </aside></div>`;

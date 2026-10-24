@@ -1,4 +1,4 @@
-/*! hearth-kit v0.3.0 · HearthGlue · built from src/js/glue/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.4.0 · HearthGlue · built from src/js/glue/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthGlue=(function(){
 'use strict';
 /* ── src/js/shared/wait.js ── */
@@ -63,6 +63,18 @@ const kv = o => {
 const list = v => (Array.isArray(v) ? v : []);
 const http = u => /^https?:\/\//i.test(str(u));
 
+/** Media strip items: { type:'image'|'video'|'embed', thumb, src, sources:[{src,type}], title }. Items without a usable thumbnail or source are dropped. */
+function coerceMedia(v) {
+  return list(v).map(m => {
+    if (!m || typeof m !== 'object') return null;
+    const type = m.type === 'video' || m.type === 'embed' ? m.type : 'image';
+    const thumb = http(m.thumb) ? str(m.thumb) : '', src = http(m.src) ? str(m.src) : '';
+    const sources = list(m.sources).filter(s => s && http(s.src)).map(s => ({ src: str(s.src), type: str(s.type) }));
+    if (!thumb || (type === 'image' ? !(src || thumb) : type === 'video' ? !sources.length : !src)) return null;
+    return { type, thumb, src: src || thumb, sources, title: str(m.title) };
+  }).filter(Boolean).slice(0, 16);
+}
+
 function coerceGame(g) {
   const art = g.art && typeof g.art === 'object' ? g.art : {};
   const appId = parseInt(g.steamAppId, 10);
@@ -88,6 +100,8 @@ function coerceGame(g) {
     similarIds: strList(g.similarIds),
     downloadUrl: str(g.downloadUrl),
     sourceUrl: str(g.sourceUrl),
+    steamUrl: http(g.steamUrl) ? str(g.steamUrl) : '',
+    media: coerceMedia(g.media),
     // — rich detail (all optional; usually filled lazily through options.resolveDetail) —
     downloads: list(g.downloads).filter(d => d && str(d.label) && http(d.href)).map(d => ({ label: str(d.label), href: str(d.href), kind: str(d.kind), hint: str(d.hint) })),
     password: str(g.password),

@@ -17,6 +17,8 @@ export const ICON = {
   check: '<path d="m5 12 5 5 9-10"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6"/>',
   bookmark: '<path d="M6 4h12v16l-6-4-6 4Z"/>',
+  play: '<path d="M8 5.5v13l11-6.5Z"/>',
+  steam: '<circle cx="15.5" cy="8.5" r="3.5"/><circle cx="8" cy="16" r="2.4"/><path d="m3 14.2 3.6 1.5M10 14.7l3.4-3.2M12.3 18.2A7 7 0 1 0 5 12"/>',
   logout: '<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M16 8l4 4-4 4M20 12H9"/>',
 };
 

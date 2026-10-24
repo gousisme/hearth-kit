@@ -93,3 +93,16 @@ All optional; usually supplied lazily through `options.resolveDetail(game)` so t
 "facts": [{ "label": "Released", "value": "4 Aug 2026" }]  // replaces the base fact with the same label, others are appended
 ```
 With 2+ `downloads` the Get button in the sheet unfolds them directly beneath itself (one card); with one it opens it; with none it falls back to `options.onGet` / `downloadUrl`.
+
+### Media, Steam link, late art (optional, v0.4)
+
+```jsonc
+"steamUrl": "https://store.steampowered.com/app/2054970/",   // when set, the sheet shows an "Open Steam" button next to "Save"
+"media": [                                                    // the strip under the sheet header (max 16); click opens a viewer (←/→/Esc)
+  { "type": "video", "thumb": "https://…jpg", "sources": [{ "src": "https://…mp4", "type": "video/mp4" }], "title": "Launch trailer" },
+  { "type": "embed", "thumb": "https://i.ytimg.com/vi/ID/hqdefault.jpg", "src": "https://www.youtube-nocookie.com/embed/ID" },
+  { "type": "image", "thumb": "https://…600x338.jpg", "src": "https://…1920x1080.jpg" }
+]
+```
+`resolveDetail(game, push)` may call `push(partialPatch)` any number of times (the sheet re-renders each time) before returning the final patch. A patch may also carry `steamAppId` and `art{poster,hero,logo,header,fallback}`: they are merged into the game, so a Steam id found late (e.g. from the page's own Steam link) fixes the sheet's hero/logo. Feature flags: `HearthUI.features.media / steamLink / detailPush`.
+

@@ -9,6 +9,7 @@ import { featuredHtml } from './components/featured.js';
 import { shelfHtml, initShelves } from './components/shelf.js';
 import { barHtml, cornerHtml, searchHtml, navActive } from './components/nav.js';
 import { detailHtml } from './components/detail.js';
+import { lightboxInner } from './components/media.js';
 import { profileHtml } from './components/profile.js';
 import { browseHtml, initGrid } from './components/browse.js';
 
@@ -21,7 +22,7 @@ import { browseHtml, initGrid } from './components/browse.js';
  *           (this is the Tampermonkey path: the original site's CSS can't touch us, and vice versa).
  *           If omitted, the UI renders in the light DOM and expects dist/hearth.css to be linked (mockup/dev path).
  *  options  { autoplay, autoplayMs, placeholders, theme, saved, route, imageLoader,
- *             resolveDetail(game) → Promise<patch|null> // called once, the first time a game's sheet opens: { description, downloads[{label,href,kind,hint}], password, guide[{title,steps[]}], update{date,version,text}, facts[{label,value}] }
+ *             resolveDetail(game, push) → Promise<patch|null> // called once, the first time a game's sheet opens: { description, downloads[{label,href,kind,hint}], password, guide[{title,steps[]}], update{date,version,text}, facts[{label,value}], steamUrl, media[{type,thumb,src,sources,title}], steamAppId, art{} }; call push(partial) to show data early
  *             resolveArt(game) → Promise<patch|null>   // called lazily, once per game, right before its first image loads; patch = { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … }
  *             resolveProfile(user) → Promise<profile|null>  // called when the avatar is first clicked: { name, avatarUrl, badge, stats[{label,value}], facts[{label,value}], links[{label,href,hint,kind}] }
  *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on),
@@ -42,12 +43,12 @@ export function mount({ target = document.body, data, css = null, shadow, option
   if (opt.theme) Object.entries(opt.theme).forEach(([k, v]) => root.style.setProperty('--' + k, v));
   root.innerHTML = `<div class="bar-slot"></div>
     <div class="scroll"><div class="top"></div><main class="page is-out"></main><footer class="foot"></footer></div>
-    <div class="modal" aria-hidden="true"><div class="scrim" data-close></div><div class="sheet" role="dialog" aria-modal="true" tabindex="-1"></div></div>`;
+    <div class="modal" aria-hidden="true"><div class="scrim" data-close></div><div class="sheet" role="dialog" aria-modal="true" tabindex="-1"></div><div class="lb" aria-hidden="true" role="dialog" aria-label="Media viewer"></div></div>`;
   scope.appendChild(root);
   target.appendChild(host);
 
   const $bar = root.querySelector('.bar-slot'), $top = root.querySelector('.top'), $scroll = root.querySelector('.scroll'), $page = root.querySelector('.page'),
-    $foot = root.querySelector('.foot'), $modal = root.querySelector('.modal'), $sheet = root.querySelector('.sheet');
+    $foot = root.querySelector('.foot'), $modal = root.querySelector('.modal'), $sheet = root.querySelector('.sheet'), $lb = root.querySelector('.lb');
   const active = () => scope.activeElement || document.activeElement;
 
   let D = normalize(data);
@@ -137,7 +138,11 @@ export function mount({ target = document.body, data, css = null, shadow, option
     if (openId !== g.id) dlOpen = false;
     profileOpen = false;
     enrich.applyCached(g);
-    const fill = () => { $sheet.classList.remove('is-profile'); $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }); art.hydrate($sheet); $sheet.scrollTop = 0; };
+    const fill = () => {
+      const old = $sheet.querySelector('.mstrip'), sl = old ? old.scrollLeft : 0;
+      $sheet.classList.remove('is-profile'); $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }); art.hydrate($sheet); $sheet.scrollTop = 0;
+      const ns = sl && $sheet.querySelector('.mstrip'); if (ns) ns.scrollLeft = sl;       // a re-render (details arriving) keeps the strip where the person scrolled it
+    };
     const sig = () => [g.description, g.developer, g.publisher, g.releaseYear, g.rating].join('|'), s0 = sig();
     if (!$modal.classList.contains('open')) {
       lastFocus = active(); fill();
@@ -148,7 +153,9 @@ export function mount({ target = document.body, data, css = null, shadow, option
     // art/details that were still being resolved when the sheet opened: show them as soon as they arrive (the sheet never waits)
     if (opt.resolveArt) art.settle(g).then(() => { if (openId === g.id && sig() !== s0) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
     // downloads / how-to-connect / update info are fetched on demand: the sheet opens at once with skeletons and fills in when they arrive
-    if (!enrich.done(g.id)) enrich.get(g).then(() => { if (openId === g.id) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
+    // (a resolver may also push partial patches: the sheet shows each one as it arrives)
+    const refill = () => { if (openId === g.id) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } };
+    if (!enrich.done(g.id)) enrich.get(g, () => { enrich.applyCached(g); refill(); }).then(refill);
     opt.onOpen && opt.onOpen(g);
   }
   /** The avatar: the kit's own account sheet (opens at once with what is known, fills in from options.resolveProfile). */
@@ -171,6 +178,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
   }
   function closeGame() {
     if (!$modal.classList.contains('open')) return;
+    lbHide();
     $modal.classList.remove('open'); $modal.setAttribute('aria-hidden', 'true'); $scroll.classList.remove('is-locked');
     const was = D.byId.get(openId);
     openId = null; profileOpen = false;
@@ -200,10 +208,30 @@ export function mount({ target = document.body, data, css = null, shadow, option
     const bl = btn && btn.querySelector('.bl');
     if (bl && !btn.dataset.busy) { btn.dataset.busy = '1'; const t = bl.textContent; bl.textContent = 'Starting…'; setTimeout(() => { bl.textContent = t; delete btn.dataset.busy; }, 1600); }
   }
+  /* ── media viewer ── */
+  let lbI = -1, dragMoved = false;
+  function lbShow(i) {
+    const g = D.byId.get(openId), items = (g && g.media) || []; if (!items[i]) return;
+    lbI = i; $lb.innerHTML = lightboxInner(items, i); $lb.classList.add('open'); $lb.setAttribute('aria-hidden', 'false');
+    const v = $lb.querySelector('video');
+    if (v) { const s = v.querySelectorAll('source'); s[s.length - 1].addEventListener('error', () => { v.hidden = true; $lb.querySelector('.lb-err').hidden = false; }); }   // every source failed (e.g. blocked by the page's CSP)
+    const x = $lb.querySelector('.lb-x'); x && x.focus({ preventScroll: true });
+  }
+  function lbHide() {
+    if (lbI < 0) return; lbI = -1;
+    $lb.classList.remove('open'); $lb.setAttribute('aria-hidden', 'true'); $lb.innerHTML = '';       // also stops a playing video / embed
+    $sheet.focus({ preventScroll: true });
+  }
+  function lbStep(d) { const g = D.byId.get(openId), n = (g && g.media && g.media.length) || 0; if (n > 1 && lbI >= 0) lbShow((lbI + d + n) % n); }
+  let drag = null;                                     // mouse drag-to-scroll on the media strip
+  $sheet.addEventListener('pointerdown', e => { const s = e.pointerType === 'mouse' && !e.button && e.target.closest && e.target.closest('.mstrip'); if (s) { drag = { s, x: e.clientX, l: s.scrollLeft }; dragMoved = false; } });
+  root.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x; if (Math.abs(dx) > 5) { dragMoved = true; drag.s.scrollLeft = drag.l - dx; } });
+  root.addEventListener('pointerup', () => { drag = null; setTimeout(() => { dragMoved = false; }, 0); });
+
   function toggleSaved(id, btn) {
     const g = D.byId.get(String(id)); if (!g) return;
     const on = !saved.has(g.id); on ? saved.add(g.id) : saved.delete(g.id);
-    btn.classList.toggle('on', on); btn.querySelector('span').textContent = on ? 'Saved' : 'Save for later';
+    btn.classList.toggle('on', on); btn.querySelector('span').textContent = on ? 'Saved' : (btn.dataset.off || 'Save for later'); btn.setAttribute('aria-label', on ? 'Saved' : 'Save for later');
     opt.onSave && opt.onSave(g, on);
   }
   function navTo(item) {
@@ -220,6 +248,10 @@ export function mount({ target = document.body, data, css = null, shadow, option
       e.stopPropagation(); const v = el.dataset.copy, em = el.querySelector('em'), done = () => { el.classList.add('ok'); if (em) em.textContent = 'Copied'; setTimeout(() => { el.classList.remove('ok'); if (em) em.textContent = 'Copy'; }, 1400); };
       try { navigator.clipboard.writeText(v).then(done, () => {}); } catch (err) { /* clipboard blocked: the code is selectable */ } return;
     }
+    if (q('[data-lb-close]')) return lbHide();
+    if ((el = q('[data-lb-step]'))) return lbStep(+el.dataset.lbStep);
+    if (t === $lb) return lbHide();                                  // the dark area around the media
+    if ((el = q('[data-media]'))) return dragMoved ? undefined : lbShow(+el.dataset.media);
     if ((el = q('[data-get]'))) { e.stopPropagation(); return doGet(el.dataset.get, el); }
     if ((el = q('[data-wish]'))) return toggleSaved(el.dataset.wish, el);
     if (q('[data-close]')) return closeGame();
@@ -233,6 +265,12 @@ export function mount({ target = document.body, data, css = null, shadow, option
     if ((el = q('[data-open]'))) return openGame(el.dataset.open);
   };
   const onKey = e => {
+    if (lbI >= 0) {                                                  // the media viewer is on top of everything
+      if (e.key === 'Escape') { e.preventDefault(); return lbHide(); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); return lbStep(1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); return lbStep(-1); }
+      if (e.key === 'Tab') { e.preventDefault(); const x = $lb.querySelector('.lb-x'); return x && x.focus(); }
+    }
     if (e.key === 'Escape') { if ($modal.classList.contains('open')) return closeGame(); if ($search && searchOpen()) return closeSearch(); }
     if (e.key === 'Tab' && $modal.classList.contains('open')) return trapTab(e);
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-open][role="button"]')) { e.preventDefault(); openGame(e.target.dataset.open); }
