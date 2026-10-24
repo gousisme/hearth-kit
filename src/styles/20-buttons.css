@@ -6,8 +6,8 @@
 .btn:hover { gap: 18px; }
 .btn:hover .d:not([data-dl]) > svg:first-child { transform: translateY(34px); }
 .btn:hover .d:not([data-dl]) > svg + svg { transform: none; }
-/* download glyph: the tray line stays; the arrow slides down into it and a new one enters from the top, looping while the button is hovered / keyboard-focused.
-   The loop itself is the Web Animations API (core/dl-loop.js). Rest: the arrow in place, the next one parked above it (clipped by the nested <svg>). */
+/* download glyph: the tray line stays; the arrow slides down into it and a new one enters from the top, one slide per hover / keyboard focus.
+   The slide itself is the Web Animations API (core/dl-loop.js). Rest: the arrow in place, the next one parked above it (clipped by the nested <svg>). */
 .btn:active { transform: scale(.96); }
 a.btn { text-decoration: none; }
 .btn.sm { padding: 4px 4px 4px 16px; font-size: 13px; gap: 8px; }

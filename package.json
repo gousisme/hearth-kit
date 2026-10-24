@@ -1,6 +1,6 @@
 {
   "name": "hearth-kit",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "description": "A reusable Tampermonkey site-redesign kit: scrape any site, render a cinematic game-storefront UI in its place.",
   "private": true,
   "type": "module",

@@ -1,4 +1,4 @@
-/*! hearth-kit v0.5.6 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.5.7 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthUI=(function(){
 'use strict';
 /* ── src/js/shared/util.js ── */
@@ -527,7 +527,7 @@ function ic(path, size = 18, stroke = 2.4) {
 }
 /** The Get button's download glyph: a tray line that stays put + ONE group holding two arrows 17 units apart (the second parked above the first, clipped away).
  *  Sliding the group down by 17 makes the first arrow leave into the line while the second arrives; at 17 the picture equals the resting one. The arrows live in a nested <svg>
- *  so everything below its edge is clipped. Looped by core/dl-loop.js. */
+ *  so everything below its edge is clipped. Played once per hover by core/dl-loop.js. */
 function dlGlyph(size = 18, stroke = 2.4) {
   const arrow = 'M12 4v11m0 0-5-5m5 5 5-5';
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20h14"/><svg x="0" y="0" width="24" height="18.5" viewBox="0 0 24 18.5" overflow="hidden"><g class="ar-g"><path d="${arrow}"/><path d="${arrow}" transform="translate(0 -17)"/></g></svg></svg>`;
@@ -540,7 +540,7 @@ function dlGlyph(size = 18, stroke = 2.4) {
  * `attrs` is raw HTML attributes (already escaped by the caller).
  */
 function button(label, { icon = ICON.download, attrs = '', cls = '' } = {}) {
-  const dl = icon === ICON.download;                  // the download glyph is one SVG (line + loopable arrow); every other icon is two copies that swap on hover
+  const dl = icon === ICON.download;                  // the download glyph is one SVG (line + slidable arrow); every other icon is two copies that swap on hover
   return `<button class="btn ${cls}" ${attrs}><span class="bl">${esc(label)}</span><span class="d"${dl ? ' data-dl' : ''}>${dl ? dlGlyph() : ic(icon) + ic(icon)}</span></button>`;
 }
 
@@ -851,43 +851,21 @@ function morphKids(parent, next, animate) {
 
 /* ── src/js/ui/core/dl-loop.js ── */
 /**
- * The Get button's looping arrow (Web Animations API). The glyph (see dlGlyph) is ONE group holding two arrows, 17 units apart; moving the group down by 17 makes the
- * arrow leave into the line while the next one arrives from above — and at 17 the picture is identical to the resting one (offset 0). One animation, so the two arrows
- * can never drift apart.
- *   dlStart(disc) — pointer / keyboard focus is on the button: loop (slide, short hold, repeat)
- *   dlStop(disc)  — it left: after a short grace (hover flicker under a moving card), the arrow is eased to the nearest resting position (finish the slide, or go
- *                   back if it only just started) and the loop ends there — it neither keeps running unseen nor jumps. Re-entering during that settle waits for it, then loops.
- * State lives in a WeakMap (no CSS classes), a disc that leaves the page cancels its animations by itself.
+ * The Get button's arrow: ONE slide per hover (Web Animations API), no loop.
+ * The glyph (see dlGlyph) is one group holding two arrows 17 units apart; sliding the group down by 17 makes the arrow leave into the line while the next one arrives from
+ * above, and at 17 the picture is identical to the resting one (offset 0) — so the animation always ends exactly where it began and cannot be left half-way, whatever the pointer does.
+ *   dlPlay(disc) — the pointer / keyboard focus reached the button: play once (ignored while it is still playing; plays again on the next hover)
  */
-const DIST = 17, MS = 900, SLIDE = 0.7, EASE = 'cubic-bezier(.5, 0, .2, 1)', GRACE = 90;
-const KF = [{ transform: 'translateY(0px)', offset: 0, easing: EASE }, { transform: `translateY(${DIST}px)`, offset: SLIDE }, { transform: `translateY(${DIST}px)`, offset: 1 }];
-const st = new WeakMap();                                     // .d → { g, loop, settle, timer, hovering }
+const DIST = 17, MS = 560, EASE = 'cubic-bezier(.45, 0, .2, 1)';
+const KF = [{ transform: 'translateY(0px)' }, { transform: `translateY(${DIST}px)` }];
+const busy = new WeakSet();                                   // discs that are playing right now
 
-const offsetOf = g => { try { const m = String(getComputedStyle(g).transform).match(/matrix\(([^)]+)\)/); return m ? Math.min(DIST, Math.max(0, +m[1].split(',')[5] || 0)) : 0; } catch (e) { return 0; } };
-
-function dlStart(d) {
-  if (!d || reduced()) return;
-  let s = st.get(d);
-  if (!s) { const g = d.querySelector('.ar-g'); if (!g || !g.animate) return; st.set(d, s = { g, loop: null, settle: null, timer: 0, hovering: false }); }
-  clearTimeout(s.timer); s.hovering = true;
-  if (s.loop || s.settle) return;                             // already looping, or settling (it restarts the loop when it ends, see settle())
-  s.loop = s.g.animate(KF, { duration: MS, iterations: Infinity });
-}
-
-function dlStop(d) {
-  const s = d && st.get(d); if (!s) return;
-  s.hovering = false; clearTimeout(s.timer);
-  s.timer = setTimeout(() => settle(d, s), GRACE);
-}
-
-function settle(d, s) {
-  if (s.hovering || !s.loop) return;
-  const from = offsetOf(s.g), to = from > DIST / 2 ? DIST : 0, dist = Math.abs(to - from);
-  s.loop.cancel(); s.loop = null;                             // (the element is at rest for the instant before the settle below takes over: same task, no frame between)
-  if (dist < 0.5) return;
-  const a = s.settle = s.g.animate([{ transform: `translateY(${from}px)` }, { transform: `translateY(${to}px)` }], { duration: 70 + dist * 9, easing: 'cubic-bezier(.25, 0, .2, 1)' });
-  const done = () => { if (s.settle !== a) return; s.settle = null; a.cancel(); if (s.hovering) dlStart(d); };
-  a.onfinish = a.oncancel = done;
+function dlPlay(d) {
+  if (!d || reduced() || busy.has(d)) return;
+  const g = d.querySelector('.ar-g'); if (!g || !g.animate) return;
+  busy.add(d);
+  const a = g.animate(KF, { duration: MS, easing: EASE });    // fill: none → back to the resting transform when it ends (which looks the same)
+  a.onfinish = a.oncancel = () => busy.delete(d);
 }
 
 /* ── src/js/ui/components/profile.js ── */
@@ -1361,12 +1339,10 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     if (e.key === 'Tab' && $modal.classList.contains('open')) return trapTab(e);
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-open][role="button"]')) { e.preventDefault(); openGame(e.target.dataset.open); }
   };
-  /* Get button icon: while the pointer (or keyboard focus) is on a button the arrow loops (core/dl-loop.js); leaving lets the running cycle finish. */
+  /* Get button icon: one slide of the arrow each time the pointer (or keyboard focus) reaches a button (core/dl-loop.js). */
   const discOf = e => { const b = e.target.closest && e.target.closest('.btn'); return b ? [b, b.querySelector('.d[data-dl]')] : [null, null]; };
-  root.addEventListener('pointerover', e => { const [b, d] = discOf(e); if (d && !(e.relatedTarget && b.contains(e.relatedTarget))) dlStart(d); });
-  root.addEventListener('pointerout', e => { const [b, d] = discOf(e); if (d && !(e.relatedTarget && b.contains(e.relatedTarget))) dlStop(d); });
-  root.addEventListener('focusin', e => { const [, d] = discOf(e); if (d && e.target.matches && e.target.matches(':focus-visible')) dlStart(d); });
-  root.addEventListener('focusout', e => { const [b, d] = discOf(e); if (d && !b.matches(':hover')) dlStop(d); });
+  root.addEventListener('pointerover', e => { const [b, d] = discOf(e); if (d && !(e.relatedTarget && b.contains(e.relatedTarget))) dlPlay(d); });
+  root.addEventListener('focusin', e => { const [, d] = discOf(e); if (d && e.target.matches && e.target.matches(':focus-visible')) dlPlay(d); });
   root.addEventListener('click', onClick);
   document.addEventListener('keydown', onKey);
 
@@ -1400,7 +1376,7 @@ function adopt(scope, css) {
 }
 
 /* ── src/js/ui/index.js ── */
-const version = '0.5.6';
+const version = '0.5.7';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
 const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true };
 
