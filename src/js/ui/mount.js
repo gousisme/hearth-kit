@@ -13,7 +13,6 @@ import { lightboxShell, lightboxSlide } from './components/media.js';
 import { morphInto } from './core/morph.js';
 import { profileHtml } from './components/profile.js';
 import { browseHtml, initGrid } from './components/browse.js';
-import { createIconPlayer } from './core/lottie-icon.js';
 
 /**
  * mount({ target, data, css, shadow, options })  →  app
@@ -31,8 +30,7 @@ import { createIconPlayer } from './core/lottie-icon.js';
  *             resolveLogo(game, triedUrls) → Promise<url|''>   // optional: last-chance logo source (asked only when every Steam URL failed)
  *             artDeadlineMs (default 4000): longest a card waits for resolveArt before it loads with what it already has; imageTimeoutMs (default 12000): longest one image URL may take
  *             onUser(user) → false to take over the avatar click (default: the kit's own account sheet opens), onArtMiss(game, kind, urls),
- *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game,
- *             lottie (the lottie-web player, lottie_light is enough) + icons { download: { data: <lottie JSON>, rest: <frame>, hover: [from, to] } } → animated download icon on the Get buttons (optional) }
+ *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game }
  *
  * app: { el, root, update(data), add(games), navigate(view, filter), open(id), close(), getRoute(), destroy() }
  */
@@ -66,7 +64,6 @@ export function mount({ target = document.body, data, css = null, shadow, option
   const prof = { data: null, done: !opt.resolveProfile, call: null };
   const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, onMiss: opt.onArtMiss, resolveLogo: opt.resolveLogo, resolveMs: opt.artDeadlineMs, loadMs: opt.imageTimeoutMs, game: id => D.byId.get(String(id)) });
   const saved = new Set((opt.saved || []).map(String));
-  const dlIcon = createIconPlayer(opt);              // animated download icon on the Get buttons (null without options.lottie + options.icons.download)
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
   let heroCtl, stopReveal, stopShelves, stopGrid, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
 
@@ -389,10 +386,15 @@ export function mount({ target = document.body, data, css = null, shadow, option
     if (e.key === 'Tab' && $modal.classList.contains('open')) return trapTab(e);
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-open][role="button"]')) { e.preventDefault(); openGame(e.target.dataset.open); }
   };
-  if (dlIcon) {
-    root.addEventListener('pointerover', e => { const b = e.target.closest && e.target.closest('.btn'); if (b && !(e.relatedTarget && b.contains(e.relatedTarget))) dlIcon.hover(b); });
-    root.addEventListener('focusin', e => { const b = e.target.closest && e.target.closest('.btn'); if (b && e.target.matches && e.target.matches(':focus-visible')) dlIcon.hover(b); });
-  }
+  /* Get button icon: while the pointer (or keyboard focus) is on a button the arrow slides down and loops, the line under it stays.
+     The loop is CSS (.d.run); it is only STOPPED here, at the end of a cycle, so the arrow never freezes half-way. */
+  const dlRun = e => { const b = e.target.closest && e.target.closest('.btn'), d = b && b.querySelector('.d[data-dl]'); if (d) d.classList.add('run'); };
+  root.addEventListener('pointerover', dlRun);
+  root.addEventListener('focusin', e => { if (e.target.matches && e.target.matches(':focus-visible')) dlRun(e); });
+  root.addEventListener('animationiteration', e => {
+    const d = e.target.closest && e.target.closest('.d[data-dl]'), b = d && d.closest('.btn');
+    if (b && !b.matches(':hover') && !b.matches(':focus-visible')) d.classList.remove('run');
+  });
   root.addEventListener('click', onClick);
   document.addEventListener('keydown', onKey);
 
@@ -416,7 +418,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; dlIcon && dlIcon.destroy(); indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 

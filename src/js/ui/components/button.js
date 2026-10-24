@@ -1,5 +1,5 @@
 import { esc } from '../../shared/util.js';
-import { ic, ICON } from '../core/icons.js';
+import { ic, dlGlyph, ICON } from '../core/icons.js';
 
 /**
  * Primary button: a lime pill with an arrow disc. On hover the disc's arrow slides out and a second
@@ -7,7 +7,8 @@ import { ic, ICON } from '../core/icons.js';
  * `attrs` is raw HTML attributes (already escaped by the caller).
  */
 export function button(label, { icon = ICON.download, attrs = '', cls = '' } = {}) {
-  return `<button class="btn ${cls}" ${attrs}><span class="bl">${esc(label)}</span><span class="d"${icon === ICON.download ? ' data-dl' : ''}>${ic(icon)}${ic(icon)}</span></button>`;
+  const dl = icon === ICON.download;                  // the download glyph is one SVG (line + loopable arrow); every other icon is two copies that swap on hover
+  return `<button class="btn ${cls}" ${attrs}><span class="bl">${esc(label)}</span><span class="d"${dl ? ' data-dl' : ''}>${dl ? dlGlyph() : ic(icon) + ic(icon)}</span></button>`;
 }
 
 /** Secondary button: frosted glass pill (only used over imagery). */
