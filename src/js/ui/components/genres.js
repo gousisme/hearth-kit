@@ -17,9 +17,12 @@ export function genresHtml(D, { title = 'Browse by category', max = 14 } = {}) {
   const used = new Map();                                            // a game is shown on as few tiles as possible, so neighbouring tiles do not look alike
   const tile = c => {
     const pool = D.games.filter(g => g.categories.includes(c.id)).sort((a, b) => hasArt(b) - hasArt(a) || (used.get(a.id) || 0) - (used.get(b.id) || 0));
-    const pick = pool.slice(0, 3); pick.forEach(g => used.set(g.id, (used.get(g.id) || 0) + 1));
+    const pick = pool.slice(0, 8); pick.forEach(g => used.set(g.id, (used.get(g.id) || 0) + 1));
+    // a wall of 3 rows x 4 bricks; the real artwork sits on most of them, the rest are plain tinted bricks. Only the art costs a request.
+    const at = [1, 2, 3, 4, 5, 6, 8, 10].slice(0, pick.length), bricks = Array.from({ length: 12 }, (_, i) => { const k = at.indexOf(i); return k < 0 ? '<span class="gt-b"></span>' : `<span class="gt-b has">${layer(pick[k], 'header')}</span>`; });
+    const rows = [0, 1, 2].map(r => `<span class="gt-r">${bricks.slice(r * 4, r * 4 + 4).join('')}</span>`).join('');
     return `<button type="button" class="gt rv" data-cat="${esc(c.id)}" style="--h:${hueOf(c.id)}" aria-label="${esc(c.label)}">
-      <span class="gt-art" aria-hidden="true">${pick.map(g => `<span class="gt-a">${layer(g, 'header')}</span>`).join('')}</span>
+      <span class="gt-art" aria-hidden="true">${rows}</span>
       <span class="gt-name">${esc(c.label)}</span></button>`;
   };
   return `<section class="shelf genres" data-shelf="genres">

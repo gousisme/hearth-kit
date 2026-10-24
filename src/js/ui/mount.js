@@ -77,7 +77,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
   function paint() {
     heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid();
     $page.classList.toggle('has-bar', route.view !== 'home');
-    $page.innerHTML = route.view === 'home' ? homeHtml() : browseHtml(D, route, saved);
+    $page.innerHTML = route.view === 'home' ? homeHtml() : browseHtml(D, route, saved, typeof opt.loadMore === 'function');
     $scroll.scrollTop = 0;
     art.hydrate($page);
     stopReveal = reveal($page, { lead: 140 });

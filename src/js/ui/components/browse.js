@@ -7,21 +7,29 @@ import { reveal } from '../core/motion.js';
 /** The grid renders in chunks: a few hundred cards at once is ~12k DOM nodes and a visible stall on every tab change. */
 export const GRID_CHUNK = 24;
 
-/** Grid view for category filters, search, "Library" and "See all". */
-export function browseHtml(D, route, savedIds) {
+/** The "no results" block (also built by initGrid when a lazily loaded grid ends up empty). */
+export function emptyHtml(f, savedIds) {
+  const t = f.saved && !savedIds.size ? ['Nothing saved yet', 'Open any game and choose “Save for later”.'] : ['Nothing matches', 'Try a different word or clear the filter.'];
+  return `<div class="empty"><h3>${t[0]}</h3><p>${t[1]}</p><button class="btn glass alt" data-nav="home">Back to discover</button></div>`;
+}
+
+/**
+ * Grid view for category filters, search, "Library" and "See all".
+ * `canMore` = the app has a loadMore hook. A category nobody has loaded yet (no local game matches) then still gets a grid, which asks the hook for the category's own
+ * pages right away, instead of a "Nothing matches" page that never asks (the site files a game under one url folder but lists it in several categories).
+ */
+export function browseHtml(D, route, savedIds, canMore = false) {
   const f = route.filter || {};
   const list = filterGames(D, f, savedIds);
   const cat = D.categories.find(c => c.id === f.category);
   const title = f.query ? `Results for “${f.query}”` : f.saved ? 'Your library' : cat ? cat.label : f.sort === 'new' ? 'New & recent' : 'All games';
-  const empty = f.saved && !savedIds.size
-    ? ['Nothing saved yet', 'Open any game and choose “Save for later”.']
-    : ['Nothing matches', 'Try a different word or clear the filter.'];
+  const lazy = !list.length && canMore && !f.saved && !f.query;
   return `<div class="browse">
     <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span></div>
     ${f.saved ? '' : chipsHtml(D.categories, f.category || '')}
     ${list.length
       ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
-      : `<div class="empty"><h3>${empty[0]}</h3><p>${empty[1]}</p><button class="btn glass alt" data-nav="home">Back to discover</button></div>`}
+      : lazy ? '<div class="grid"></div><div class="more" aria-hidden="true"></div>' : emptyHtml(f, savedIds)}
   </div>`;
 }
 
@@ -50,6 +58,7 @@ export function initGrid(root, D, route, savedIds, art, loadMore) {
     tmp.innerHTML = Array.from({ length: n }, () => '<div class="card skc" aria-hidden="true"><div class="poster"><div class="layer is-skel is-busy"></div></div><div class="skl"></div><div class="skl"></div></div>').join('');
     const els = [...tmp.children]; grid.append(...els); return () => els.forEach(e => e.remove());
   };
+  const settleEmpty = () => { if (!grid.isConnected || grid.querySelector('.card')) return; grid.insertAdjacentHTML('afterend', emptyHtml(f, savedIds)); grid.remove(); };   // the lazy grid found nothing at all
   const setCount = () => { const c = root.querySelector('.browse .count'); if (c) { const n = list().length; c.textContent = `${n} ${n === 1 ? 'game' : 'games'}`; } };
   const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) step(); }, { rootMargin: '700px 0px' }) : null;
   async function step() {
@@ -65,10 +74,10 @@ export function initGrid(root, D, route, savedIds, art, loadMore) {
       }
     } finally { busy = false; }
     if (dead) return;
-    if (done && !pending().length) { io && io.disconnect(); more.remove(); return; }
+    if (done && !pending().length) { io && io.disconnect(); more.remove(); settleEmpty(); return; }
     if (io) { io.unobserve(more); io.observe(more); }        // re-check: the sentinel may still be on screen
   }
-  if (!io) { add(pending()); more.remove(); return () => stops.forEach(s => s()); }
+  if (!io) { add(pending()); more.remove(); if (!grid.children.length) { done = false; step(); } return () => { dead = true; stops.forEach(s => s()); }; }
   io.observe(more);
   return () => { dead = true; io.disconnect(); stops.forEach(s => s()); };
 }

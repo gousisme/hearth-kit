@@ -1,4 +1,4 @@
-/*! hearth-kit v0.5.10 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.5.11 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthUI=(function(){
 'use strict';
 /* ── src/js/shared/util.js ── */
@@ -634,9 +634,12 @@ function genresHtml(D, { title = 'Browse by category', max = 14 } = {}) {
   const used = new Map();                                            // a game is shown on as few tiles as possible, so neighbouring tiles do not look alike
   const tile = c => {
     const pool = D.games.filter(g => g.categories.includes(c.id)).sort((a, b) => hasArt(b) - hasArt(a) || (used.get(a.id) || 0) - (used.get(b.id) || 0));
-    const pick = pool.slice(0, 3); pick.forEach(g => used.set(g.id, (used.get(g.id) || 0) + 1));
+    const pick = pool.slice(0, 8); pick.forEach(g => used.set(g.id, (used.get(g.id) || 0) + 1));
+    // a wall of 3 rows x 4 bricks; the real artwork sits on most of them, the rest are plain tinted bricks. Only the art costs a request.
+    const at = [1, 2, 3, 4, 5, 6, 8, 10].slice(0, pick.length), bricks = Array.from({ length: 12 }, (_, i) => { const k = at.indexOf(i); return k < 0 ? '<span class="gt-b"></span>' : `<span class="gt-b has">${layer(pick[k], 'header')}</span>`; });
+    const rows = [0, 1, 2].map(r => `<span class="gt-r">${bricks.slice(r * 4, r * 4 + 4).join('')}</span>`).join('');
     return `<button type="button" class="gt rv" data-cat="${esc(c.id)}" style="--h:${hueOf(c.id)}" aria-label="${esc(c.label)}">
-      <span class="gt-art" aria-hidden="true">${pick.map(g => `<span class="gt-a">${layer(g, 'header')}</span>`).join('')}</span>
+      <span class="gt-art" aria-hidden="true">${rows}</span>
       <span class="gt-name">${esc(c.label)}</span></button>`;
   };
   return `<section class="shelf genres" data-shelf="genres">
@@ -963,21 +966,29 @@ function chipsHtml(categories, active = '') {
 /** The grid renders in chunks: a few hundred cards at once is ~12k DOM nodes and a visible stall on every tab change. */
 const GRID_CHUNK = 24;
 
-/** Grid view for category filters, search, "Library" and "See all". */
-function browseHtml(D, route, savedIds) {
+/** The "no results" block (also built by initGrid when a lazily loaded grid ends up empty). */
+function emptyHtml(f, savedIds) {
+  const t = f.saved && !savedIds.size ? ['Nothing saved yet', 'Open any game and choose “Save for later”.'] : ['Nothing matches', 'Try a different word or clear the filter.'];
+  return `<div class="empty"><h3>${t[0]}</h3><p>${t[1]}</p><button class="btn glass alt" data-nav="home">Back to discover</button></div>`;
+}
+
+/**
+ * Grid view for category filters, search, "Library" and "See all".
+ * `canMore` = the app has a loadMore hook. A category nobody has loaded yet (no local game matches) then still gets a grid, which asks the hook for the category's own
+ * pages right away, instead of a "Nothing matches" page that never asks (the site files a game under one url folder but lists it in several categories).
+ */
+function browseHtml(D, route, savedIds, canMore = false) {
   const f = route.filter || {};
   const list = filterGames(D, f, savedIds);
   const cat = D.categories.find(c => c.id === f.category);
   const title = f.query ? `Results for “${f.query}”` : f.saved ? 'Your library' : cat ? cat.label : f.sort === 'new' ? 'New & recent' : 'All games';
-  const empty = f.saved && !savedIds.size
-    ? ['Nothing saved yet', 'Open any game and choose “Save for later”.']
-    : ['Nothing matches', 'Try a different word or clear the filter.'];
+  const lazy = !list.length && canMore && !f.saved && !f.query;
   return `<div class="browse">
     <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span></div>
     ${f.saved ? '' : chipsHtml(D.categories, f.category || '')}
     ${list.length
       ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
-      : `<div class="empty"><h3>${empty[0]}</h3><p>${empty[1]}</p><button class="btn glass alt" data-nav="home">Back to discover</button></div>`}
+      : lazy ? '<div class="grid"></div><div class="more" aria-hidden="true"></div>' : emptyHtml(f, savedIds)}
   </div>`;
 }
 
@@ -1006,6 +1017,7 @@ function initGrid(root, D, route, savedIds, art, loadMore) {
     tmp.innerHTML = Array.from({ length: n }, () => '<div class="card skc" aria-hidden="true"><div class="poster"><div class="layer is-skel is-busy"></div></div><div class="skl"></div><div class="skl"></div></div>').join('');
     const els = [...tmp.children]; grid.append(...els); return () => els.forEach(e => e.remove());
   };
+  const settleEmpty = () => { if (!grid.isConnected || grid.querySelector('.card')) return; grid.insertAdjacentHTML('afterend', emptyHtml(f, savedIds)); grid.remove(); };   // the lazy grid found nothing at all
   const setCount = () => { const c = root.querySelector('.browse .count'); if (c) { const n = list().length; c.textContent = `${n} ${n === 1 ? 'game' : 'games'}`; } };
   const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) step(); }, { rootMargin: '700px 0px' }) : null;
   async function step() {
@@ -1021,10 +1033,10 @@ function initGrid(root, D, route, savedIds, art, loadMore) {
       }
     } finally { busy = false; }
     if (dead) return;
-    if (done && !pending().length) { io && io.disconnect(); more.remove(); return; }
+    if (done && !pending().length) { io && io.disconnect(); more.remove(); settleEmpty(); return; }
     if (io) { io.unobserve(more); io.observe(more); }        // re-check: the sentinel may still be on screen
   }
-  if (!io) { add(pending()); more.remove(); return () => stops.forEach(s => s()); }
+  if (!io) { add(pending()); more.remove(); if (!grid.children.length) { done = false; step(); } return () => { dead = true; stops.forEach(s => s()); }; }
   io.observe(more);
   return () => { dead = true; io.disconnect(); stops.forEach(s => s()); };
 }
@@ -1092,7 +1104,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   function paint() {
     heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid();
     $page.classList.toggle('has-bar', route.view !== 'home');
-    $page.innerHTML = route.view === 'home' ? homeHtml() : browseHtml(D, route, saved);
+    $page.innerHTML = route.view === 'home' ? homeHtml() : browseHtml(D, route, saved, typeof opt.loadMore === 'function');
     $scroll.scrollTop = 0;
     art.hydrate($page);
     stopReveal = reveal($page, { lead: 140 });
@@ -1439,7 +1451,7 @@ function adopt(scope, css) {
 }
 
 /* ── src/js/ui/index.js ── */
-const version = '0.5.10';
+const version = '0.5.11';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
 const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true };
 
