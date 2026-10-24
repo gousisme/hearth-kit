@@ -1,7 +1,8 @@
 @media (max-width: 900px) {
   .feat { grid-template-columns: 1fr; }
   .fc { height: 340px; }
-  .bar { padding: 0 20px; top: 24px; }
+  .bar { top: 24px; }
+  .top { top: 24px; padding: 0 20px; }
   .pill button { padding: 9px 12px; }
   .hero { height: 70vh; }
   .info { left: 24px; right: 24px; bottom: 76px; }
@@ -13,14 +14,16 @@
 @media (max-width: 820px) {
   .db { grid-template-columns: 1fr; padding: 6px 20px 28px; }
   .dh { height: 240px; }
-  .dh .logo, .dh .fbt { left: 20px; }
+  .dh .lg { left: 20px; }
   .req { grid-template-columns: 1fr; }
   .modal { padding: 10px; }
   .sheet { max-height: calc(100% - 20px); }
 }
 @media (max-width: 520px) {
-  .bar { grid-template-columns: auto 1fr; gap: 10px; }
-  .bar .pill { grid-column: 2; justify-self: end; }
-  .bar .bar-r { display: none; }
+  .bar { justify-content: flex-end; padding: 0 20px; }
+  .bar .pill { max-width: calc(100% - 84px); overflow-x: auto; scrollbar-width: none; }
+  .top .bar-r { display: none; }
+  .sheet.is-profile .ph { padding: 52px 20px 20px; }
+  .sheet.is-profile .pb { padding: 4px 20px 24px; }
   .pill button { padding: 9px 9px; font-size: 13px; }
 }

@@ -15,6 +15,9 @@ export const ICON = {
   ext: '<path d="M7 17 17 7M8 7h9v9"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
   check: '<path d="m5 12 5 5 9-10"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6"/>',
+  bookmark: '<path d="M6 4h12v16l-6-4-6 4Z"/>',
+  logout: '<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M16 8l4 4-4 4M20 12H9"/>',
 };
 
 export function ic(path, size = 18, stroke = 2.4) {

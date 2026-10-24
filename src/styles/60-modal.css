@@ -9,7 +9,8 @@
 
 .dh { position: relative; height: 350px; overflow: hidden; background: var(--s2); }
 .dh::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, var(--s1) 2%, transparent 65%); }
-.dh .logo, .dh .fbt { position: absolute; z-index: 2; left: 40px; bottom: 26px; margin: 0; }
+.dh .lg { position: absolute; z-index: 2; left: 40px; bottom: 26px; margin: 0; min-height: 0; max-width: calc(100% - 120px); }
+.dh .fbt { font-size: clamp(32px, 4.4vw, 60px); }
 .x { position: absolute; z-index: 5; top: 16px; right: 16px; width: 42px; height: 42px; border-radius: 50%; background: rgba(24, 26, 30, .6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: grid; place-items: center; transition: transform var(--tb) var(--ease), background var(--tf); }
 .x:hover { transform: rotate(90deg); background: rgba(24, 26, 30, .85); }
 .db { display: grid; grid-template-columns: 1fr 300px; gap: 40px; padding: 6px 40px 40px; }

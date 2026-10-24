@@ -1,4 +1,4 @@
-/*! hearth-kit v0.2.0 · HearthScrape · built from src/js/scrape/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.3.0 · HearthScrape · built from src/js/scrape/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthScrape=(function(){
 'use strict';
 /* ── src/js/scrape/dom.js ── */

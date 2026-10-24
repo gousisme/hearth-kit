@@ -1,5 +1,5 @@
 import { esc } from '../../shared/util.js';
-import { layer, artImg } from '../core/art.js';
+import { layer, logoSlot } from '../core/art.js';
 import { reduced } from '../core/motion.js';
 import { button, glassButton } from './button.js';
 
@@ -12,7 +12,7 @@ export function heroHtml(slides) {
       <div class="art">${layer(g, 'hero')}</div>
       <div class="info">
         <div class="chip-new"><i></i>${esc(eyebrow)}${g.tagline ? ' · ' + esc(g.tagline) : ''}</div>
-        <div class="lg is-skel">${artImg(g, 'logo', 'logo')}</div>
+        ${logoSlot(g)}
         <div class="tags">${meta}</div>
         <div class="acts">${button('Get game', { attrs: `data-get="${esc(g.id)}"` })}${glassButton('Details', `data-open="${esc(g.id)}"`)}</div>
       </div></article>`;

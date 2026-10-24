@@ -32,6 +32,12 @@
             },
             "avatarUrl": {
               "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "href": {
+              "type": "string"
             }
           }
         }

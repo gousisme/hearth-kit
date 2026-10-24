@@ -1,11 +1,13 @@
 import { esc, safeUrl } from '../../shared/util.js';
-import { layer, artImg } from '../core/art.js';
+import { layer, artImg, logoSlot } from '../core/art.js';
 import { ic, ICON } from '../core/icons.js';
 import { similar } from '../core/data.js';
 import { button } from './button.js';
 
 const DEMO_REQ = { minimum: { OS: 'Windows 10', CPU: 'Core i5-8400', RAM: '8 GB' }, recommended: { OS: 'Windows 11', CPU: 'Core i7-8700K', RAM: '16 GB' } };
 const KIND_ICON = { hosters: ICON.cloud, drive: ICON.drive, fix: ICON.fix, torrent: ICON.torrent };
+/** "1.5.1.2608" → "v1.5.1.2608", but "Build 16102" stays as it is (never "vBuild 16102"). */
+const verLabel = v => (/^v?\d/i.test(v) ? 'v' + v.replace(/^v/i, '') : v);
 
 /** The download list that opens directly under the Get button (one card, not a floating menu). */
 function getBox(g, { pending, dlOpen }) {
@@ -37,10 +39,10 @@ export function detailHtml(D, g, { saved = false, placeholders = false, pending 
   const base = [['Developer', g.developer], ['Publisher', g.publisher], ['Released', g.releaseYear], ['Reception', g.rating], ['Genre', g.genres[0]], ['Size', g.size]];
   const extra = g.facts || [];
   const facts = [...base.map(([k, v]) => [k, (extra.find(f => f.label === k) || {}).value || v]), ...extra.filter(f => !base.some(([k]) => k === f.label)).map(f => [f.label, f.value])].filter(([, v]) => v);
-  const upd = g.update ? `<div class="upd">${g.update.version ? `<span class="v">v${esc(g.update.version.replace(/^v/i, ''))}</span>` : ''}<div><b>${g.update.date ? 'Updated ' + esc(g.update.date) : 'Latest update'}</b>${g.update.text ? `<span>${esc(g.update.text)}</span>` : ''}</div></div>` : '';
+  const upd = g.update ? `<div class="upd">${g.update.version ? `<span class="v">${esc(verLabel(g.update.version))}</span>` : ''}<div><b>${g.update.date ? 'Updated ' + esc(g.update.date) : 'Latest update'}</b>${g.update.text ? `<span>${esc(g.update.text)}</span>` : ''}</div></div>` : '';
   const sim = similar(D, g);
   return `<button class="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>
-  <div class="dh">${layer(g, 'hero')}${artImg(g, 'logo', 'logo')}</div>
+  <div class="dh">${layer(g, 'hero')}${logoSlot(g)}</div>
   <div class="db"><div>
     ${g.description ? `<h4>About</h4><p>${esc(g.description)}</p>` : ''}
     ${upd}

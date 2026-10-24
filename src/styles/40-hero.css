@@ -16,9 +16,14 @@
 .slide.on .info > :nth-child(4) { transition-delay: 270ms; }
 .chip-new { display: inline-flex; align-items: center; gap: 8px; background: rgba(24, 26, 30, .55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding: 5px 12px; border-radius: 99px; font: 600 12px var(--fb); margin-bottom: 16px; }
 .chip-new i { width: 7px; height: 7px; border-radius: 50%; background: var(--ac); }
-.lg { position: relative; min-height: 112px; display: flex; align-items: flex-end; margin-bottom: 16px; }   /* reserves the logo's height so the text doesn't jump when it loads */
-.lg.is-skel { max-width: 300px; border-radius: 14px; }
+/* LOGO SLOT: the title is plain text from the first frame (no skeleton); when the real logo has loaded, the text fades out and the
+   logo takes its place (.has-logo). If no logo can be found (.no-logo) the text just stays. Both anchor to the bottom-left corner. */
+.lg { position: relative; min-height: 112px; display: flex; align-items: flex-end; margin-bottom: 16px; }
 .lg .logo, .lg .fbt { margin-bottom: 0; }
+.lg .logo { position: absolute; left: 0; bottom: 0; }
+.lg.has-logo .logo { position: static; }
+.lg .fbt { transition: opacity var(--tb) var(--ease), visibility 0s; }
+.lg.has-logo .fbt { position: absolute; left: 0; bottom: 0; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--tb) var(--ease), visibility 0s var(--tb); }
 .logo { max-width: 380px; max-height: 140px; object-fit: contain; object-position: left; margin-bottom: 16px; filter: drop-shadow(0 2px 14px rgba(0, 0, 0, .4)); }
 .fbt { font: 800 clamp(44px, 6vw, 88px)/.9 var(--fd); letter-spacing: -.035em; text-transform: uppercase; margin-bottom: 16px; text-shadow: 0 2px 24px rgba(0, 0, 0, .35); }
 .tags { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-weight: 500; font-size: 14px; margin-bottom: 20px; }

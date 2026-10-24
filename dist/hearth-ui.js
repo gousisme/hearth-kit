@@ -1,4 +1,4 @@
-/*! hearth-kit v0.2.0 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.3.0 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthUI=(function(){
 'use strict';
 /* ── src/js/shared/util.js ── */
@@ -129,6 +129,9 @@ function normalize(raw) {
 
   const site = { name: 'Hearth', mark: '', footer: '', user: null, ...(d.site || {}) };
   site.mark = site.mark || (site.name || 'h').trim().charAt(0).toLowerCase();
+  // `user` is an object (signed in) or null. Initials are derived from the name when not given.
+  site.user = site.user && typeof site.user === 'object' ? { ...site.user } : null;
+  if (site.user) { site.user.name = String(site.user.name || '').trim(); site.user.initials = String(site.user.initials || site.user.name.slice(0, 2).toUpperCase()).trim(); }
 
   const nav = Array.isArray(d.nav) && d.nav.length ? d.nav : [
     { id: 'discover', label: 'Discover', view: 'home' },
@@ -201,6 +204,8 @@ function addGames(D, list) {
  *   · while its image is loading (or its source is still being resolved) the slot is a skeleton;
  *   · when the image arrives it fades in over the skeleton;
  *   · if nothing loads the slot becomes a flat, quiet tile (`is-failed`; posters then show the title as text).
+ * LOGOS are the exception: they never show a skeleton. A logo slot (logoSlot()) starts as the game's title in plain text and
+ * is swapped for the real logo image if (and when) one loads; if none loads the text simply stays.
  * There is NO generated artwork: a slot is either a skeleton, a real image, or an empty tile.
  *
  * Slots are filled lazily by createArt(): only slots near the viewport load, a few at a time, so a page with
@@ -234,6 +239,11 @@ function artImg(game, kind, cls = '') {
   return `<img class="art-img ${cls}" alt="${kind === 'logo' ? esc(game.title) : ''}" data-g="${esc(game.id)}" data-kind="${kind}" data-title="${esc(game.title)}" decoding="async">`;
 }
 
+/** A game's logo: the title as text first, swapped for the logo image once it has loaded. No skeleton, no layout jump. */
+function logoSlot(game, cls = '') {
+  return `<div class="lg${cls ? ' ' + cls : ''}"><div class="fbt">${esc(game.title)}</div>${artImg(game, 'logo', 'logo')}</div>`;
+}
+
 /** A full-bleed art slot (poster, hero, header…). Starts as a skeleton. */
 function layer(game, kind) {
   return `<div class="layer is-skel">${artImg(game, kind)}</div>`;
@@ -255,8 +265,9 @@ function mergeArt(g, p) {
  *   resolve(game) → Promise<patch|null>   optional, called once per game right before its first slot loads
  *                   (patch: { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … })
  *   loader(url)   → Promise<string>       optional (GM_xmlhttpRequest → blob: URL)
+ *   onMiss(game, kind, urls)              optional diagnostics hook: every candidate URL for a slot failed (a missing logo is common and fine)
  */
-function createArt({ root: scope, loader = null, resolve = null, game }) {
+function createArt({ root: scope, loader = null, resolve = null, game, onMiss = null }) {
   const MAX = 8;                                    // images loading at once (resolving art does not count: the resolver batches and limits itself)
   const pending = new Set(), queue = [], shows = [], patches = new Map();
   let active = 0, dead = false, timer = 0, last = 0, showRaf = 0;
@@ -283,6 +294,7 @@ function createArt({ root: scope, loader = null, resolve = null, game }) {
       if (!img.isConnected) return;
       img.classList.add('is-loaded');
       const l = slotOf(img); l.classList.remove('is-skel');
+      if (img.dataset.kind === 'logo') l.classList.add('has-logo');      // the title text fades out, the logo takes its place
       const p = img.closest('.poster'); if (p) p.classList.add('has-img');
     };
     // decode first, then reveal at most 2 per frame: the frame that shows an image never pays for its decode,
@@ -291,10 +303,9 @@ function createArt({ root: scope, loader = null, resolve = null, game }) {
   }
   function flushShows() { showRaf = 0; for (let n = 0; n < 2 && shows.length; n++) shows.shift()(); if (shows.length) showRaf = requestAnimationFrame(flushShows); }
   function fail(img) {
-    if (img.dataset.kind === 'logo') {                // no logo: the title as text
-      const t = document.createElement('div'); t.className = 'fbt'; t.textContent = img.dataset.title || '';
-      const l = img.closest('.lg'); if (l) l.classList.remove('is-skel');
-      img.replaceWith(t); return;
+    if (img.dataset.kind === 'logo') {                // no logo: the title text that was there from the start simply stays
+      const l = img.closest('.lg'); if (l) l.classList.add('no-logo');
+      img.remove(); return;
     }
     const l = slotOf(img); l.classList.remove('is-skel'); l.classList.add('is-failed');
     const p = img.closest('.poster'); if (p) p.classList.add('is-fallback');
@@ -304,17 +315,19 @@ function createArt({ root: scope, loader = null, resolve = null, game }) {
   /** A near slot: resolve its art first (outside the pool, so every visible game can be batched), then queue the load. */
   function begin(img) {
     const g = game(img.dataset.g); if (!g) return fail(img);
-    slotOf(img).classList.add('is-busy');             // only skeletons that are about to load shimmer; the rest stay still (animating 100 offscreen skeletons is not free)
+    if (img.dataset.kind !== 'logo') slotOf(img).classList.add('is-busy');   // (logos have no skeleton) only skeletons that are about to load shimmer; the rest stay still (animating 100 offscreen skeletons is not free)
     settle(g).then(() => { if (dead || !img.isConnected) return; queue.push(img); pump(); });
   }
   async function run(img) {
     if (dead || !img.isConnected) return;
     if (!near(slotOf(img))) { slotOf(img).classList.remove('is-busy'); pending.add(img); return; }   // scrolled far away while queued: wait for it to come back
     const g = game(img.dataset.g); if (!g) return fail(img);
-    for (const url of candidates(g, img.dataset.kind)) {
+    const urls = candidates(g, img.dataset.kind);
+    for (const url of urls) {
       if (dead || !img.isConnected) return;
       if (await loadUrl(img, url)) return succeed(img);
     }
+    try { onMiss && onMiss(g, img.dataset.kind, urls); } catch (e) { /* diagnostics only */ }
     fail(img);
   }
   function pump() {
@@ -450,6 +463,9 @@ const ICON = {
   ext: '<path d="M7 17 17 7M8 7h9v9"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
   check: '<path d="m5 12 5 5 9-10"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6"/>',
+  bookmark: '<path d="M6 4h12v16l-6-4-6 4Z"/>',
+  logout: '<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M16 8l4 4-4 4M20 12H9"/>',
 };
 
 function ic(path, size = 18, stroke = 2.4) {
@@ -481,7 +497,7 @@ function heroHtml(slides) {
       <div class="art">${layer(g, 'hero')}</div>
       <div class="info">
         <div class="chip-new"><i></i>${esc(eyebrow)}${g.tagline ? ' · ' + esc(g.tagline) : ''}</div>
-        <div class="lg is-skel">${artImg(g, 'logo', 'logo')}</div>
+        ${logoSlot(g)}
         <div class="tags">${meta}</div>
         <div class="acts">${button('Get game', { attrs: `data-get="${esc(g.id)}"` })}${glassButton('Details', `data-open="${esc(g.id)}"`)}</div>
       </div></article>`;
@@ -609,19 +625,24 @@ function navActive(n, route) {
   return !!a.saved === !!b.saved && (a.sort || '') === (b.sort || '') && (a.category || '') === (b.category || '');
 }
 
-/** Floating glass bar: mark (left) · pill nav + search (centre) · user (right). */
+/** Floating glass pill: sections + search. It is the only part of the top bar that stays on screen while scrolling. */
 function barHtml(D, route) {
-  const u = D.site.user;
-  const avatar = u && (u.avatarUrl && safeUrl(u.avatarUrl)
-    ? `<button class="av" data-user aria-label="Account"><img src="${esc(safeUrl(u.avatarUrl))}" alt=""></button>`
-    : u.initials ? `<button class="av" data-user aria-label="Account">${esc(u.initials)}</button>` : '');
-  return `<header class="bar">
-    <button class="mark" data-nav="home" aria-label="${esc(D.site.name)} — home">${esc(D.site.mark)}</button>
-    <nav class="gl pill" aria-label="Sections">
+  return `<header class="bar"><nav class="gl pill" aria-label="Sections">
       ${D.nav.map(n => `<button data-nav-id="${esc(n.id)}"${navActive(n, route) ? ' class="on" aria-current="page"' : ''}>${esc(n.label)}</button>`).join('')}
       <button class="sb" data-search-toggle aria-label="Search" aria-expanded="false">${ic(ICON.search)}</button>
-    </nav>
-    <div class="bar-r">${avatar}</div></header>`;
+    </nav></header>`;
+}
+
+/**
+ * The site mark (left) and the account button (right). They sit at the top of the scrolling page, so they scroll away
+ * with it instead of floating over the content. No user (not signed in) → no account button, never the text "undefined".
+ */
+function cornerHtml(D) {
+  const u = D.site.user, label = esc((u && u.name) || 'Account');
+  const avatar = !u ? ''
+    : u.avatarUrl && safeUrl(u.avatarUrl) ? `<button class="av" data-user aria-label="${label}"><img src="${esc(safeUrl(u.avatarUrl))}" alt=""></button>`
+    : u.initials ? `<button class="av" data-user aria-label="${label}">${esc(u.initials)}</button>` : '';
+  return `<button class="mark" data-nav="home" aria-label="${esc(D.site.name)} — home">${esc(D.site.mark)}</button><div class="bar-r">${avatar}</div>`;
 }
 
 /** Drop-down search field that lives under the pill. */
@@ -632,6 +653,8 @@ function searchHtml() {
 /* ── src/js/ui/components/detail.js ── */
 const DEMO_REQ = { minimum: { OS: 'Windows 10', CPU: 'Core i5-8400', RAM: '8 GB' }, recommended: { OS: 'Windows 11', CPU: 'Core i7-8700K', RAM: '16 GB' } };
 const KIND_ICON = { hosters: ICON.cloud, drive: ICON.drive, fix: ICON.fix, torrent: ICON.torrent };
+/** "1.5.1.2608" → "v1.5.1.2608", but "Build 16102" stays as it is (never "vBuild 16102"). */
+const verLabel = v => (/^v?\d/i.test(v) ? 'v' + v.replace(/^v/i, '') : v);
 
 /** The download list that opens directly under the Get button (one card, not a floating menu). */
 function getBox(g, { pending, dlOpen }) {
@@ -663,10 +686,10 @@ function detailHtml(D, g, { saved = false, placeholders = false, pending = false
   const base = [['Developer', g.developer], ['Publisher', g.publisher], ['Released', g.releaseYear], ['Reception', g.rating], ['Genre', g.genres[0]], ['Size', g.size]];
   const extra = g.facts || [];
   const facts = [...base.map(([k, v]) => [k, (extra.find(f => f.label === k) || {}).value || v]), ...extra.filter(f => !base.some(([k]) => k === f.label)).map(f => [f.label, f.value])].filter(([, v]) => v);
-  const upd = g.update ? `<div class="upd">${g.update.version ? `<span class="v">v${esc(g.update.version.replace(/^v/i, ''))}</span>` : ''}<div><b>${g.update.date ? 'Updated ' + esc(g.update.date) : 'Latest update'}</b>${g.update.text ? `<span>${esc(g.update.text)}</span>` : ''}</div></div>` : '';
+  const upd = g.update ? `<div class="upd">${g.update.version ? `<span class="v">${esc(verLabel(g.update.version))}</span>` : ''}<div><b>${g.update.date ? 'Updated ' + esc(g.update.date) : 'Latest update'}</b>${g.update.text ? `<span>${esc(g.update.text)}</span>` : ''}</div></div>` : '';
   const sim = similar(D, g);
   return `<button class="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>
-  <div class="dh">${layer(g, 'hero')}${artImg(g, 'logo', 'logo')}</div>
+  <div class="dh">${layer(g, 'hero')}${logoSlot(g)}</div>
   <div class="db"><div>
     ${g.description ? `<h4>About</h4><p>${esc(g.description)}</p>` : ''}
     ${upd}
@@ -679,6 +702,34 @@ function detailHtml(D, g, { saved = false, placeholders = false, pending = false
     ${facts.length ? `<div class="facts">${facts.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : ''}
     ${sim.length ? `<h4 class="sh4">Similar</h4>${sim.map(x => `<div class="sim" tabindex="0" role="button" data-open="${esc(x.id)}"><div class="sa is-skel">${artImg(x, 'header')}</div>${esc(x.title)}</div>`).join('')}` : ''}
   </aside></div>`;
+}
+
+/* ── src/js/ui/components/profile.js ── */
+const LINK_ICON = { profile: ICON.user, bookmarks: ICON.bookmark, logout: ICON.logout };
+const rows = a => (Array.isArray(a) ? a : []).filter(x => x && x.label && x.value != null && String(x.value).trim() !== '');
+
+/**
+ * The account sheet that the avatar opens (rendered into the same modal as the game sheet).
+ *   u = D.site.user  { name, avatarUrl, initials, href }          (always there: this is what is known at once)
+ *   p = options.resolveProfile(u) result, or null while it is loading / when there is none:
+ *       { name, avatarUrl, badge, stats:[{label,value}], facts:[{label,value}], links:[{label,href,hint,kind:'profile'|'bookmarks'|'logout'}] }
+ */
+function profileHtml(u, p, { pending = false } = {}) {
+  p = p || {};
+  const name = p.name || u.name || 'Account', av = safeUrl(p.avatarUrl || u.avatarUrl);
+  const stats = rows(p.stats), facts = rows(p.facts);
+  const links = (Array.isArray(p.links) ? p.links : []).filter(l => l && l.label && safeUrl(l.href));
+  if (!links.length && !pending && safeUrl(u.href)) links.push({ label: 'Open your profile on the site', href: u.href, kind: 'profile' });
+  const sk = '<div class="facts psk"><div><i></i></div><div><i></i></div><div><i></i></div></div>';
+  return `<button class="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>
+  <div class="ph">${av ? `<img class="ph-bg" src="${esc(av)}" alt="" aria-hidden="true">` : ''}
+    <div class="pav">${av ? `<img src="${esc(av)}" alt="">` : esc(u.initials || name.slice(0, 2).toUpperCase())}</div>
+    <div class="pm"><h3>${esc(name)}</h3>${p.badge ? `<span class="pbadge">${esc(p.badge)}</span>` : ''}</div></div>
+  <div class="pb">
+    ${stats.length ? `<div class="pstats">${stats.map(s => `<div><b>${esc(s.value)}</b><span>${esc(s.label)}</span></div>`).join('')}</div>` : ''}
+    ${facts.length ? `<div class="facts">${facts.map(f => `<div><span>${esc(f.label)}</span>${esc(f.value)}</div>`).join('')}</div>` : pending ? sk : ''}
+    ${links.length ? `<div class="plinks">${links.map(l => `<a class="dl${l.kind === 'logout' ? ' out' : ''}" href="${esc(safeUrl(l.href))}" target="_blank" rel="noopener noreferrer"><span class="di">${ic(LINK_ICON[l.kind] || ICON.ext, 17)}</span><span class="dt"><b>${esc(l.label)}</b>${l.hint ? `<small>${esc(l.hint)}</small>` : ''}</span><span class="da">${ic(ICON.ext, 15)}</span></a>`).join('')}</div>` : ''}
+  </div>`;
 }
 
 /* ── src/js/ui/components/browse.js ── */
@@ -763,7 +814,9 @@ function initGrid(root, D, route, savedIds, art, loadMore) {
  *  options  { autoplay, autoplayMs, placeholders, theme, saved, route, imageLoader,
  *             resolveDetail(game) → Promise<patch|null> // called once, the first time a game's sheet opens: { description, downloads[{label,href,kind,hint}], password, guide[{title,steps[]}], update{date,version,text}, facts[{label,value}] }
  *             resolveArt(game) → Promise<patch|null>   // called lazily, once per game, right before its first image loads; patch = { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … }
- *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on), onUser(),
+ *             resolveProfile(user) → Promise<profile|null>  // called when the avatar is first clicked: { name, avatarUrl, badge, stats[{label,value}], facts[{label,value}], links[{label,href,hint,kind}] }
+ *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on),
+ *             onUser(user) → false to take over the avatar click (default: the kit's own account sheet opens), onArtMiss(game, kind, urls),
  *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game }
  *
  * app: { el, root, update(data), add(games), navigate(view, filter), open(id), close(), getRoute(), destroy() }
@@ -779,19 +832,21 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   root.className = 'hearth';
   if (opt.theme) Object.entries(opt.theme).forEach(([k, v]) => root.style.setProperty('--' + k, v));
   root.innerHTML = `<div class="bar-slot"></div>
-    <div class="scroll"><main class="page is-out"></main><footer class="foot"></footer></div>
+    <div class="scroll"><div class="top"></div><main class="page is-out"></main><footer class="foot"></footer></div>
     <div class="modal" aria-hidden="true"><div class="scrim" data-close></div><div class="sheet" role="dialog" aria-modal="true" tabindex="-1"></div></div>`;
   scope.appendChild(root);
   target.appendChild(host);
 
-  const $bar = root.querySelector('.bar-slot'), $scroll = root.querySelector('.scroll'), $page = root.querySelector('.page'),
+  const $bar = root.querySelector('.bar-slot'), $top = root.querySelector('.top'), $scroll = root.querySelector('.scroll'), $page = root.querySelector('.page'),
     $foot = root.querySelector('.foot'), $modal = root.querySelector('.modal'), $sheet = root.querySelector('.sheet');
   const active = () => scope.activeElement || document.activeElement;
 
   let D = normalize(data);
   const enrich = createEnrich({ resolve: opt.resolveDetail });
   let dlOpen = false;                                // the download panel of the open sheet is unfolded
-  const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, game: id => D.byId.get(String(id)) });
+  let profileOpen = false;                           // the open sheet is the account sheet, not a game
+  const prof = { data: null, done: !opt.resolveProfile, call: null };
+  const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, onMiss: opt.onArtMiss, game: id => D.byId.get(String(id)) });
   const saved = new Set((opt.saved || []).map(String));
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
   let heroCtl, stopReveal, stopShelves, stopGrid, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
@@ -827,6 +882,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
 
   function renderBar() {
     $bar.innerHTML = barHtml(D, route) + searchHtml();
+    $top.innerHTML = cornerHtml(D);
     $search = $bar.querySelector('.searchbox'); $input = $search.querySelector('input');
     $input.addEventListener('input', debounce(onSearch, 180));
   }
@@ -870,8 +926,9 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     const g = D.byId.get(String(id)); if (!g) return;
     if (openId === g.id && $modal.classList.contains('open')) return;
     if (openId !== g.id) dlOpen = false;
+    profileOpen = false;
     enrich.applyCached(g);
-    const fill = () => { $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }); art.hydrate($sheet); $sheet.scrollTop = 0; };
+    const fill = () => { $sheet.classList.remove('is-profile'); $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }); art.hydrate($sheet); $sheet.scrollTop = 0; };
     const sig = () => [g.description, g.developer, g.publisher, g.releaseYear, g.rating].join('|'), s0 = sig();
     if (!$modal.classList.contains('open')) {
       lastFocus = active(); fill();
@@ -885,11 +942,29 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     if (!enrich.done(g.id)) enrich.get(g).then(() => { if (openId === g.id) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
     opt.onOpen && opt.onOpen(g);
   }
+  /** The avatar: the kit's own account sheet (opens at once with what is known, fills in from options.resolveProfile). */
+  async function openProfile() {
+    const u = D.site.user; if (!u) return;
+    if (opt.onUser) { let r; try { r = opt.onUser(u); } catch (e) { console.error('[hearth] onUser failed', e); } if (r === false) return; }
+    if (profileOpen && $modal.classList.contains('open')) return closeGame();       // the avatar toggles the sheet
+    if (prof.done && !prof.data && opt.resolveProfile) { prof.done = false; prof.call = null; }   // the last attempt failed: try again
+    profileOpen = true; openId = null;
+    const fill = () => { $sheet.classList.add('is-profile'); $sheet.innerHTML = profileHtml(D.site.user || u, prof.data, { pending: !prof.done }); $sheet.scrollTop = 0; };
+    if (!$modal.classList.contains('open')) {
+      lastFocus = active(); fill();
+      $modal.classList.add('open'); $modal.setAttribute('aria-hidden', 'false'); $scroll.classList.add('is-locked');
+      $sheet.focus({ preventScroll: true });
+    } else { $sheet.classList.add('is-swap'); await delay(reduced() ? 0 : T.fast); fill(); $sheet.classList.remove('is-swap'); }
+    if (!prof.done) {
+      if (!prof.call) prof.call = Promise.resolve().then(() => opt.resolveProfile(u)).catch(e => { console.warn('[hearth] resolveProfile failed', e); return null; }).then(p => { prof.data = p; prof.done = true; return p; });
+      prof.call.then(() => { if (profileOpen && $modal.classList.contains('open')) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
+    }
+  }
   function closeGame() {
     if (!$modal.classList.contains('open')) return;
     $modal.classList.remove('open'); $modal.setAttribute('aria-hidden', 'true'); $scroll.classList.remove('is-locked');
     const was = D.byId.get(openId);
-    openId = null;
+    openId = null; profileOpen = false;
     opt.onClose && was && opt.onClose(was);
     lastFocus && lastFocus.focus && lastFocus.focus({ preventScroll: true });
     if (route.filter && route.filter.saved) refresh();
@@ -943,7 +1018,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     if (q('[data-nav]')) { closeGame(); closeSearchSilently(); return go('home'); }
     if (q('[data-search-toggle]')) return searchOpen() ? closeSearch() : openSearch();
     if (q('[data-search-clear]')) { $input.value = ''; $input.focus(); return onSearch(); }
-    if (q('[data-user]')) return opt.onUser && opt.onUser();
+    if (q('[data-user]')) return openProfile();
     if ((el = q('[data-cat]'))) { const id = el.dataset.cat; if (!id && route.view === 'home') return; return go('browse', id ? { category: id } : {}); }
     if ((el = q('[data-more]'))) { const s = D.shelves.find(x => x.id === el.dataset.more); return s && go('browse', s.filter || {}); }
     if ((el = q('[data-open]'))) return openGame(el.dataset.open);
@@ -986,9 +1061,9 @@ function adopt(scope, css) {
 }
 
 /* ── src/js/ui/index.js ── */
-const version = '0.2.0';
+const version = '0.3.0';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-const features = { lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true };
+const features = { lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true };
 
 return {mount, validate, steam, normalize, version, features};
 })();

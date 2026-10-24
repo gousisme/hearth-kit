@@ -9,19 +9,24 @@ export function navActive(n, route) {
   return !!a.saved === !!b.saved && (a.sort || '') === (b.sort || '') && (a.category || '') === (b.category || '');
 }
 
-/** Floating glass bar: mark (left) · pill nav + search (centre) · user (right). */
+/** Floating glass pill: sections + search. It is the only part of the top bar that stays on screen while scrolling. */
 export function barHtml(D, route) {
-  const u = D.site.user;
-  const avatar = u && (u.avatarUrl && safeUrl(u.avatarUrl)
-    ? `<button class="av" data-user aria-label="Account"><img src="${esc(safeUrl(u.avatarUrl))}" alt=""></button>`
-    : u.initials ? `<button class="av" data-user aria-label="Account">${esc(u.initials)}</button>` : '');
-  return `<header class="bar">
-    <button class="mark" data-nav="home" aria-label="${esc(D.site.name)} — home">${esc(D.site.mark)}</button>
-    <nav class="gl pill" aria-label="Sections">
+  return `<header class="bar"><nav class="gl pill" aria-label="Sections">
       ${D.nav.map(n => `<button data-nav-id="${esc(n.id)}"${navActive(n, route) ? ' class="on" aria-current="page"' : ''}>${esc(n.label)}</button>`).join('')}
       <button class="sb" data-search-toggle aria-label="Search" aria-expanded="false">${ic(ICON.search)}</button>
-    </nav>
-    <div class="bar-r">${avatar}</div></header>`;
+    </nav></header>`;
+}
+
+/**
+ * The site mark (left) and the account button (right). They sit at the top of the scrolling page, so they scroll away
+ * with it instead of floating over the content. No user (not signed in) → no account button, never the text "undefined".
+ */
+export function cornerHtml(D) {
+  const u = D.site.user, label = esc((u && u.name) || 'Account');
+  const avatar = !u ? ''
+    : u.avatarUrl && safeUrl(u.avatarUrl) ? `<button class="av" data-user aria-label="${label}"><img src="${esc(safeUrl(u.avatarUrl))}" alt=""></button>`
+    : u.initials ? `<button class="av" data-user aria-label="${label}">${esc(u.initials)}</button>` : '';
+  return `<button class="mark" data-nav="home" aria-label="${esc(D.site.name)} — home">${esc(D.site.mark)}</button><div class="bar-r">${avatar}</div>`;
 }
 
 /** Drop-down search field that lives under the pill. */

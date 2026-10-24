@@ -18,6 +18,9 @@ export function normalize(raw) {
 
   const site = { name: 'Hearth', mark: '', footer: '', user: null, ...(d.site || {}) };
   site.mark = site.mark || (site.name || 'h').trim().charAt(0).toLowerCase();
+  // `user` is an object (signed in) or null. Initials are derived from the name when not given.
+  site.user = site.user && typeof site.user === 'object' ? { ...site.user } : null;
+  if (site.user) { site.user.name = String(site.user.name || '').trim(); site.user.initials = String(site.user.initials || site.user.name.slice(0, 2).toUpperCase()).trim(); }
 
   const nav = Array.isArray(d.nav) && d.nav.length ? d.nav : [
     { id: 'discover', label: 'Discover', view: 'home' },

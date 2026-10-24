@@ -27,7 +27,7 @@ This is **the** interface between a scraper and the UI. A scraper only has to re
 
 | Field | Default when omitted |
 |---|---|
-| `site.name` / `mark` | "Hearth" / first letter. `mark` is the 1-character logo tile. `footer` is a small line under the page. `user` shows an avatar (initials or image); omit for none. |
+| `site.name` / `mark` | "Hearth" / first letter. `mark` is the 1-character logo tile. `footer` is a small line under the page. `user` is `{name, avatarUrl?, initials?, href?}` for a signed-in visitor, and is what the avatar button and its account sheet are built from. **When nobody is signed in, omit `user` or set it to `null`: no avatar is drawn** (never pass a placeholder object). The avatar sits at the top of the page and scrolls away with it; only the nav pill stays fixed. |
 | `nav` | Discover (home) · Games (browse) · Library (saved) · New (sorted by year). Item: `{id, label, view:'home'\|'browse'\|'external', filter?, href?}`; `filter` is a browse filter (below). `external` + `href` opens a link. |
 | `categories` | up to 9 most frequent genres. `id` must match values in `game.categories`. |
 | `hero` | first 5 games that have a `steamAppId` or `art.hero`. Slides are game references, not copies. `eyebrow` default "Featured"/"Trending now". |
@@ -76,7 +76,7 @@ Given an app id, artwork URLs are built from Steam's CDN. `HearthUI.steam` expos
 
 **Getting the app id:** from a Steam link on the page (`HearthScrape.steamAppId(url)` parses `store.steampowered.com/app/<id>/…`), from the site's own data, or by searching Steam by title (ask the user if neither exists). A game with no id still renders, using generated art.
 
-**Fallback chain per slot** (`candidates()` in `core/art.js`): `art.<slot>` override → Steam URL → (hero only) header → `art.fallback`. While loading the slot is a skeleton; if everything fails it is a flat tile (posters show the title). Logos fall back to the title as text. Optional `options.resolveArt(game)` lets the userscript find Steam ids / art lazily, per card, right before its image loads. A failed image never breaks layout.
+**Fallback chain per slot** (`candidates()` in `core/art.js`): `art.<slot>` override → Steam URL → (hero only) header → `art.fallback`. While loading the slot is a skeleton; if everything fails it is a flat tile (posters show the title). Logos never show a skeleton: a logo slot starts as the game's title in plain text and is swapped for the image if and when one loads (if none does, the text stays). Optional `options.resolveArt(game)` lets the userscript find Steam ids / art lazily, per card, right before its image loads. A failed image never breaks layout.
 
 **Caveats (verify against the real CDN during development):** Steam has been moving some apps' library assets to hashed sub-paths, so the plain URL above may 404 for certain (typically newer) apps. The fallback chain hides this, but for such a game set `art.poster/hero/logo` explicitly if the site provides art or you can resolve the real URLs. Also, a host page's CSP may block the Steam CDN; see [07-gotchas.md](07-gotchas.md).
 

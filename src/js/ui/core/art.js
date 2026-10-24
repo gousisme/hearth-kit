@@ -6,6 +6,8 @@ import { esc, safeUrl } from '../../shared/util.js';
  *   · while its image is loading (or its source is still being resolved) the slot is a skeleton;
  *   · when the image arrives it fades in over the skeleton;
  *   · if nothing loads the slot becomes a flat, quiet tile (`is-failed`; posters then show the title as text).
+ * LOGOS are the exception: they never show a skeleton. A logo slot (logoSlot()) starts as the game's title in plain text and
+ * is swapped for the real logo image if (and when) one loads; if none loads the text simply stays.
  * There is NO generated artwork: a slot is either a skeleton, a real image, or an empty tile.
  *
  * Slots are filled lazily by createArt(): only slots near the viewport load, a few at a time, so a page with
@@ -39,6 +41,11 @@ export function artImg(game, kind, cls = '') {
   return `<img class="art-img ${cls}" alt="${kind === 'logo' ? esc(game.title) : ''}" data-g="${esc(game.id)}" data-kind="${kind}" data-title="${esc(game.title)}" decoding="async">`;
 }
 
+/** A game's logo: the title as text first, swapped for the logo image once it has loaded. No skeleton, no layout jump. */
+export function logoSlot(game, cls = '') {
+  return `<div class="lg${cls ? ' ' + cls : ''}"><div class="fbt">${esc(game.title)}</div>${artImg(game, 'logo', 'logo')}</div>`;
+}
+
 /** A full-bleed art slot (poster, hero, header…). Starts as a skeleton. */
 export function layer(game, kind) {
   return `<div class="layer is-skel">${artImg(game, kind)}</div>`;
@@ -60,8 +67,9 @@ function mergeArt(g, p) {
  *   resolve(game) → Promise<patch|null>   optional, called once per game right before its first slot loads
  *                   (patch: { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … })
  *   loader(url)   → Promise<string>       optional (GM_xmlhttpRequest → blob: URL)
+ *   onMiss(game, kind, urls)              optional diagnostics hook: every candidate URL for a slot failed (a missing logo is common and fine)
  */
-export function createArt({ root: scope, loader = null, resolve = null, game }) {
+export function createArt({ root: scope, loader = null, resolve = null, game, onMiss = null }) {
   const MAX = 8;                                    // images loading at once (resolving art does not count: the resolver batches and limits itself)
   const pending = new Set(), queue = [], shows = [], patches = new Map();
   let active = 0, dead = false, timer = 0, last = 0, showRaf = 0;
@@ -88,6 +96,7 @@ export function createArt({ root: scope, loader = null, resolve = null, game }) 
       if (!img.isConnected) return;
       img.classList.add('is-loaded');
       const l = slotOf(img); l.classList.remove('is-skel');
+      if (img.dataset.kind === 'logo') l.classList.add('has-logo');      // the title text fades out, the logo takes its place
       const p = img.closest('.poster'); if (p) p.classList.add('has-img');
     };
     // decode first, then reveal at most 2 per frame: the frame that shows an image never pays for its decode,
@@ -96,10 +105,9 @@ export function createArt({ root: scope, loader = null, resolve = null, game }) 
   }
   function flushShows() { showRaf = 0; for (let n = 0; n < 2 && shows.length; n++) shows.shift()(); if (shows.length) showRaf = requestAnimationFrame(flushShows); }
   function fail(img) {
-    if (img.dataset.kind === 'logo') {                // no logo: the title as text
-      const t = document.createElement('div'); t.className = 'fbt'; t.textContent = img.dataset.title || '';
-      const l = img.closest('.lg'); if (l) l.classList.remove('is-skel');
-      img.replaceWith(t); return;
+    if (img.dataset.kind === 'logo') {                // no logo: the title text that was there from the start simply stays
+      const l = img.closest('.lg'); if (l) l.classList.add('no-logo');
+      img.remove(); return;
     }
     const l = slotOf(img); l.classList.remove('is-skel'); l.classList.add('is-failed');
     const p = img.closest('.poster'); if (p) p.classList.add('is-fallback');
@@ -109,17 +117,19 @@ export function createArt({ root: scope, loader = null, resolve = null, game }) 
   /** A near slot: resolve its art first (outside the pool, so every visible game can be batched), then queue the load. */
   function begin(img) {
     const g = game(img.dataset.g); if (!g) return fail(img);
-    slotOf(img).classList.add('is-busy');             // only skeletons that are about to load shimmer; the rest stay still (animating 100 offscreen skeletons is not free)
+    if (img.dataset.kind !== 'logo') slotOf(img).classList.add('is-busy');   // (logos have no skeleton) only skeletons that are about to load shimmer; the rest stay still (animating 100 offscreen skeletons is not free)
     settle(g).then(() => { if (dead || !img.isConnected) return; queue.push(img); pump(); });
   }
   async function run(img) {
     if (dead || !img.isConnected) return;
     if (!near(slotOf(img))) { slotOf(img).classList.remove('is-busy'); pending.add(img); return; }   // scrolled far away while queued: wait for it to come back
     const g = game(img.dataset.g); if (!g) return fail(img);
-    for (const url of candidates(g, img.dataset.kind)) {
+    const urls = candidates(g, img.dataset.kind);
+    for (const url of urls) {
       if (dead || !img.isConnected) return;
       if (await loadUrl(img, url)) return succeed(img);
     }
+    try { onMiss && onMiss(g, img.dataset.kind, urls); } catch (e) { /* diagnostics only */ }
     fail(img);
   }
   function pump() {

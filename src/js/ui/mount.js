@@ -7,8 +7,9 @@ import { heroHtml, initHero } from './components/hero.js';
 import { chipsHtml } from './components/chips.js';
 import { featuredHtml } from './components/featured.js';
 import { shelfHtml, initShelves } from './components/shelf.js';
-import { barHtml, searchHtml, navActive } from './components/nav.js';
+import { barHtml, cornerHtml, searchHtml, navActive } from './components/nav.js';
 import { detailHtml } from './components/detail.js';
+import { profileHtml } from './components/profile.js';
 import { browseHtml, initGrid } from './components/browse.js';
 
 /**
@@ -22,7 +23,9 @@ import { browseHtml, initGrid } from './components/browse.js';
  *  options  { autoplay, autoplayMs, placeholders, theme, saved, route, imageLoader,
  *             resolveDetail(game) → Promise<patch|null> // called once, the first time a game's sheet opens: { description, downloads[{label,href,kind,hint}], password, guide[{title,steps[]}], update{date,version,text}, facts[{label,value}] }
  *             resolveArt(game) → Promise<patch|null>   // called lazily, once per game, right before its first image loads; patch = { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … }
- *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on), onUser(),
+ *             resolveProfile(user) → Promise<profile|null>  // called when the avatar is first clicked: { name, avatarUrl, badge, stats[{label,value}], facts[{label,value}], links[{label,href,hint,kind}] }
+ *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on),
+ *             onUser(user) → false to take over the avatar click (default: the kit's own account sheet opens), onArtMiss(game, kind, urls),
  *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game }
  *
  * app: { el, root, update(data), add(games), navigate(view, filter), open(id), close(), getRoute(), destroy() }
@@ -38,19 +41,21 @@ export function mount({ target = document.body, data, css = null, shadow, option
   root.className = 'hearth';
   if (opt.theme) Object.entries(opt.theme).forEach(([k, v]) => root.style.setProperty('--' + k, v));
   root.innerHTML = `<div class="bar-slot"></div>
-    <div class="scroll"><main class="page is-out"></main><footer class="foot"></footer></div>
+    <div class="scroll"><div class="top"></div><main class="page is-out"></main><footer class="foot"></footer></div>
     <div class="modal" aria-hidden="true"><div class="scrim" data-close></div><div class="sheet" role="dialog" aria-modal="true" tabindex="-1"></div></div>`;
   scope.appendChild(root);
   target.appendChild(host);
 
-  const $bar = root.querySelector('.bar-slot'), $scroll = root.querySelector('.scroll'), $page = root.querySelector('.page'),
+  const $bar = root.querySelector('.bar-slot'), $top = root.querySelector('.top'), $scroll = root.querySelector('.scroll'), $page = root.querySelector('.page'),
     $foot = root.querySelector('.foot'), $modal = root.querySelector('.modal'), $sheet = root.querySelector('.sheet');
   const active = () => scope.activeElement || document.activeElement;
 
   let D = normalize(data);
   const enrich = createEnrich({ resolve: opt.resolveDetail });
   let dlOpen = false;                                // the download panel of the open sheet is unfolded
-  const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, game: id => D.byId.get(String(id)) });
+  let profileOpen = false;                           // the open sheet is the account sheet, not a game
+  const prof = { data: null, done: !opt.resolveProfile, call: null };
+  const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, onMiss: opt.onArtMiss, game: id => D.byId.get(String(id)) });
   const saved = new Set((opt.saved || []).map(String));
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
   let heroCtl, stopReveal, stopShelves, stopGrid, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
@@ -86,6 +91,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
 
   function renderBar() {
     $bar.innerHTML = barHtml(D, route) + searchHtml();
+    $top.innerHTML = cornerHtml(D);
     $search = $bar.querySelector('.searchbox'); $input = $search.querySelector('input');
     $input.addEventListener('input', debounce(onSearch, 180));
   }
@@ -129,8 +135,9 @@ export function mount({ target = document.body, data, css = null, shadow, option
     const g = D.byId.get(String(id)); if (!g) return;
     if (openId === g.id && $modal.classList.contains('open')) return;
     if (openId !== g.id) dlOpen = false;
+    profileOpen = false;
     enrich.applyCached(g);
-    const fill = () => { $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }); art.hydrate($sheet); $sheet.scrollTop = 0; };
+    const fill = () => { $sheet.classList.remove('is-profile'); $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }); art.hydrate($sheet); $sheet.scrollTop = 0; };
     const sig = () => [g.description, g.developer, g.publisher, g.releaseYear, g.rating].join('|'), s0 = sig();
     if (!$modal.classList.contains('open')) {
       lastFocus = active(); fill();
@@ -144,11 +151,29 @@ export function mount({ target = document.body, data, css = null, shadow, option
     if (!enrich.done(g.id)) enrich.get(g).then(() => { if (openId === g.id) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
     opt.onOpen && opt.onOpen(g);
   }
+  /** The avatar: the kit's own account sheet (opens at once with what is known, fills in from options.resolveProfile). */
+  async function openProfile() {
+    const u = D.site.user; if (!u) return;
+    if (opt.onUser) { let r; try { r = opt.onUser(u); } catch (e) { console.error('[hearth] onUser failed', e); } if (r === false) return; }
+    if (profileOpen && $modal.classList.contains('open')) return closeGame();       // the avatar toggles the sheet
+    if (prof.done && !prof.data && opt.resolveProfile) { prof.done = false; prof.call = null; }   // the last attempt failed: try again
+    profileOpen = true; openId = null;
+    const fill = () => { $sheet.classList.add('is-profile'); $sheet.innerHTML = profileHtml(D.site.user || u, prof.data, { pending: !prof.done }); $sheet.scrollTop = 0; };
+    if (!$modal.classList.contains('open')) {
+      lastFocus = active(); fill();
+      $modal.classList.add('open'); $modal.setAttribute('aria-hidden', 'false'); $scroll.classList.add('is-locked');
+      $sheet.focus({ preventScroll: true });
+    } else { $sheet.classList.add('is-swap'); await delay(reduced() ? 0 : T.fast); fill(); $sheet.classList.remove('is-swap'); }
+    if (!prof.done) {
+      if (!prof.call) prof.call = Promise.resolve().then(() => opt.resolveProfile(u)).catch(e => { console.warn('[hearth] resolveProfile failed', e); return null; }).then(p => { prof.data = p; prof.done = true; return p; });
+      prof.call.then(() => { if (profileOpen && $modal.classList.contains('open')) { const st = $sheet.scrollTop; fill(); $sheet.scrollTop = st; } });
+    }
+  }
   function closeGame() {
     if (!$modal.classList.contains('open')) return;
     $modal.classList.remove('open'); $modal.setAttribute('aria-hidden', 'true'); $scroll.classList.remove('is-locked');
     const was = D.byId.get(openId);
-    openId = null;
+    openId = null; profileOpen = false;
     opt.onClose && was && opt.onClose(was);
     lastFocus && lastFocus.focus && lastFocus.focus({ preventScroll: true });
     if (route.filter && route.filter.saved) refresh();
@@ -202,7 +227,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     if (q('[data-nav]')) { closeGame(); closeSearchSilently(); return go('home'); }
     if (q('[data-search-toggle]')) return searchOpen() ? closeSearch() : openSearch();
     if (q('[data-search-clear]')) { $input.value = ''; $input.focus(); return onSearch(); }
-    if (q('[data-user]')) return opt.onUser && opt.onUser();
+    if (q('[data-user]')) return openProfile();
     if ((el = q('[data-cat]'))) { const id = el.dataset.cat; if (!id && route.view === 'home') return; return go('browse', id ? { category: id } : {}); }
     if ((el = q('[data-more]'))) { const s = D.shelves.find(x => x.id === el.dataset.more); return s && go('browse', s.filter || {}); }
     if ((el = q('[data-open]'))) return openGame(el.dataset.open);
