@@ -30,9 +30,10 @@ export function icf(path, size = 18) {
 export function ic(path, size = 18, stroke = 2.4) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
 }
-/** The Get button's download glyph: a tray line that stays put + an arrow that can slide down and loop (two copies: one leaves downwards, the next enters from the top).
- *  The arrows live in a nested <svg> so everything below its edge is clipped (the arrow disappears into the line). Looped by core/dl-loop.js. */
+/** The Get button's download glyph: a tray line that stays put + ONE group holding two arrows 17 units apart (the second parked above the first, clipped away).
+ *  Sliding the group down by 17 makes the first arrow leave into the line while the second arrives; at 17 the picture equals the resting one. The arrows live in a nested <svg>
+ *  so everything below its edge is clipped. Looped by core/dl-loop.js. */
 export function dlGlyph(size = 18, stroke = 2.4) {
-  const arrow = '<path d="M12 4v11m0 0-5-5m5 5 5-5"/>';
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20h14"/><svg x="0" y="0" width="24" height="18.5" viewBox="0 0 24 18.5" overflow="hidden"><g class="ar a">${arrow}</g><g class="ar b">${arrow}</g></svg></svg>`;
+  const arrow = 'M12 4v11m0 0-5-5m5 5 5-5';
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20h14"/><svg x="0" y="0" width="24" height="18.5" viewBox="0 0 24 18.5" overflow="hidden"><g class="ar-g"><path d="${arrow}"/><path d="${arrow}" transform="translate(0 -17)"/></g></svg></svg>`;
 }

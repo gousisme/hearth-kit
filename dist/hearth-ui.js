@@ -1,4 +1,4 @@
-/*! hearth-kit v0.5.5 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.5.6 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthUI=(function(){
 'use strict';
 /* ── src/js/shared/util.js ── */
@@ -525,11 +525,12 @@ function icf(path, size = 18) {
 function ic(path, size = 18, stroke = 2.4) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
 }
-/** The Get button's download glyph: a tray line that stays put + an arrow that can slide down and loop (two copies: one leaves downwards, the next enters from the top).
- *  The arrows live in a nested <svg> so everything below its edge is clipped (the arrow disappears into the line). Looped by core/dl-loop.js. */
+/** The Get button's download glyph: a tray line that stays put + ONE group holding two arrows 17 units apart (the second parked above the first, clipped away).
+ *  Sliding the group down by 17 makes the first arrow leave into the line while the second arrives; at 17 the picture equals the resting one. The arrows live in a nested <svg>
+ *  so everything below its edge is clipped. Looped by core/dl-loop.js. */
 function dlGlyph(size = 18, stroke = 2.4) {
-  const arrow = '<path d="M12 4v11m0 0-5-5m5 5 5-5"/>';
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20h14"/><svg x="0" y="0" width="24" height="18.5" viewBox="0 0 24 18.5" overflow="hidden"><g class="ar a">${arrow}</g><g class="ar b">${arrow}</g></svg></svg>`;
+  const arrow = 'M12 4v11m0 0-5-5m5 5 5-5';
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20h14"/><svg x="0" y="0" width="24" height="18.5" viewBox="0 0 24 18.5" overflow="hidden"><g class="ar-g"><path d="${arrow}"/><path d="${arrow}" transform="translate(0 -17)"/></g></svg></svg>`;
 }
 
 /* ── src/js/ui/components/button.js ── */
@@ -850,34 +851,43 @@ function morphKids(parent, next, animate) {
 
 /* ── src/js/ui/core/dl-loop.js ── */
 /**
- * The Get button's looping arrow (Web Animations API). The glyph (see dlGlyph) has two arrow copies: A leaves downwards into the line, B enters from the top.
- *   dlStart(disc) — the pointer / keyboard focus is on the button: loop (a cycle = slide, then a short hold)
- *   dlStop(disc)  — it left: let the CURRENT cycle finish, then rest. A finished cycle looks exactly like the resting glyph, so nothing ever snaps or freezes half-way.
- * Starting again while a cycle is still finishing just keeps going (no restart); a disc that is removed from the page cancels its animations by itself.
- * State lives in a WeakMap, not in CSS classes, so a re-render, a hover that comes and goes, or an event arriving late cannot leave it in a wrong state.
+ * The Get button's looping arrow (Web Animations API). The glyph (see dlGlyph) is ONE group holding two arrows, 17 units apart; moving the group down by 17 makes the
+ * arrow leave into the line while the next one arrives from above — and at 17 the picture is identical to the resting one (offset 0). One animation, so the two arrows
+ * can never drift apart.
+ *   dlStart(disc) — pointer / keyboard focus is on the button: loop (slide, short hold, repeat)
+ *   dlStop(disc)  — it left: after a short grace (hover flicker under a moving card), the arrow is eased to the nearest resting position (finish the slide, or go
+ *                   back if it only just started) and the loop ends there — it neither keeps running unseen nor jumps. Re-entering during that settle waits for it, then loops.
+ * State lives in a WeakMap (no CSS classes), a disc that leaves the page cancels its animations by itself.
  */
-const DIST = 17, MS = 1000, EASE = 'cubic-bezier(.5, 0, .2, 1)', SLIDE = 0.78;
-const KF_A = [{ transform: 'translateY(0px)', offset: 0, easing: EASE }, { transform: `translateY(${DIST}px)`, offset: SLIDE }, { transform: `translateY(${DIST}px)`, offset: 1 }];
-const KF_B = [{ transform: `translateY(${-DIST}px)`, offset: 0, easing: EASE }, { transform: 'translateY(0px)', offset: SLIDE }, { transform: 'translateY(0px)', offset: 1 }];
-const live = new WeakMap();                                   // .d → { a, b }
+const DIST = 17, MS = 900, SLIDE = 0.7, EASE = 'cubic-bezier(.5, 0, .2, 1)', GRACE = 90;
+const KF = [{ transform: 'translateY(0px)', offset: 0, easing: EASE }, { transform: `translateY(${DIST}px)`, offset: SLIDE }, { transform: `translateY(${DIST}px)`, offset: 1 }];
+const st = new WeakMap();                                     // .d → { g, loop, settle, timer, hovering }
 
-const iterate = (s, n) => { s.a.effect.updateTiming({ iterations: n }); s.b.effect.updateTiming({ iterations: n }); };
+const offsetOf = g => { try { const m = String(getComputedStyle(g).transform).match(/matrix\(([^)]+)\)/); return m ? Math.min(DIST, Math.max(0, +m[1].split(',')[5] || 0)) : 0; } catch (e) { return 0; } };
 
 function dlStart(d) {
-  if (!d || !d.animate || reduced()) return;
-  const cur = live.get(d);
-  if (cur && cur.a.playState === 'running') { iterate(cur, Infinity); return; }       // still finishing its last cycle: just keep looping
-  const A = d.querySelector('.ar.a'), B = d.querySelector('.ar.b'); if (!A || !B) return;
-  const o = { duration: MS, iterations: Infinity }, s = { a: A.animate(KF_A, o), b: B.animate(KF_B, o) };
-  live.set(d, s);
-  const gone = () => { if (live.get(d) === s) live.delete(d); };
-  s.a.onfinish = s.a.oncancel = gone;
+  if (!d || reduced()) return;
+  let s = st.get(d);
+  if (!s) { const g = d.querySelector('.ar-g'); if (!g || !g.animate) return; st.set(d, s = { g, loop: null, settle: null, timer: 0, hovering: false }); }
+  clearTimeout(s.timer); s.hovering = true;
+  if (s.loop || s.settle) return;                             // already looping, or settling (it restarts the loop when it ends, see settle())
+  s.loop = s.g.animate(KF, { duration: MS, iterations: Infinity });
 }
 
 function dlStop(d) {
-  const s = d && live.get(d); if (!s || s.a.playState !== 'running') return;
-  const t = s.a.effect.getComputedTiming();
-  iterate(s, (t.currentIteration || 0) + 1);                  // ends at the end of the cycle that is running now
+  const s = d && st.get(d); if (!s) return;
+  s.hovering = false; clearTimeout(s.timer);
+  s.timer = setTimeout(() => settle(d, s), GRACE);
+}
+
+function settle(d, s) {
+  if (s.hovering || !s.loop) return;
+  const from = offsetOf(s.g), to = from > DIST / 2 ? DIST : 0, dist = Math.abs(to - from);
+  s.loop.cancel(); s.loop = null;                             // (the element is at rest for the instant before the settle below takes over: same task, no frame between)
+  if (dist < 0.5) return;
+  const a = s.settle = s.g.animate([{ transform: `translateY(${from}px)` }, { transform: `translateY(${to}px)` }], { duration: 70 + dist * 9, easing: 'cubic-bezier(.25, 0, .2, 1)' });
+  const done = () => { if (s.settle !== a) return; s.settle = null; a.cancel(); if (s.hovering) dlStart(d); };
+  a.onfinish = a.oncancel = done;
 }
 
 /* ── src/js/ui/components/profile.js ── */
@@ -1390,7 +1400,7 @@ function adopt(scope, css) {
 }
 
 /* ── src/js/ui/index.js ── */
-const version = '0.5.5';
+const version = '0.5.6';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
 const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true };
 
