@@ -31,7 +31,7 @@ export function ic(path, size = 18, stroke = 2.4) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
 }
 /** The Get button's download glyph: a tray line that stays put + an arrow that can slide down and loop (two copies: one leaves downwards, the next enters from the top).
- *  The arrows live in a nested <svg> so everything below its edge is clipped (the arrow disappears into the line). Animated by `.d.run` in 20-buttons.css. */
+ *  The arrows live in a nested <svg> so everything below its edge is clipped (the arrow disappears into the line). Looped by core/dl-loop.js. */
 export function dlGlyph(size = 18, stroke = 2.4) {
   const arrow = '<path d="M12 4v11m0 0-5-5m5 5 5-5"/>';
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20h14"/><svg x="0" y="0" width="24" height="18.5" viewBox="0 0 24 18.5" overflow="hidden"><g class="ar a">${arrow}</g><g class="ar b">${arrow}</g></svg></svg>`;

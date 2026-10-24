@@ -1,4 +1,4 @@
-/*! hearth-kit v0.5.4 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.5.5 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthUI=(function(){
 'use strict';
 /* ── src/js/shared/util.js ── */
@@ -526,7 +526,7 @@ function ic(path, size = 18, stroke = 2.4) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
 }
 /** The Get button's download glyph: a tray line that stays put + an arrow that can slide down and loop (two copies: one leaves downwards, the next enters from the top).
- *  The arrows live in a nested <svg> so everything below its edge is clipped (the arrow disappears into the line). Animated by `.d.run` in 20-buttons.css. */
+ *  The arrows live in a nested <svg> so everything below its edge is clipped (the arrow disappears into the line). Looped by core/dl-loop.js. */
 function dlGlyph(size = 18, stroke = 2.4) {
   const arrow = '<path d="M12 4v11m0 0-5-5m5 5 5-5"/>';
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20h14"/><svg x="0" y="0" width="24" height="18.5" viewBox="0 0 24 18.5" overflow="hidden"><g class="ar a">${arrow}</g><g class="ar b">${arrow}</g></svg></svg>`;
@@ -846,6 +846,38 @@ function morphKids(parent, next, animate) {
     if (n.classList.contains('rg-in')) n.addEventListener('animationend', () => n.classList.remove('rg-in'), { once: true });
     prev = n;
   }
+}
+
+/* ── src/js/ui/core/dl-loop.js ── */
+/**
+ * The Get button's looping arrow (Web Animations API). The glyph (see dlGlyph) has two arrow copies: A leaves downwards into the line, B enters from the top.
+ *   dlStart(disc) — the pointer / keyboard focus is on the button: loop (a cycle = slide, then a short hold)
+ *   dlStop(disc)  — it left: let the CURRENT cycle finish, then rest. A finished cycle looks exactly like the resting glyph, so nothing ever snaps or freezes half-way.
+ * Starting again while a cycle is still finishing just keeps going (no restart); a disc that is removed from the page cancels its animations by itself.
+ * State lives in a WeakMap, not in CSS classes, so a re-render, a hover that comes and goes, or an event arriving late cannot leave it in a wrong state.
+ */
+const DIST = 17, MS = 1000, EASE = 'cubic-bezier(.5, 0, .2, 1)', SLIDE = 0.78;
+const KF_A = [{ transform: 'translateY(0px)', offset: 0, easing: EASE }, { transform: `translateY(${DIST}px)`, offset: SLIDE }, { transform: `translateY(${DIST}px)`, offset: 1 }];
+const KF_B = [{ transform: `translateY(${-DIST}px)`, offset: 0, easing: EASE }, { transform: 'translateY(0px)', offset: SLIDE }, { transform: 'translateY(0px)', offset: 1 }];
+const live = new WeakMap();                                   // .d → { a, b }
+
+const iterate = (s, n) => { s.a.effect.updateTiming({ iterations: n }); s.b.effect.updateTiming({ iterations: n }); };
+
+function dlStart(d) {
+  if (!d || !d.animate || reduced()) return;
+  const cur = live.get(d);
+  if (cur && cur.a.playState === 'running') { iterate(cur, Infinity); return; }       // still finishing its last cycle: just keep looping
+  const A = d.querySelector('.ar.a'), B = d.querySelector('.ar.b'); if (!A || !B) return;
+  const o = { duration: MS, iterations: Infinity }, s = { a: A.animate(KF_A, o), b: B.animate(KF_B, o) };
+  live.set(d, s);
+  const gone = () => { if (live.get(d) === s) live.delete(d); };
+  s.a.onfinish = s.a.oncancel = gone;
+}
+
+function dlStop(d) {
+  const s = d && live.get(d); if (!s || s.a.playState !== 'running') return;
+  const t = s.a.effect.getComputedTiming();
+  iterate(s, (t.currentIteration || 0) + 1);                  // ends at the end of the cycle that is running now
 }
 
 /* ── src/js/ui/components/profile.js ── */
@@ -1319,15 +1351,12 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     if (e.key === 'Tab' && $modal.classList.contains('open')) return trapTab(e);
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-open][role="button"]')) { e.preventDefault(); openGame(e.target.dataset.open); }
   };
-  /* Get button icon: while the pointer (or keyboard focus) is on a button the arrow slides down and loops, the line under it stays.
-     The loop is CSS (.d.run); it is only STOPPED here, at the end of a cycle, so the arrow never freezes half-way. */
-  const dlRun = e => { const b = e.target.closest && e.target.closest('.btn'), d = b && b.querySelector('.d[data-dl]'); if (d) d.classList.add('run'); };
-  root.addEventListener('pointerover', dlRun);
-  root.addEventListener('focusin', e => { if (e.target.matches && e.target.matches(':focus-visible')) dlRun(e); });
-  root.addEventListener('animationiteration', e => {
-    const d = e.target.closest && e.target.closest('.d[data-dl]'), b = d && d.closest('.btn');
-    if (b && !b.matches(':hover') && !b.matches(':focus-visible')) d.classList.remove('run');
-  });
+  /* Get button icon: while the pointer (or keyboard focus) is on a button the arrow loops (core/dl-loop.js); leaving lets the running cycle finish. */
+  const discOf = e => { const b = e.target.closest && e.target.closest('.btn'); return b ? [b, b.querySelector('.d[data-dl]')] : [null, null]; };
+  root.addEventListener('pointerover', e => { const [b, d] = discOf(e); if (d && !(e.relatedTarget && b.contains(e.relatedTarget))) dlStart(d); });
+  root.addEventListener('pointerout', e => { const [b, d] = discOf(e); if (d && !(e.relatedTarget && b.contains(e.relatedTarget))) dlStop(d); });
+  root.addEventListener('focusin', e => { const [, d] = discOf(e); if (d && e.target.matches && e.target.matches(':focus-visible')) dlStart(d); });
+  root.addEventListener('focusout', e => { const [b, d] = discOf(e); if (d && !b.matches(':hover')) dlStop(d); });
   root.addEventListener('click', onClick);
   document.addEventListener('keydown', onKey);
 
@@ -1361,7 +1390,7 @@ function adopt(scope, css) {
 }
 
 /* ── src/js/ui/index.js ── */
-const version = '0.5.4';
+const version = '0.5.5';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
 const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true };
 

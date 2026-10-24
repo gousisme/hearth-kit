@@ -1,4 +1,4 @@
-/*! hearth-kit v0.5.4 — DO NOT EDIT, edit src/styles/ and run `npm run build` */
+/*! hearth-kit v0.5.5 — DO NOT EDIT, edit src/styles/ and run `npm run build` */
 
 /* ── src/styles/00-tokens.css ── */
 /* TOKENS — everything visual that is a decision lives here. Override from options.theme
@@ -96,14 +96,9 @@
 .btn:hover { gap: 18px; }
 .btn:hover .d:not([data-dl]) > svg:first-child { transform: translateY(34px); }
 .btn:hover .d:not([data-dl]) > svg + svg { transform: none; }
-/* download glyph: the tray line stays, the arrow slides down and a new one enters from the top, looping while the button is hovered / keyboard-focused (.d.run, set by mount.js).
-   Rest: arrow A in place, arrow B parked above (clipped by the nested <svg>). Cycle: 55% slide, 45% hold; the end of a cycle looks exactly like its start, so the loop (and stopping it) is seamless. */
+/* download glyph: the tray line stays; the arrow slides down into it and a new one enters from the top, looping while the button is hovered / keyboard-focused.
+   The loop itself is the Web Animations API (core/dl-loop.js). Rest: arrow A in place, arrow B parked above (clipped by the nested <svg>). */
 .btn .d[data-dl] .ar.b { transform: translateY(-17px); }
-@keyframes dl-a { 0% { transform: translateY(0); } 55%, 100% { transform: translateY(17px); } }
-@keyframes dl-b { 0% { transform: translateY(-17px); } 55%, 100% { transform: translateY(0); } }
-.btn .d.run .ar.a { animation: dl-a 1.1s cubic-bezier(.5, 0, .2, 1) infinite; }
-.btn .d.run .ar.b { animation: dl-b 1.1s cubic-bezier(.5, 0, .2, 1) infinite; }
-@media (prefers-reduced-motion: reduce) { .btn .d.run .ar { animation: none; } }
 .btn:active { transform: scale(.96); }
 a.btn { text-decoration: none; }
 .btn.sm { padding: 4px 4px 4px 16px; font-size: 13px; gap: 8px; }

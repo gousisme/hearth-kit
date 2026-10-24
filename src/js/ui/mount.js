@@ -11,6 +11,7 @@ import { barHtml, cornerHtml, searchHtml, navActive } from './components/nav.js'
 import { detailHtml } from './components/detail.js';
 import { lightboxShell, lightboxSlide } from './components/media.js';
 import { morphInto } from './core/morph.js';
+import { dlStart, dlStop } from './core/dl-loop.js';
 import { profileHtml } from './components/profile.js';
 import { browseHtml, initGrid } from './components/browse.js';
 
@@ -386,15 +387,12 @@ export function mount({ target = document.body, data, css = null, shadow, option
     if (e.key === 'Tab' && $modal.classList.contains('open')) return trapTab(e);
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-open][role="button"]')) { e.preventDefault(); openGame(e.target.dataset.open); }
   };
-  /* Get button icon: while the pointer (or keyboard focus) is on a button the arrow slides down and loops, the line under it stays.
-     The loop is CSS (.d.run); it is only STOPPED here, at the end of a cycle, so the arrow never freezes half-way. */
-  const dlRun = e => { const b = e.target.closest && e.target.closest('.btn'), d = b && b.querySelector('.d[data-dl]'); if (d) d.classList.add('run'); };
-  root.addEventListener('pointerover', dlRun);
-  root.addEventListener('focusin', e => { if (e.target.matches && e.target.matches(':focus-visible')) dlRun(e); });
-  root.addEventListener('animationiteration', e => {
-    const d = e.target.closest && e.target.closest('.d[data-dl]'), b = d && d.closest('.btn');
-    if (b && !b.matches(':hover') && !b.matches(':focus-visible')) d.classList.remove('run');
-  });
+  /* Get button icon: while the pointer (or keyboard focus) is on a button the arrow loops (core/dl-loop.js); leaving lets the running cycle finish. */
+  const discOf = e => { const b = e.target.closest && e.target.closest('.btn'); return b ? [b, b.querySelector('.d[data-dl]')] : [null, null]; };
+  root.addEventListener('pointerover', e => { const [b, d] = discOf(e); if (d && !(e.relatedTarget && b.contains(e.relatedTarget))) dlStart(d); });
+  root.addEventListener('pointerout', e => { const [b, d] = discOf(e); if (d && !(e.relatedTarget && b.contains(e.relatedTarget))) dlStop(d); });
+  root.addEventListener('focusin', e => { const [, d] = discOf(e); if (d && e.target.matches && e.target.matches(':focus-visible')) dlStart(d); });
+  root.addEventListener('focusout', e => { const [b, d] = discOf(e); if (d && !b.matches(':hover')) dlStop(d); });
   root.addEventListener('click', onClick);
   document.addEventListener('keydown', onKey);
 
