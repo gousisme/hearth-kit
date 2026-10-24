@@ -232,7 +232,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
   function toggleSaved(id, btn) {
     const g = D.byId.get(String(id)); if (!g) return;
     const on = !saved.has(g.id); on ? saved.add(g.id) : saved.delete(g.id);
-    btn.classList.toggle('on', on); btn.querySelector('span').textContent = on ? 'Saved' : (btn.dataset.off || 'Save for later'); btn.setAttribute('aria-label', on ? 'Saved' : 'Save for later');
+    btn.classList.toggle('on', on); const sp = btn.querySelector('span'); if (sp) sp.textContent = on ? 'Saved' : (btn.dataset.off || 'Save for later'); btn.title = on ? 'Saved' : 'Save for later'; btn.setAttribute('aria-label', on ? 'Saved' : 'Save for later');
     opt.onSave && opt.onSave(g, on);
   }
   function navTo(item) {

@@ -6,7 +6,7 @@
 function gmRequest(url, responseType) {
   return new Promise((resolve, reject) => {
     // eslint-disable-next-line no-undef
-    GM_xmlhttpRequest({ method: 'GET', url, responseType, onload: r => (r.status >= 200 && r.status < 400 ? resolve(r.response) : reject(new Error(`HTTP ${r.status} for ${url}`))), onerror: () => reject(new Error('Network error for ' + url)), ontimeout: () => reject(new Error('Timeout for ' + url)) });
+    GM_xmlhttpRequest({ method: 'GET', url, responseType, timeout: 20000, onload: r => (r.status >= 200 && r.status < 400 ? resolve(r.response) : reject(new Error(`HTTP ${r.status} for ${url}`))), onerror: () => reject(new Error('Network error for ' + url)), ontimeout: () => reject(new Error('Timeout for ' + url)) });
   });
 }
 const hasGM = () => typeof GM_xmlhttpRequest === 'function';

@@ -31,10 +31,14 @@
 .lb-nx { right: 16px; }
 .lb-c { position: absolute; left: 0; right: 0; bottom: 20px; text-align: center; font: 600 13px var(--fb); color: var(--mu); letter-spacing: .06em; }
 
-/* Save (shrinks) + Open Steam, side by side. Scoped to the sheet's side panel: the hero has its own .acts (flex) and must not stretch with the title */
-.side .acts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
-.side .acts .btn.glass { padding: 0 12px; gap: 8px; white-space: nowrap; font-size: 14px; }
-.side .acts .btn.glass:hover { gap: 8px; }
-.side .acts .btn.glass svg { flex: none; }
+/* Save (round heart) + Open in Steam, side by side. Scoped to the sheet's side panel: the hero has its own .acts (flex) and must not stretch with the title */
+.side .acts { display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 8px; }
+.side .acts .btn.glass { height: 50px; white-space: nowrap; }
+.side .acts .btn.wish { width: 50px; padding: 0; gap: 0; border-radius: 50%; }
+.side .acts .btn.wish:hover { gap: 0; }
+.side .acts .btn.steam { padding: 0 20px; gap: 10px; font-size: 15px; }
+.side .acts .btn.steam:hover { gap: 10px; }
+.side .acts .btn.steam svg { flex: none; }
+.side .acts .btn.steam:hover svg { color: var(--ac); }
 .btn.glass.alt.on span { color: inherit; }
 @media (max-width: 820px) { .mt { width: 168px; } .lb { padding: 56px 12px; } .lb-p { left: 6px; } .lb-nx { right: 6px; } }

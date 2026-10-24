@@ -1,6 +1,6 @@
 import { esc, safeUrl } from '../../shared/util.js';
 import { layer, artImg, logoSlot } from '../core/art.js';
-import { ic, ICON } from '../core/icons.js';
+import { ic, icf, ICON, LOGO } from '../core/icons.js';
 import { similar } from '../core/data.js';
 import { button } from './button.js';
 import { mediaHtml } from './media.js';
@@ -28,12 +28,16 @@ function guideHtml(g, pending) {
   return `<h4>How to connect</h4><div class="guide">${g.guide.map(s => `<section class="gsec">${s.title ? `<h5>${esc(s.title)}</h5>` : ''}<ol>${s.steps.map(t => `<li><span>${esc(t)}</span></li>`).join('')}</ol></section>`).join('')}</div>`;
 }
 
-/** Save-for-later, plus an "Open Steam" button next to it when the game has a Steam page link (the Save label shrinks to make room). */
+/** Save-for-later, plus an "Open Steam" button when the game has a Steam page (Save then shrinks to a round heart button).
+ *  With a known app id the button uses steam://store/<id>, which asks the browser to open the Steam client itself; otherwise it falls back to the page link. */
 function actsHtml(g, saved) {
-  const steam = safeUrl(g.steamUrl), off = steam ? 'Save' : 'Save for later';
-  const wish = `<button class="btn glass alt${saved ? ' on' : ''}" data-wish="${esc(g.id)}" data-off="${off}" aria-label="${saved ? 'Saved' : 'Save for later'}">${ic(ICON.heart)}<span>${saved ? 'Saved' : off}</span></button>`;
-  if (!steam) return wish;
-  return `<div class="acts">${wish}<a class="btn glass alt" href="${esc(steam)}" target="_blank" rel="noopener noreferrer">${ic(ICON.steam)}<span>Open Steam</span></a></div>`;
+  const web = safeUrl(g.steamUrl), app = /^\d+$/.test(String(g.steamAppId || '')) ? String(g.steamAppId) : '';
+  const href = app ? `steam://store/${app}` : web;
+  const off = href ? 'Save' : 'Save for later';
+  const wish = `<button class="btn glass alt wish${saved ? ' on' : ''}" data-wish="${esc(g.id)}" data-off="${off}" aria-label="${saved ? 'Saved' : 'Save for later'}" title="${saved ? 'Saved' : 'Save for later'}">${ic(ICON.heart, 20)}${href ? '' : `<span>${saved ? 'Saved' : off}</span>`}</button>`;
+  if (!href) return wish;
+  const ext = app ? '' : ' target="_blank" rel="noopener noreferrer"';
+  return `<div class="acts">${wish}<a class="btn glass alt steam" href="${esc(href)}"${ext}>${icf(LOGO.steam, 20)}<span>Open in Steam</span></a></div>`;
 }
 
 /** Game detail sheet (rendered into the modal). Sections with no data are omitted. */
