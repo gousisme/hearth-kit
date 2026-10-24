@@ -70,13 +70,19 @@ function mergeArt(g, p) {
  *   resolveLogo(game, urls) → Promise<url|''>  optional: asked once when every candidate URL of a LOGO slot failed (e.g. SteamGridDB); the url it returns is tried last
  *   onMiss(game, kind, urls)              optional diagnostics hook: every candidate URL for a slot failed (a missing logo is common and fine)
  */
-export function createArt({ root: scope, loader = null, resolve = null, game, onMiss = null, resolveLogo = null }) {
+export function createArt({ root: scope, loader = null, resolve = null, game, onMiss = null, resolveLogo = null, resolveMs = 4000, loadMs = 12000 }) {
   const MAX = 8;                                    // images loading at once (resolving art does not count: the resolver batches and limits itself)
   const pending = new Set(), queue = [], shows = [], patches = new Map();
   let active = 0, dead = false, timer = 0, last = 0, showRaf = 0;
 
   const slotOf = img => img.closest('.layer, .sa, .lg') || img;
   const near = el => { const r = el.getBoundingClientRect(); return r.bottom > -700 && r.top < innerHeight + 700 && r.right > -400 && r.left < innerWidth + 400; };
+  // A parked slot (not near when its turn came) used to wait for a scroll / resize / hydrate() to be looked at again, so anything that moved it
+  // into view WITHOUT a scroll (fade-in transform ending, fonts, a sheet closing, rows re-laid out) left it grey until something else (like opening a game) called sweep().
+  // The observer wakes the sweep whenever a parked slot comes near, whatever moved it.
+  const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (!dead && es.some(e => e.isIntersecting)) later(); }, { rootMargin: '700px 400px' }) : null;
+  const park = img => { pending.add(img); io && io.observe(slotOf(img)); };
+  const unpark = img => { pending.delete(img); io && io.unobserve(slotOf(img)); };
 
   function settle(g) {
     if (!resolve) return Promise.resolve();
@@ -85,10 +91,13 @@ export function createArt({ root: scope, loader = null, resolve = null, game, on
     return p.then(patch => mergeArt(g, patch));     // merged into every new copy of the game (the data can be re-normalized)
   }
 
+  /** One URL into one <img>. Settles false after `loadMs`: a stalled connection must never hold one of the 8 pool slots (or a card's skeleton) for minutes. */
   const loadUrl = (img, url) => new Promise(res => {
-    const done = v => { img.removeEventListener('load', onl); img.removeEventListener('error', one); res(v); };
+    let t = 0;
+    const done = v => { clearTimeout(t); img.removeEventListener('load', onl); img.removeEventListener('error', one); if (!v) img.removeAttribute('src'); res(v); };   // (dropping src cancels a stalled request)
     const onl = () => done(true), one = () => done(false);
     img.addEventListener('load', onl); img.addEventListener('error', one);
+    t = setTimeout(() => done(false), loadMs);
     Promise.resolve(loader ? loader(url) : url).then(src => { img.src = src; }, () => done(false));
   });
 
@@ -119,11 +128,12 @@ export function createArt({ root: scope, loader = null, resolve = null, game, on
   function begin(img) {
     const g = game(img.dataset.g); if (!g) return fail(img);
     if (img.dataset.kind !== 'logo') slotOf(img).classList.add('is-busy');   // (logos have no skeleton) only skeletons that are about to load shimmer; the rest stay still (animating 100 offscreen skeletons is not free)
-    settle(g).then(() => { if (dead || !img.isConnected) return; queue.push(img); pump(); });
+    // the resolver may be slow or stuck (network): after `resolveMs` the slot loads with what the game already has (e.g. the site's own image)
+    Promise.race([settle(g), new Promise(r => setTimeout(r, resolveMs))]).then(() => { if (dead || !img.isConnected) return; queue.push(img); pump(); });
   }
   async function run(img) {
     if (dead || !img.isConnected) return;
-    if (!near(slotOf(img))) { slotOf(img).classList.remove('is-busy'); pending.add(img); return; }   // scrolled far away while queued: wait for it to come back
+    if (!near(slotOf(img))) { slotOf(img).classList.remove('is-busy'); park(img); return; }   // scrolled far away while queued: wait for it to come back
     const g = game(img.dataset.g); if (!g) return fail(img);
     const urls = candidates(g, img.dataset.kind);
     for (const url of urls) {
@@ -153,11 +163,11 @@ export function createArt({ root: scope, loader = null, resolve = null, game, on
     if (dead) return; last = Date.now();
     const hit = [];
     pending.forEach(img => {
-      if (!img.isConnected) return pending.delete(img);
+      if (!img.isConnected) return unpark(img);
       const r = slotOf(img).getBoundingClientRect();
       if (r.bottom > -700 && r.top < innerHeight + 700 && r.right > -400 && r.left < innerWidth + 400) hit.push([r.top, r.left, img]);
     });
-    hit.sort((a, b) => a[0] - b[0] || a[1] - b[1]).forEach(([, , img]) => { pending.delete(img); begin(img); });
+    hit.sort((a, b) => a[0] - b[0] || a[1] - b[1]).forEach(([, , img]) => { unpark(img); begin(img); });
   }
   function later() {
     if (timer || dead) return;
@@ -174,11 +184,11 @@ export function createArt({ root: scope, loader = null, resolve = null, game, on
     hydrate(root, { force = false } = {}) {
       root.querySelectorAll('img.art-img[data-g]:not([data-h])').forEach(img => {
         if (!force && img.closest('.slide:not(.on)')) return;
-        img.dataset.h = '1'; pending.add(img);
+        img.dataset.h = '1'; park(img);
       });
       sweep();
     },
     warm(root) { if (root) this.hydrate(root, { force: true }); },
-    destroy() { dead = true; clearTimeout(timer); cancelAnimationFrame(showRaf); shows.length = 0; pending.clear(); queue.length = 0; removeEventListener('resize', onScroll); scope.removeEventListener('scroll', onScroll, { capture: true }); },
+    destroy() { dead = true; io && io.disconnect(); clearTimeout(timer); cancelAnimationFrame(showRaf); shows.length = 0; pending.clear(); queue.length = 0; removeEventListener('resize', onScroll); scope.removeEventListener('scroll', onScroll, { capture: true }); },
   };
 }
