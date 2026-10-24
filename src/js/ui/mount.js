@@ -13,6 +13,7 @@ import { lightboxShell, lightboxSlide } from './components/media.js';
 import { morphInto } from './core/morph.js';
 import { profileHtml } from './components/profile.js';
 import { browseHtml, initGrid } from './components/browse.js';
+import { createIconPlayer } from './core/lottie-icon.js';
 
 /**
  * mount({ target, data, css, shadow, options })  →  app
@@ -30,7 +31,8 @@ import { browseHtml, initGrid } from './components/browse.js';
  *             resolveLogo(game, triedUrls) → Promise<url|''>   // optional: last-chance logo source (asked only when every Steam URL failed)
  *             artDeadlineMs (default 4000): longest a card waits for resolveArt before it loads with what it already has; imageTimeoutMs (default 12000): longest one image URL may take
  *             onUser(user) → false to take over the avatar click (default: the kit's own account sheet opens), onArtMiss(game, kind, urls),
- *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game }
+ *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game,
+ *             lottie (the lottie-web player, lottie_light is enough) + icons { download: { data: <lottie JSON>, rest: <frame>, hover: [from, to] } } → animated download icon on the Get buttons (optional) }
  *
  * app: { el, root, update(data), add(games), navigate(view, filter), open(id), close(), getRoute(), destroy() }
  */
@@ -53,6 +55,9 @@ export function mount({ target = document.body, data, css = null, shadow, option
   const $bar = root.querySelector('.bar-slot'), $top = root.querySelector('.top'), $scroll = root.querySelector('.scroll'), $page = root.querySelector('.page'),
     $foot = root.querySelector('.foot'), $modal = root.querySelector('.modal'), $sheet = root.querySelector('.sheet'), $lb = root.querySelector('.lb');
   const active = () => scope.activeElement || document.activeElement;
+  /** What gets focus back when the sheet closes: only an element the KEYBOARD had focused. After a mouse click the card is focused too, and giving it focus back made its
+   *  hover-only Get button stick on (and :focus-visible matches for programmatic focus after Esc). Mouse users simply have no focused element afterwards. */
+  const focusToRestore = () => { const a = active(); try { return a && a.matches && a.matches(':focus-visible') ? a : null; } catch (e) { return null; } };
 
   let D = normalize(data);
   const enrich = createEnrich({ resolve: opt.resolveDetail });
@@ -61,6 +66,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
   const prof = { data: null, done: !opt.resolveProfile, call: null };
   const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, onMiss: opt.onArtMiss, resolveLogo: opt.resolveLogo, resolveMs: opt.artDeadlineMs, loadMs: opt.imageTimeoutMs, game: id => D.byId.get(String(id)) });
   const saved = new Set((opt.saved || []).map(String));
+  const dlIcon = createIconPlayer(opt);              // animated download icon on the Get buttons (null without options.lottie + options.icons.download)
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
   let heroCtl, stopReveal, stopShelves, stopGrid, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
 
@@ -180,7 +186,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     };
     const sig = () => [g.description, g.developer, g.publisher, g.releaseYear, g.rating].join('|'), s0 = sig();
     if (!$modal.classList.contains('open')) {
-      lastFocus = active(); fill();
+      lastFocus = focusToRestore(); fill();
       $modal.classList.add('open'); $modal.setAttribute('aria-hidden', 'false'); $scroll.classList.add('is-locked');
       $sheet.focus({ preventScroll: true });
     } else { $sheet.classList.add('is-swap'); await delay(reduced() ? 0 : T.fast); fill(); $sheet.classList.remove('is-swap'); }
@@ -202,7 +208,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     profileOpen = true; openId = null;
     const fill = () => { delete $sheet.dataset.gid; $sheet.classList.add('is-profile'); $sheet.innerHTML = profileHtml(D.site.user || u, prof.data, { pending: !prof.done }); $sheet.scrollTop = 0; };
     if (!$modal.classList.contains('open')) {
-      lastFocus = active(); fill();
+      lastFocus = focusToRestore(); fill();
       $modal.classList.add('open'); $modal.setAttribute('aria-hidden', 'false'); $scroll.classList.add('is-locked');
       $sheet.focus({ preventScroll: true });
     } else { $sheet.classList.add('is-swap'); await delay(reduced() ? 0 : T.fast); fill(); $sheet.classList.remove('is-swap'); }
@@ -383,6 +389,10 @@ export function mount({ target = document.body, data, css = null, shadow, option
     if (e.key === 'Tab' && $modal.classList.contains('open')) return trapTab(e);
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-open][role="button"]')) { e.preventDefault(); openGame(e.target.dataset.open); }
   };
+  if (dlIcon) {
+    root.addEventListener('pointerover', e => { const b = e.target.closest && e.target.closest('.btn'); if (b && !(e.relatedTarget && b.contains(e.relatedTarget))) dlIcon.hover(b); });
+    root.addEventListener('focusin', e => { const b = e.target.closest && e.target.closest('.btn'); if (b && e.target.matches && e.target.matches(':focus-visible')) dlIcon.hover(b); });
+  }
   root.addEventListener('click', onClick);
   document.addEventListener('keydown', onKey);
 
@@ -406,7 +416,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; dlIcon && dlIcon.destroy(); indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 

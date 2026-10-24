@@ -38,7 +38,8 @@
 .poster.is-fallback .pt { opacity: 1; }
 .card:hover .pt, .card:focus-visible .pt { opacity: 0; }
 .go { position: absolute; left: 10px; right: 10px; bottom: 10px; opacity: 0; transform: translateY(12px); transition: opacity var(--tb) var(--ease), transform var(--tb) var(--ease); }
-.card:hover .go, .card:focus-within .go, .card:focus-visible .go { opacity: 1; transform: none; }
+/* hover or KEYBOARD focus only. `:focus-within` stayed true after a click (the card / its Get button keeps focus when the sheet closes and focus is restored), which left the Get button stuck on */
+.card:hover .go, .card:focus-visible .go, .card:has(:focus-visible) .go { opacity: 1; transform: none; }
 .card h3 { font: 600 14px var(--fb); margin-top: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card p { color: var(--mu); font-size: 13px; }
 .card p .clx { color: var(--bad); font-weight: 600; }

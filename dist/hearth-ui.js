@@ -1,4 +1,4 @@
-/*! hearth-kit v0.5.2 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.5.3 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthUI=(function(){
 'use strict';
 /* ── src/js/shared/util.js ── */
@@ -533,7 +533,7 @@ function ic(path, size = 18, stroke = 2.4) {
  * `attrs` is raw HTML attributes (already escaped by the caller).
  */
 function button(label, { icon = ICON.download, attrs = '', cls = '' } = {}) {
-  return `<button class="btn ${cls}" ${attrs}><span class="bl">${esc(label)}</span><span class="d">${ic(icon)}${ic(icon)}</span></button>`;
+  return `<button class="btn ${cls}" ${attrs}><span class="bl">${esc(label)}</span><span class="d"${icon === ICON.download ? ' data-dl' : ''}>${ic(icon)}${ic(icon)}</span></button>`;
 }
 
 /** Secondary button: frosted glass pill (only used over imagery). */
@@ -939,6 +939,55 @@ function initGrid(root, D, route, savedIds, art, loadMore) {
   return () => { dead = true; io.disconnect(); stops.forEach(s => s()); };
 }
 
+/* ── src/js/ui/core/lottie-icon.js ── */
+/**
+ * One shared Lottie player for every primary "download" button (the Get buttons).
+ *   options.lottie = the lottie-web player (lottie_light is enough; the userscript @requires it)
+ *   options.icons  = { download: { data: <lottie JSON>, rest: 69, hover: [70, 140] } }
+ * Without both, nothing changes: the buttons keep their CSS arrow swap.
+ * The animation is created on the first hover and then MOVED into whichever button is hovered (one player, one SVG, however many cards there are).
+ * Colours are replaced with the button's own icon colour, so the theme accent keeps working; expressions / effects of the export are not needed.
+ */
+function createIconPlayer(options) {
+  const lib = options && options.lottie, cfg = options && options.icons && options.icons.download;
+  if (!lib || typeof lib.loadAnimation !== 'function' || !cfg || !cfg.data) return null;
+  const rest = Number.isFinite(cfg.rest) ? cfg.rest : 0, seg = Array.isArray(cfg.hover) && cfg.hover.length === 2 ? cfg.hover : null;
+  let anim = null, el = null, cur = null, failed = false;
+
+  const rgb = css => { const m = String(css || '').match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i); return m ? [m[1] / 255, m[2] / 255, m[3] / 255, 1] : [1, 1, 1, 1]; };
+  /** a private copy of the animation data with every fill / stroke in `color`, no expressions, no effects */
+  function paint(data, color) {
+    const copy = JSON.parse(JSON.stringify(data));
+    (function walk(o) {
+      if (Array.isArray(o)) return o.forEach(walk);
+      if (!o || typeof o !== 'object') return;
+      if ((o.ty === 'st' || o.ty === 'fl') && o.c) { o.c = { a: 0, k: color, ix: o.c.ix || 3 }; }
+      delete o.ef; if (typeof o.x === 'string') delete o.x;
+      Object.values(o).forEach(walk);
+    })(copy);
+    return copy;
+  }
+  function ensure(d) {
+    if (anim || failed) return !failed;
+    try {
+      el = document.createElement('span'); el.className = 'lt'; d.appendChild(el);
+      anim = lib.loadAnimation({ container: el, renderer: 'svg', loop: false, autoplay: false, animationData: paint(cfg.data, rgb(getComputedStyle(d).color)), rendererSettings: { preserveAspectRatio: 'xMidYMid meet' } });
+      anim.goToAndStop(rest, true);
+    } catch (e) { failed = true; anim = null; if (el && el.parentNode) el.parentNode.removeChild(el); return false; }
+    return true;
+  }
+  return {
+    /** the pointer entered (or keyboard focus reached) `btn` */
+    hover(btn) {
+      const d = btn && btn.querySelector && btn.querySelector('.d[data-dl]');
+      if (!d || !ensure(d)) return;
+      if (cur !== d) { if (cur) cur.classList.remove('lt-on'); cur = d; d.appendChild(el); d.classList.add('lt-on'); anim.goToAndStop(rest, true); }
+      if (seg && !reduced()) anim.playSegments(seg, true);
+    },
+    destroy() { try { anim && anim.destroy(); } catch (e) { /* ignore */ } anim = null; },
+  };
+}
+
 /* ── src/js/ui/mount.js ── */
 /**
  * mount({ target, data, css, shadow, options })  →  app
@@ -956,7 +1005,8 @@ function initGrid(root, D, route, savedIds, art, loadMore) {
  *             resolveLogo(game, triedUrls) → Promise<url|''>   // optional: last-chance logo source (asked only when every Steam URL failed)
  *             artDeadlineMs (default 4000): longest a card waits for resolveArt before it loads with what it already has; imageTimeoutMs (default 12000): longest one image URL may take
  *             onUser(user) → false to take over the avatar click (default: the kit's own account sheet opens), onArtMiss(game, kind, urls),
- *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game }
+ *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game,
+ *             lottie (the lottie-web player, lottie_light is enough) + icons { download: { data: <lottie JSON>, rest: <frame>, hover: [from, to] } } → animated download icon on the Get buttons (optional) }
  *
  * app: { el, root, update(data), add(games), navigate(view, filter), open(id), close(), getRoute(), destroy() }
  */
@@ -979,6 +1029,9 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   const $bar = root.querySelector('.bar-slot'), $top = root.querySelector('.top'), $scroll = root.querySelector('.scroll'), $page = root.querySelector('.page'),
     $foot = root.querySelector('.foot'), $modal = root.querySelector('.modal'), $sheet = root.querySelector('.sheet'), $lb = root.querySelector('.lb');
   const active = () => scope.activeElement || document.activeElement;
+  /** What gets focus back when the sheet closes: only an element the KEYBOARD had focused. After a mouse click the card is focused too, and giving it focus back made its
+   *  hover-only Get button stick on (and :focus-visible matches for programmatic focus after Esc). Mouse users simply have no focused element afterwards. */
+  const focusToRestore = () => { const a = active(); try { return a && a.matches && a.matches(':focus-visible') ? a : null; } catch (e) { return null; } };
 
   let D = normalize(data);
   const enrich = createEnrich({ resolve: opt.resolveDetail });
@@ -987,6 +1040,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   const prof = { data: null, done: !opt.resolveProfile, call: null };
   const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, onMiss: opt.onArtMiss, resolveLogo: opt.resolveLogo, resolveMs: opt.artDeadlineMs, loadMs: opt.imageTimeoutMs, game: id => D.byId.get(String(id)) });
   const saved = new Set((opt.saved || []).map(String));
+  const dlIcon = createIconPlayer(opt);              // animated download icon on the Get buttons (null without options.lottie + options.icons.download)
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
   let heroCtl, stopReveal, stopShelves, stopGrid, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
 
@@ -1106,7 +1160,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     };
     const sig = () => [g.description, g.developer, g.publisher, g.releaseYear, g.rating].join('|'), s0 = sig();
     if (!$modal.classList.contains('open')) {
-      lastFocus = active(); fill();
+      lastFocus = focusToRestore(); fill();
       $modal.classList.add('open'); $modal.setAttribute('aria-hidden', 'false'); $scroll.classList.add('is-locked');
       $sheet.focus({ preventScroll: true });
     } else { $sheet.classList.add('is-swap'); await delay(reduced() ? 0 : T.fast); fill(); $sheet.classList.remove('is-swap'); }
@@ -1128,7 +1182,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     profileOpen = true; openId = null;
     const fill = () => { delete $sheet.dataset.gid; $sheet.classList.add('is-profile'); $sheet.innerHTML = profileHtml(D.site.user || u, prof.data, { pending: !prof.done }); $sheet.scrollTop = 0; };
     if (!$modal.classList.contains('open')) {
-      lastFocus = active(); fill();
+      lastFocus = focusToRestore(); fill();
       $modal.classList.add('open'); $modal.setAttribute('aria-hidden', 'false'); $scroll.classList.add('is-locked');
       $sheet.focus({ preventScroll: true });
     } else { $sheet.classList.add('is-swap'); await delay(reduced() ? 0 : T.fast); fill(); $sheet.classList.remove('is-swap'); }
@@ -1309,6 +1363,10 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     if (e.key === 'Tab' && $modal.classList.contains('open')) return trapTab(e);
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-open][role="button"]')) { e.preventDefault(); openGame(e.target.dataset.open); }
   };
+  if (dlIcon) {
+    root.addEventListener('pointerover', e => { const b = e.target.closest && e.target.closest('.btn'); if (b && !(e.relatedTarget && b.contains(e.relatedTarget))) dlIcon.hover(b); });
+    root.addEventListener('focusin', e => { const b = e.target.closest && e.target.closest('.btn'); if (b && e.target.matches && e.target.matches(':focus-visible')) dlIcon.hover(b); });
+  }
   root.addEventListener('click', onClick);
   document.addEventListener('keydown', onKey);
 
@@ -1332,7 +1390,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; dlIcon && dlIcon.destroy(); indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 
@@ -1342,9 +1400,9 @@ function adopt(scope, css) {
 }
 
 /* ── src/js/ui/index.js ── */
-const version = '0.5.2';
+const version = '0.5.3';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-const features = { lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true };
+const features = { lottieIcon: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true };
 
 return {mount, validate, steam, normalize, version, features};
 })();

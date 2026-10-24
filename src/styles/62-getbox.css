@@ -1,10 +1,10 @@
 /* Download panel: ONE card. The Get button is its header; the list unfolds out of it (no floating menu). */
 .getbox { border-radius: 27px; overflow: hidden; background: var(--s2); }
 .getbox > .btn { width: 100%; border-radius: 0; }
-.getbox > .btn .d svg { transition: transform var(--tb) var(--ease); }
-.getbox.open > .btn .d svg:first-child { transform: rotate(180deg); }
-.getbox:not(.open) > .btn:hover .d svg:first-child { transform: translateY(34px); }
-.getbox.open > .btn:hover .d svg + svg { transform: translateY(-34px); }                 /* keep the chevron still while open */
+.getbox > .btn .d > svg { transition: transform var(--tb) var(--ease); }
+.getbox.open > .btn .d > svg:first-child { transform: rotate(180deg); }
+.getbox:not(.open) > .btn:hover .d > svg:first-child { transform: translateY(34px); }
+.getbox.open > .btn:hover .d > svg + svg { transform: translateY(-34px); }                 /* keep the chevron still while open */
 .dlp { display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows var(--tb) var(--ease), visibility 0s var(--tb); }
 .getbox.open .dlp { grid-template-rows: 1fr; visibility: visible; transition-delay: 0s; }
 .dli { min-height: 0; overflow: hidden; }

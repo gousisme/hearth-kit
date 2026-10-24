@@ -7,7 +7,7 @@ import { ic, ICON } from '../core/icons.js';
  * `attrs` is raw HTML attributes (already escaped by the caller).
  */
 export function button(label, { icon = ICON.download, attrs = '', cls = '' } = {}) {
-  return `<button class="btn ${cls}" ${attrs}><span class="bl">${esc(label)}</span><span class="d">${ic(icon)}${ic(icon)}</span></button>`;
+  return `<button class="btn ${cls}" ${attrs}><span class="bl">${esc(label)}</span><span class="d"${icon === ICON.download ? ' data-dl' : ''}>${ic(icon)}${ic(icon)}</span></button>`;
 }
 
 /** Secondary button: frosted glass pill (only used over imagery). */
