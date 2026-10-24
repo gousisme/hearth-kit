@@ -20,9 +20,6 @@ export const steam = {
   poster: id => `${STEAM}${id}/library_600x900.jpg`,
   hero: id => `${STEAM}${id}/library_hero.jpg`,
   logo: id => `${STEAM}${id}/logo.png`,
-  logoAlt: id => `${STEAM}${id}/logo_2x.png`,
-  logoLib: id => `${STEAM}${id}/library_logo.png`,
-  logoLib2x: id => `${STEAM}${id}/library_logo_2x.png`,
   header: id => `${STEAM}${id}/header.jpg`,
   capsule: id => `${STEAM}${id}/capsule_616x353.jpg`,
 };
@@ -33,7 +30,6 @@ export function candidates(game, kind) {
   if (a[kind]) out.push(a[kind]);
   if (game.steamAppId) {
     out.push(steam[kind](game.steamAppId));
-    if (kind === 'logo') out.push(steam.logoAlt(game.steamAppId), steam.logoLib(game.steamAppId), steam.logoLib2x(game.steamAppId)); // newer apps only ship the library_logo files
     if (kind === 'hero') out.push(steam.header(game.steamAppId)); // low-res but better than nothing
   }
   if (kind !== 'logo' && a.fallback) out.push(a.fallback);
@@ -135,8 +131,15 @@ export function createArt({ root: scope, loader = null, resolve = null, game, on
       if (await loadUrl(img, url)) return succeed(img);
     }
     if (img.dataset.kind === 'logo' && resolveLogo) {
-      let u = ''; try { u = await resolveLogo(g, urls); } catch (e) { /* fall through to the text title */ }
-      u = safeUrl(u); if (u && !dead && img.isConnected && await loadUrl(img, u)) return succeed(img);
+      // asked OUTSIDE the pool (a slow lookup must never hold one of the image slots that posters and heroes need)
+      const kind = img.dataset.kind;
+      Promise.resolve().then(() => resolveLogo(g, urls)).catch(() => '').then(async u => {
+        u = safeUrl(u); if (dead || !img.isConnected) return;
+        if (u && await loadUrl(img, u)) return succeed(img);
+        try { onMiss && onMiss(g, kind, urls); } catch (e) { /* diagnostics only */ }
+        fail(img);
+      });
+      return;
     }
     try { onMiss && onMiss(g, img.dataset.kind, urls); } catch (e) { /* diagnostics only */ }
     fail(img);

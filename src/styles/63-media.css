@@ -36,7 +36,7 @@
 .side .acts .btn.glass { height: 50px; white-space: nowrap; }
 .side .acts .btn.wish { width: 50px; padding: 0; gap: 0; border-radius: 50%; }
 .side .acts .btn.wish:hover { gap: 0; }
-.side .acts .btn.steam { padding: 0 20px; gap: 10px; font-size: 15px; }
+.side .acts .btn.steam { padding: 0 20px; gap: 10px; font-size: 15px; text-decoration: none; }
 .side .acts .btn.steam:hover { gap: 10px; }
 .side .acts .btn.steam svg { flex: none; }
 .side .acts .btn.steam:hover svg { color: var(--ac); }
