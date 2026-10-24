@@ -41,6 +41,7 @@
 .card:hover .go, .card:focus-within .go, .card:focus-visible .go { opacity: 1; transform: none; }
 .card h3 { font: 600 14px var(--fb); margin-top: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card p { color: var(--mu); font-size: 13px; }
+.card p .clx { color: var(--bad); font-weight: 600; }
 
 /* ranked ("Top 10") */
 .rank { width: 290px; position: relative; }

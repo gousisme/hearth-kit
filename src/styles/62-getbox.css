@@ -44,5 +44,8 @@ a.dl:hover .da { color: var(--ac); transform: translate(2px, -2px); }
 .upd { margin-top: 18px; display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 14px; background: var(--s2); }
 .upd .v { flex: none; padding: 5px 11px; border-radius: 99px; background: var(--ac); color: var(--ink); font: 700 12px var(--fb); }
 .upd b { display: block; font: 600 13px var(--fb); }
+.upd.closed { background: color-mix(in srgb, var(--bad) 14%, var(--s2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 55%, transparent); }
+.upd.closed .v { background: var(--bad); color: #fff; }
+.upd.closed b { color: var(--bad); }
 .upd span:not(.v) { display: block; margin-top: 2px; font-size: 13px; color: var(--mu); }
 @media (prefers-reduced-motion: reduce) { .dl.sk .dt i, .dl.sk .di, .gsec.sk i { animation: none; } }

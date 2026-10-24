@@ -28,16 +28,16 @@ function guideHtml(g, pending) {
   return `<h4>How to connect</h4><div class="guide">${g.guide.map(s => `<section class="gsec">${s.title ? `<h5>${esc(s.title)}</h5>` : ''}<ol>${s.steps.map(t => `<li><span>${esc(t)}</span></li>`).join('')}</ol></section>`).join('')}</div>`;
 }
 
-/** Save-for-later, plus an "Open Steam" button when the game has a Steam page (Save then shrinks to a round heart button).
- *  With a known app id the button uses steam://store/<id>, which asks the browser to open the Steam client itself; otherwise it falls back to the page link. */
+/** Save-for-later, plus an "Open in Steam" button when the game has a Steam page (Save then shrinks to a round heart button).
+ *  The button only appears when the userscript supplied `steamUrl` (a page it KNOWS is the game's Steam page). `steamAppId` alone never shows it:
+ *  that id can come from a title search for art, and a game that is not on Steam (Microsoft Store, Epic, ...) could match a different game.
+ *  It opens the Steam store website in a new tab, not the Steam client (steam://). */
 function actsHtml(g, saved) {
-  const web = safeUrl(g.steamUrl), app = /^\d+$/.test(String(g.steamAppId || '')) ? String(g.steamAppId) : '';
-  const href = app ? `steam://store/${app}` : web;
+  const href = safeUrl(g.steamUrl);
   const off = href ? 'Save' : 'Save for later';
   const wish = `<button class="btn glass alt wish${saved ? ' on' : ''}" data-wish="${esc(g.id)}" data-off="${off}" aria-label="${saved ? 'Saved' : 'Save for later'}" title="${saved ? 'Saved' : 'Save for later'}">${ic(ICON.heart, 20)}${href ? '' : `<span>${saved ? 'Saved' : off}</span>`}</button>`;
   if (!href) return wish;
-  const ext = app ? '' : ' target="_blank" rel="noopener noreferrer"';
-  return `<div class="acts">${wish}<a class="btn glass alt steam" href="${esc(href)}"${ext}>${icf(LOGO.steam, 20)}<span>Open in Steam</span></a></div>`;
+  return `<div class="acts">${wish}<a class="btn glass alt steam" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${icf(LOGO.steam, 20)}<span>Open in Steam</span></a></div>`;
 }
 
 /** Game detail sheet (rendered into the modal). Sections with no data are omitted. */
@@ -52,7 +52,9 @@ export function detailHtml(D, g, { saved = false, placeholders = false, pending 
   const base = [['Developer', g.developer], ['Publisher', g.publisher], ['Released', g.releaseYear], ['Reception', g.rating], ['Genre', g.genres[0]], ['Size', g.size]];
   const extra = g.facts || [];
   const facts = [...base.map(([k, v]) => [k, (extra.find(f => f.label === k) || {}).value || v]), ...extra.filter(f => !base.some(([k]) => k === f.label)).map(f => [f.label, f.value])].filter(([, v]) => v);
-  const upd = g.update ? `<div class="upd" data-k="upd">${g.update.version ? `<span class="v">${esc(verLabel(g.update.version))}</span>` : ''}<div><b>${g.update.date ? 'Updated ' + esc(g.update.date) : 'Latest update'}</b>${g.update.text ? `<span>${esc(g.update.text)}</span>` : ''}</div></div>` : '';
+  const closed = !!(g.update && g.update.closed);
+  const pill = g.update && (closed ? '<span class="v">Guide closed</span>' : g.update.version ? `<span class="v">${esc(verLabel(g.update.version))}</span>` : '');
+  const upd = g.update ? `<div class="upd${closed ? ' closed' : ''}" data-k="upd">${pill}<div><b>${g.update.date ? 'Updated ' + esc(g.update.date) : 'Latest update'}</b>${g.update.text && !(closed && /^guide closed\.?$/i.test(g.update.text)) ? `<span>${esc(g.update.text)}</span>` : ''}</div></div>` : '';
   const sim = similar(D, g);
   // Every region carries data-k: mount.js updates the sheet region by region (core/morph.js), so a region whose HTML did not change keeps its DOM
   // (no image created / loaded twice, the media strip keeps its scroll position). `data-art` makes the header re-render only when its image URLs change.

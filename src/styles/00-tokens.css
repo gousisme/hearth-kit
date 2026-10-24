@@ -9,6 +9,8 @@
   --tx: #f1f2ee; --mu: #9ea3ad;
   /* the one accent, and the ink that sits on it */
   --ac: #c6f432; --ink: #13150a;
+  /* closed guides / warnings */
+  --bad: #ff5a5f;
   /* radii */
   --r: 12px; --rl: 26px; --rhero: 28px;
   /* motion: three durations, two curves. See docs/03-motion.md */
