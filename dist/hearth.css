@@ -260,7 +260,7 @@
 .modal.open { visibility: visible; transition-delay: 0s; }
 .scrim { position: absolute; inset: 0; background: rgba(16, 17, 20, .7); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); opacity: 0; transition: opacity var(--tb) var(--ein); }
 .modal.open .scrim { opacity: 1; transition-timing-function: var(--ease); }
-.sheet { position: relative; width: min(1040px, 100%); max-height: calc(100% - 48px); overflow: auto; background: var(--s1); border-radius: var(--rl); opacity: 0; transform: translateY(34px) scale(.97); transition: opacity var(--tb) var(--ein), transform var(--tb) var(--ein); scrollbar-width: thin; scrollbar-color: var(--line) transparent; outline: 0; }
+.sheet { position: relative; width: min(1040px, 100%); max-height: calc(100% - 48px); overflow: auto; background: var(--s1); border-radius: var(--rl); opacity: 0; transform: translateY(34px) scale(.97); transition: opacity var(--tb) var(--ein), transform var(--tb) var(--ein); scrollbar-width: thin; scrollbar-color: var(--line) transparent; outline: 0; clip-path: inset(0 round var(--rl)); }
 .modal.open .sheet { opacity: 1; transform: none; transition: opacity var(--tb) var(--ease), transform var(--ts) var(--ease); }
 .sheet.is-swap > *:not(.x) { opacity: 0; transform: translateY(6px); }
 .sheet > * { transition: opacity var(--tf) var(--ein), transform var(--tf) var(--ein); }
@@ -271,7 +271,8 @@
 .dh .fbt { font-size: clamp(32px, 4.4vw, 60px); }
 .x { position: absolute; z-index: 5; top: 16px; right: 16px; width: 42px; height: 42px; border-radius: 50%; background: rgba(24, 26, 30, .6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: grid; place-items: center; transition: transform var(--tb) var(--ease), background var(--tf); }
 .x:hover { transform: rotate(90deg); background: rgba(24, 26, 30, .85); }
-.db { display: grid; grid-template-columns: 1fr 300px; gap: 40px; padding: 6px 40px 40px; }
+.db { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; padding: 6px 40px 40px; }
+.db > * { min-width: 0; }
 .db h4 { font: 700 12px var(--fb); letter-spacing: .14em; text-transform: uppercase; color: var(--mu); margin: 28px 0 12px; }
 .db h4:first-child { margin-top: 0; }
 .db p { color: #cfd3da; }
@@ -355,12 +356,12 @@ a.dl:hover .da { color: var(--ac); transform: translate(2px, -2px); }
 .mt:hover { transform: scale(1.03); }
 .mt:focus-visible { box-shadow: 0 0 0 2px var(--ac); outline: 0; }
 .mt img { width: 100%; height: 100%; object-fit: cover; display: block; user-select: none; -webkit-user-drag: none; }
-.mt .pb { position: absolute; inset: 0; margin: auto; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: rgba(20, 22, 26, .62); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #fff; transition: transform var(--tb) var(--ease), background var(--tf); }
-.mt .pb svg { fill: currentColor; margin-left: 2px; }
-.mt.vid:hover .pb { transform: scale(1.12); background: var(--ac); color: var(--ink); }
+.mt .mt-play { position: absolute; inset: 0; margin: auto; width: 46px; height: 46px; padding: 0; gap: 0; border-radius: 50%; display: grid; place-items: center; background: rgba(20, 22, 26, .62); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #fff; transition: transform var(--tb) var(--ease), background var(--tf); }
+.mt .mt-play svg { fill: currentColor; margin-left: 3px; width: 18px; height: 18px; }
+.mt.vid:hover .mt-play { transform: scale(1.12); background: var(--ac); color: var(--ink); }
 .mt.sk { background: linear-gradient(100deg, var(--s2) 30%, var(--line) 50%, var(--s2) 70%) 0 0 / 220% 100%; animation: mt-sh 1.4s linear infinite; }
 @keyframes mt-sh { to { background-position: -120% 0; } }
-@media (prefers-reduced-motion: reduce) { .mt.sk { animation: none; } .mt, .mt .pb { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .mt.sk { animation: none; } .mt, .mt .mt-play { transition: none; } }
 
 .lb { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: 56px 72px; background: rgba(12, 13, 16, .92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); opacity: 0; visibility: hidden; transition: opacity var(--tb) var(--ease), visibility 0s var(--tb); }
 .lb.open { opacity: 1; visibility: visible; transition-delay: 0s; }
@@ -377,11 +378,11 @@ a.dl:hover .da { color: var(--ac); transform: translate(2px, -2px); }
 .lb-nx { right: 16px; }
 .lb-c { position: absolute; left: 0; right: 0; bottom: 20px; text-align: center; font: 600 13px var(--fb); color: var(--mu); letter-spacing: .06em; }
 
-/* Save (shrinks) + Open Steam, side by side */
-.acts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
-.acts .btn.glass { padding: 0 12px; gap: 8px; white-space: nowrap; font-size: 14px; }
-.acts .btn.glass:hover { gap: 8px; }
-.acts .btn.glass svg { flex: none; }
+/* Save (shrinks) + Open Steam, side by side. Scoped to the sheet's side panel: the hero has its own .acts (flex) and must not stretch with the title */
+.side .acts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.side .acts .btn.glass { padding: 0 12px; gap: 8px; white-space: nowrap; font-size: 14px; }
+.side .acts .btn.glass:hover { gap: 8px; }
+.side .acts .btn.glass svg { flex: none; }
 .btn.glass.alt.on span { color: inherit; }
 @media (max-width: 820px) { .mt { width: 168px; } .lb { padding: 56px 12px; } .lb-p { left: 6px; } .lb-nx { right: 6px; } }
 
@@ -436,7 +437,7 @@ a.dl.out:hover .da { color: #ff8a80; }
   .nx { display: none; }
 }
 @media (max-width: 820px) {
-  .db { grid-template-columns: 1fr; padding: 6px 20px 28px; }
+  .db { grid-template-columns: minmax(0, 1fr); padding: 6px 20px 28px; }
   .dh { height: 240px; }
   .dh .lg { left: 20px; }
   .req { grid-template-columns: 1fr; }

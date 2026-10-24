@@ -20,6 +20,9 @@ export const steam = {
   poster: id => `${STEAM}${id}/library_600x900.jpg`,
   hero: id => `${STEAM}${id}/library_hero.jpg`,
   logo: id => `${STEAM}${id}/logo.png`,
+  logoAlt: id => `${STEAM}${id}/logo_2x.png`,
+  logoLib: id => `${STEAM}${id}/library_logo.png`,
+  logoLib2x: id => `${STEAM}${id}/library_logo_2x.png`,
   header: id => `${STEAM}${id}/header.jpg`,
   capsule: id => `${STEAM}${id}/capsule_616x353.jpg`,
 };
@@ -30,6 +33,7 @@ export function candidates(game, kind) {
   if (a[kind]) out.push(a[kind]);
   if (game.steamAppId) {
     out.push(steam[kind](game.steamAppId));
+    if (kind === 'logo') out.push(steam.logoAlt(game.steamAppId), steam.logoLib(game.steamAppId), steam.logoLib2x(game.steamAppId)); // newer apps only ship the library_logo files
     if (kind === 'hero') out.push(steam.header(game.steamAppId)); // low-res but better than nothing
   }
   if (kind !== 'logo' && a.fallback) out.push(a.fallback);
@@ -67,9 +71,10 @@ function mergeArt(g, p) {
  *   resolve(game) → Promise<patch|null>   optional, called once per game right before its first slot loads
  *                   (patch: { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … })
  *   loader(url)   → Promise<string>       optional (GM_xmlhttpRequest → blob: URL)
+ *   resolveLogo(game, urls) → Promise<url|''>  optional: asked once when every candidate URL of a LOGO slot failed (e.g. SteamGridDB); the url it returns is tried last
  *   onMiss(game, kind, urls)              optional diagnostics hook: every candidate URL for a slot failed (a missing logo is common and fine)
  */
-export function createArt({ root: scope, loader = null, resolve = null, game, onMiss = null }) {
+export function createArt({ root: scope, loader = null, resolve = null, game, onMiss = null, resolveLogo = null }) {
   const MAX = 8;                                    // images loading at once (resolving art does not count: the resolver batches and limits itself)
   const pending = new Set(), queue = [], shows = [], patches = new Map();
   let active = 0, dead = false, timer = 0, last = 0, showRaf = 0;
@@ -128,6 +133,10 @@ export function createArt({ root: scope, loader = null, resolve = null, game, on
     for (const url of urls) {
       if (dead || !img.isConnected) return;
       if (await loadUrl(img, url)) return succeed(img);
+    }
+    if (img.dataset.kind === 'logo' && resolveLogo) {
+      let u = ''; try { u = await resolveLogo(g, urls); } catch (e) { /* fall through to the text title */ }
+      u = safeUrl(u); if (u && !dead && img.isConnected && await loadUrl(img, u)) return succeed(img);
     }
     try { onMiss && onMiss(g, img.dataset.kind, urls); } catch (e) { /* diagnostics only */ }
     fail(img);

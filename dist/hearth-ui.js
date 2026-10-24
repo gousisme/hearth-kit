@@ -232,6 +232,9 @@ const steam = {
   poster: id => `${STEAM}${id}/library_600x900.jpg`,
   hero: id => `${STEAM}${id}/library_hero.jpg`,
   logo: id => `${STEAM}${id}/logo.png`,
+  logoAlt: id => `${STEAM}${id}/logo_2x.png`,
+  logoLib: id => `${STEAM}${id}/library_logo.png`,
+  logoLib2x: id => `${STEAM}${id}/library_logo_2x.png`,
   header: id => `${STEAM}${id}/header.jpg`,
   capsule: id => `${STEAM}${id}/capsule_616x353.jpg`,
 };
@@ -242,6 +245,7 @@ function candidates(game, kind) {
   if (a[kind]) out.push(a[kind]);
   if (game.steamAppId) {
     out.push(steam[kind](game.steamAppId));
+    if (kind === 'logo') out.push(steam.logoAlt(game.steamAppId), steam.logoLib(game.steamAppId), steam.logoLib2x(game.steamAppId)); // newer apps only ship the library_logo files
     if (kind === 'hero') out.push(steam.header(game.steamAppId)); // low-res but better than nothing
   }
   if (kind !== 'logo' && a.fallback) out.push(a.fallback);
@@ -279,9 +283,10 @@ function mergeArt(g, p) {
  *   resolve(game) → Promise<patch|null>   optional, called once per game right before its first slot loads
  *                   (patch: { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … })
  *   loader(url)   → Promise<string>       optional (GM_xmlhttpRequest → blob: URL)
+ *   resolveLogo(game, urls) → Promise<url|''>  optional: asked once when every candidate URL of a LOGO slot failed (e.g. SteamGridDB); the url it returns is tried last
  *   onMiss(game, kind, urls)              optional diagnostics hook: every candidate URL for a slot failed (a missing logo is common and fine)
  */
-function createArt({ root: scope, loader = null, resolve = null, game, onMiss = null }) {
+function createArt({ root: scope, loader = null, resolve = null, game, onMiss = null, resolveLogo = null }) {
   const MAX = 8;                                    // images loading at once (resolving art does not count: the resolver batches and limits itself)
   const pending = new Set(), queue = [], shows = [], patches = new Map();
   let active = 0, dead = false, timer = 0, last = 0, showRaf = 0;
@@ -340,6 +345,10 @@ function createArt({ root: scope, loader = null, resolve = null, game, onMiss = 
     for (const url of urls) {
       if (dead || !img.isConnected) return;
       if (await loadUrl(img, url)) return succeed(img);
+    }
+    if (img.dataset.kind === 'logo' && resolveLogo) {
+      let u = ''; try { u = await resolveLogo(g, urls); } catch (e) { /* fall through to the text title */ }
+      u = safeUrl(u); if (u && !dead && img.isConnected && await loadUrl(img, u)) return succeed(img);
     }
     try { onMiss && onMiss(g, img.dataset.kind, urls); } catch (e) { /* diagnostics only */ }
     fail(img);
@@ -682,7 +691,7 @@ function searchHtml() {
 function mediaHtml(g, { pending = false } = {}) {
   const items = g.media || [];
   if (!items.length) return pending && (g.steamAppId || g.steamUrl) ? `<div class="media"><div class="mstrip">${'<i class="mt sk"></i>'.repeat(3)}</div></div>` : '';
-  const tiles = items.map((m, i) => `<button type="button" class="mt${m.type === 'image' ? '' : ' vid'}" data-media="${i}" aria-label="${esc(m.title || (m.type === 'image' ? 'Screenshot ' + (i + 1) : 'Trailer'))}"><img src="${esc(safeUrl(m.thumb))}" alt="" loading="lazy" decoding="async" draggable="false">${m.type === 'image' ? '' : `<span class="pb">${ic(ICON.play, 18, 2)}</span>`}</button>`).join('');
+  const tiles = items.map((m, i) => `<button type="button" class="mt${m.type === 'image' ? '' : ' vid'}" data-media="${i}" aria-label="${esc(m.title || (m.type === 'image' ? 'Screenshot ' + (i + 1) : 'Trailer'))}"><img src="${esc(safeUrl(m.thumb))}" alt="" loading="lazy" decoding="async" draggable="false">${m.type === 'image' ? '' : `<span class="mt-play">${ic(ICON.play, 18, 2)}</span>`}</button>`).join('');
   return `<div class="media"><div class="mstrip" tabindex="0" aria-label="Trailers and screenshots">${tiles}</div></div>`;
 }
 
@@ -875,6 +884,7 @@ function initGrid(root, D, route, savedIds, art, loadMore) {
  *             resolveArt(game) → Promise<patch|null>   // called lazily, once per game, right before its first image loads; patch = { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … }
  *             resolveProfile(user) → Promise<profile|null>  // called when the avatar is first clicked: { name, avatarUrl, badge, stats[{label,value}], facts[{label,value}], links[{label,href,hint,kind}] }
  *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on),
+ *             resolveLogo(game, triedUrls) → Promise<url|''>   // optional: last-chance logo source (asked only when every Steam URL failed)
  *             onUser(user) → false to take over the avatar click (default: the kit's own account sheet opens), onArtMiss(game, kind, urls),
  *             loadMore({view, filter}) → Promise<game[] | false>   // called when the browse grid has shown every local game }
  *
@@ -905,7 +915,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   let dlOpen = false;                                // the download panel of the open sheet is unfolded
   let profileOpen = false;                           // the open sheet is the account sheet, not a game
   const prof = { data: null, done: !opt.resolveProfile, call: null };
-  const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, onMiss: opt.onArtMiss, game: id => D.byId.get(String(id)) });
+  const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, onMiss: opt.onArtMiss, resolveLogo: opt.resolveLogo, game: id => D.byId.get(String(id)) });
   const saved = new Set((opt.saved || []).map(String));
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
   let heroCtl, stopReveal, stopShelves, stopGrid, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;

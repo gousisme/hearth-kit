@@ -2,7 +2,7 @@
 .modal.open { visibility: visible; transition-delay: 0s; }
 .scrim { position: absolute; inset: 0; background: rgba(16, 17, 20, .7); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); opacity: 0; transition: opacity var(--tb) var(--ein); }
 .modal.open .scrim { opacity: 1; transition-timing-function: var(--ease); }
-.sheet { position: relative; width: min(1040px, 100%); max-height: calc(100% - 48px); overflow: auto; background: var(--s1); border-radius: var(--rl); opacity: 0; transform: translateY(34px) scale(.97); transition: opacity var(--tb) var(--ein), transform var(--tb) var(--ein); scrollbar-width: thin; scrollbar-color: var(--line) transparent; outline: 0; }
+.sheet { position: relative; width: min(1040px, 100%); max-height: calc(100% - 48px); overflow: auto; background: var(--s1); border-radius: var(--rl); opacity: 0; transform: translateY(34px) scale(.97); transition: opacity var(--tb) var(--ein), transform var(--tb) var(--ein); scrollbar-width: thin; scrollbar-color: var(--line) transparent; outline: 0; clip-path: inset(0 round var(--rl)); }
 .modal.open .sheet { opacity: 1; transform: none; transition: opacity var(--tb) var(--ease), transform var(--ts) var(--ease); }
 .sheet.is-swap > *:not(.x) { opacity: 0; transform: translateY(6px); }
 .sheet > * { transition: opacity var(--tf) var(--ein), transform var(--tf) var(--ein); }
@@ -13,7 +13,8 @@
 .dh .fbt { font-size: clamp(32px, 4.4vw, 60px); }
 .x { position: absolute; z-index: 5; top: 16px; right: 16px; width: 42px; height: 42px; border-radius: 50%; background: rgba(24, 26, 30, .6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: grid; place-items: center; transition: transform var(--tb) var(--ease), background var(--tf); }
 .x:hover { transform: rotate(90deg); background: rgba(24, 26, 30, .85); }
-.db { display: grid; grid-template-columns: 1fr 300px; gap: 40px; padding: 6px 40px 40px; }
+.db { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; padding: 6px 40px 40px; }
+.db > * { min-width: 0; }
 .db h4 { font: 700 12px var(--fb); letter-spacing: .14em; text-transform: uppercase; color: var(--mu); margin: 28px 0 12px; }
 .db h4:first-child { margin-top: 0; }
 .db p { color: #cfd3da; }

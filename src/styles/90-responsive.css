@@ -12,7 +12,7 @@
   .nx { display: none; }
 }
 @media (max-width: 820px) {
-  .db { grid-template-columns: 1fr; padding: 6px 20px 28px; }
+  .db { grid-template-columns: minmax(0, 1fr); padding: 6px 20px 28px; }
   .dh { height: 240px; }
   .dh .lg { left: 20px; }
   .req { grid-template-columns: 1fr; }

@@ -5,7 +5,7 @@ import { ic, ICON } from '../core/icons.js';
 export function mediaHtml(g, { pending = false } = {}) {
   const items = g.media || [];
   if (!items.length) return pending && (g.steamAppId || g.steamUrl) ? `<div class="media"><div class="mstrip">${'<i class="mt sk"></i>'.repeat(3)}</div></div>` : '';
-  const tiles = items.map((m, i) => `<button type="button" class="mt${m.type === 'image' ? '' : ' vid'}" data-media="${i}" aria-label="${esc(m.title || (m.type === 'image' ? 'Screenshot ' + (i + 1) : 'Trailer'))}"><img src="${esc(safeUrl(m.thumb))}" alt="" loading="lazy" decoding="async" draggable="false">${m.type === 'image' ? '' : `<span class="pb">${ic(ICON.play, 18, 2)}</span>`}</button>`).join('');
+  const tiles = items.map((m, i) => `<button type="button" class="mt${m.type === 'image' ? '' : ' vid'}" data-media="${i}" aria-label="${esc(m.title || (m.type === 'image' ? 'Screenshot ' + (i + 1) : 'Trailer'))}"><img src="${esc(safeUrl(m.thumb))}" alt="" loading="lazy" decoding="async" draggable="false">${m.type === 'image' ? '' : `<span class="mt-play">${ic(ICON.play, 18, 2)}</span>`}</button>`).join('');
   return `<div class="media"><div class="mstrip" tabindex="0" aria-label="Trailers and screenshots">${tiles}</div></div>`;
 }
 
