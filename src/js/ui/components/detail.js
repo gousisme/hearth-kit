@@ -1,5 +1,5 @@
 import { esc, safeUrl } from '../../shared/util.js';
-import { layer, artImg, logoSlot } from '../core/art.js';
+import { layer, artImg, logoSlot, candidates } from '../core/art.js';
 import { ic, icf, ICON, LOGO } from '../core/icons.js';
 import { similar } from '../core/data.js';
 import { button } from './button.js';
@@ -52,21 +52,25 @@ export function detailHtml(D, g, { saved = false, placeholders = false, pending 
   const base = [['Developer', g.developer], ['Publisher', g.publisher], ['Released', g.releaseYear], ['Reception', g.rating], ['Genre', g.genres[0]], ['Size', g.size]];
   const extra = g.facts || [];
   const facts = [...base.map(([k, v]) => [k, (extra.find(f => f.label === k) || {}).value || v]), ...extra.filter(f => !base.some(([k]) => k === f.label)).map(f => [f.label, f.value])].filter(([, v]) => v);
-  const upd = g.update ? `<div class="upd">${g.update.version ? `<span class="v">${esc(verLabel(g.update.version))}</span>` : ''}<div><b>${g.update.date ? 'Updated ' + esc(g.update.date) : 'Latest update'}</b>${g.update.text ? `<span>${esc(g.update.text)}</span>` : ''}</div></div>` : '';
+  const upd = g.update ? `<div class="upd" data-k="upd">${g.update.version ? `<span class="v">${esc(verLabel(g.update.version))}</span>` : ''}<div><b>${g.update.date ? 'Updated ' + esc(g.update.date) : 'Latest update'}</b>${g.update.text ? `<span>${esc(g.update.text)}</span>` : ''}</div></div>` : '';
   const sim = similar(D, g);
-  return `<button class="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>
-  <div class="dh">${layer(g, 'hero')}${logoSlot(g)}</div>
-  <div class="db"><div>
+  // Every region carries data-k: mount.js updates the sheet region by region (core/morph.js), so a region whose HTML did not change keeps its DOM
+  // (no image created / loaded twice, the media strip keeps its scroll position). `data-art` makes the header re-render only when its image URLs change.
+  const rg = (k, inner) => (inner ? `<div class="rg" data-k="${k}">${inner}</div>` : '');
+  const art = [...candidates(g, 'hero'), '|', ...candidates(g, 'logo')].join(' ');
+  return `<button class="x" data-k="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>
+  <div class="dh" data-k="dh" data-art="${esc(art)}">${layer(g, 'hero')}${logoSlot(g)}</div>
+  <div class="db" data-k="db" data-morph><div data-k="main" data-morph>
     ${mediaHtml(g, { pending })}
-    ${g.description ? `<h4>About</h4><p>${esc(g.description)}</p>` : ''}
+    ${rg('about', g.description ? `<h4>About</h4><p>${esc(g.description)}</p>` : '')}
     ${upd}
-    ${guideHtml(g, pending)}
-    ${shotsHtml ? `<h4>Screenshots</h4><div class="shots">${shotsHtml}</div>` : ''}
-    ${req ? `<h4>System requirements</h4><div class="req">${reqBox('Minimum', req.minimum)}${reqBox('Recommended', req.recommended)}</div>` : ''}
+    ${rg('guide', guideHtml(g, pending))}
+    ${rg('shots', shotsHtml ? `<h4>Screenshots</h4><div class="shots">${shotsHtml}</div>` : '')}
+    ${rg('req', req ? `<h4>System requirements</h4><div class="req">${reqBox('Minimum', req.minimum)}${reqBox('Recommended', req.recommended)}</div>` : '')}
   </div>
-  <aside class="side">${getBox(g, { pending, dlOpen })}
-    ${actsHtml(g, saved)}
-    ${facts.length ? `<div class="facts">${facts.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : ''}
-    ${sim.length ? `<h4 class="sh4">Similar</h4>${sim.map(x => `<div class="sim" tabindex="0" role="button" data-open="${esc(x.id)}"><div class="sa is-skel">${artImg(x, 'header')}</div>${esc(x.title)}</div>`).join('')}` : ''}
+  <aside class="side" data-k="side" data-morph>${rg('get', getBox(g, { pending, dlOpen }))}
+    ${rg('acts', actsHtml(g, saved))}
+    ${facts.length ? `<div class="facts" data-k="facts">${facts.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : ''}
+    ${rg('sim', sim.length ? `<h4 class="sh4">Similar</h4>${sim.map(x => `<div class="sim" tabindex="0" role="button" data-open="${esc(x.id)}"><div class="sa is-skel">${artImg(x, 'header')}</div>${esc(x.title)}</div>`).join('')}` : '')}
   </aside></div>`;
 }

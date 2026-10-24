@@ -9,7 +9,8 @@ import { featuredHtml } from './components/featured.js';
 import { shelfHtml, initShelves } from './components/shelf.js';
 import { barHtml, cornerHtml, searchHtml, navActive } from './components/nav.js';
 import { detailHtml } from './components/detail.js';
-import { lightboxInner } from './components/media.js';
+import { lightboxShell, lightboxSlide } from './components/media.js';
+import { morphInto } from './core/morph.js';
 import { profileHtml } from './components/profile.js';
 import { browseHtml, initGrid } from './components/browse.js';
 
@@ -95,6 +96,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
   function renderBar() {
     $bar.innerHTML = barHtml(D, route) + searchHtml();
     $top.innerHTML = cornerHtml(D);
+    $top.querySelectorAll('.mark img').forEach(im => { const ok = () => im.parentNode && im.parentNode.classList.add('ok'); im.complete && im.naturalWidth ? ok() : im.addEventListener('load', ok, { once: true }); });   // the site's own logo fades in over the letter
     $search = $bar.querySelector('.searchbox'); $input = $search.querySelector('input');
     $input.addEventListener('input', debounce(onSearch, 180));
   }
@@ -140,10 +142,17 @@ export function mount({ target = document.body, data, css = null, shadow, option
     if (openId !== g.id) dlOpen = false;
     profileOpen = false;
     enrich.applyCached(g);
+    // One paint for the sheet: regions whose HTML did not change keep their DOM (no image is created or loaded twice, the media strip keeps its scroll).
+    // `again` = the same game is already showing (details arriving): new regions fade in. A different game / the account sheet is painted from scratch.
     const fill = () => {
-      const old = $sheet.querySelector('.mstrip'), sl = old ? old.scrollLeft : 0;
-      $sheet.classList.remove('is-profile'); $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }); art.hydrate($sheet); $sheet.scrollTop = 0;
-      const ns = sl && $sheet.querySelector('.mstrip'); if (ns) ns.scrollLeft = sl;       // a re-render (details arriving) keeps the strip where the person scrolled it
+      const again = $sheet.dataset.gid === g.id && !$sheet.classList.contains('is-profile');
+      if (!again) $sheet.textContent = '';
+      $sheet.classList.remove('is-profile'); $sheet.dataset.gid = g.id;
+      const sl = ($sheet.querySelector('.mstrip') || {}).scrollLeft || 0, strip0 = $sheet.querySelector('.mstrip');
+      morphInto($sheet, detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }), { animate: again });
+      art.hydrate($sheet); if (!again) $sheet.scrollTop = 0;
+      const ns = $sheet.querySelector('.mstrip'); if (ns && ns !== strip0 && sl) ns.scrollLeft = sl;   // the strip was replaced (not kept): put it back where the person had scrolled it
+      stripReady();
     };
     const sig = () => [g.description, g.developer, g.publisher, g.releaseYear, g.rating].join('|'), s0 = sig();
     if (!$modal.classList.contains('open')) {
@@ -167,7 +176,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     if (profileOpen && $modal.classList.contains('open')) return closeGame();       // the avatar toggles the sheet
     if (prof.done && !prof.data && opt.resolveProfile) { prof.done = false; prof.call = null; }   // the last attempt failed: try again
     profileOpen = true; openId = null;
-    const fill = () => { $sheet.classList.add('is-profile'); $sheet.innerHTML = profileHtml(D.site.user || u, prof.data, { pending: !prof.done }); $sheet.scrollTop = 0; };
+    const fill = () => { delete $sheet.dataset.gid; $sheet.classList.add('is-profile'); $sheet.innerHTML = profileHtml(D.site.user || u, prof.data, { pending: !prof.done }); $sheet.scrollTop = 0; };
     if (!$modal.classList.contains('open')) {
       lastFocus = active(); fill();
       $modal.classList.add('open'); $modal.setAttribute('aria-hidden', 'false'); $scroll.classList.add('is-locked');
@@ -183,7 +192,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     lbHide();
     $modal.classList.remove('open'); $modal.setAttribute('aria-hidden', 'true'); $scroll.classList.remove('is-locked');
     const was = D.byId.get(openId);
-    openId = null; profileOpen = false;
+    openId = null; profileOpen = false; delete $sheet.dataset.gid;       // the next opening paints from scratch (and from the top)
     opt.onClose && was && opt.onClose(was);
     lastFocus && lastFocus.focus && lastFocus.focus({ preventScroll: true });
     if (route.filter && route.filter.saved) refresh();
@@ -210,25 +219,98 @@ export function mount({ target = document.body, data, css = null, shadow, option
     const bl = btn && btn.querySelector('.bl');
     if (bl && !btn.dataset.busy) { btn.dataset.busy = '1'; const t = bl.textContent; bl.textContent = 'Starting…'; setTimeout(() => { bl.textContent = t; delete btn.dataset.busy; }, 1600); }
   }
-  /* ── media viewer ── */
-  let lbI = -1, dragMoved = false;
-  function lbShow(i) {
+  /* ── media viewer: opens / closes with a fade, and every change of item cross-fades (the new slide waits for its image, so there is never a blank flash) ── */
+  let lbI = -1, lbT = 0;
+  const LB_MS = () => (reduced() ? 0 : T.base + 60);
+  function lbRetire(old, dir) {
+    old.classList.remove('in'); old.classList.add('out'); old.style.setProperty('--dx', (-dir * 28) + 'px');
+    old.querySelectorAll('video').forEach(v => v.pause());
+    setTimeout(() => old.remove(), LB_MS());
+  }
+  function lbShow(i, dir = 0) {
     const g = D.byId.get(openId), items = (g && g.media) || []; if (!items[i]) return;
-    lbI = i; $lb.innerHTML = lightboxInner(items, i); $lb.classList.add('open'); $lb.setAttribute('aria-hidden', 'false');
-    const v = $lb.querySelector('video');
-    if (v) { const s = v.querySelectorAll('source'); s[s.length - 1].addEventListener('error', () => { v.hidden = true; $lb.querySelector('.lb-err').hidden = false; }); }   // every source failed (e.g. blocked by the page's CSP)
-    const x = $lb.querySelector('.lb-x'); x && x.focus({ preventScroll: true });
+    const first = lbI < 0; lbI = i; clearTimeout(lbT);
+    if (first || !$lb.querySelector('.lb-m')) $lb.innerHTML = lightboxShell(items.length > 1);
+    const stage = $lb.querySelector('.lb-m');
+    $lb.querySelector('.lb-c').textContent = items.length > 1 ? `${i + 1} / ${items.length}` : '';
+    stage.querySelectorAll('.lb-s:not(.out)').forEach(o => lbRetire(o, dir));
+    const sl = document.createElement('div'); sl.className = 'lb-s'; sl.style.setProperty('--dx', (dir * 28) + 'px'); sl.innerHTML = lightboxSlide(items[i]); stage.appendChild(sl);
+    const v = sl.querySelector('video');
+    if (v) { const s = v.querySelectorAll('source'); s[s.length - 1].addEventListener('error', () => { v.hidden = true; sl.querySelector('.lb-err').hidden = false; }); }   // every source failed (e.g. blocked by the page's CSP)
+    const on = () => { if (sl.isConnected && !sl.classList.contains('out')) sl.classList.add('in'); }, img = sl.querySelector('img');
+    if (img && !(img.complete && img.naturalWidth)) { img.addEventListener('load', on, { once: true }); img.addEventListener('error', on, { once: true }); setTimeout(on, 4000); }   // a picture fades in when it has arrived
+    else requestAnimationFrame(() => requestAnimationFrame(on));
+    $lb.classList.add('open'); $lb.setAttribute('aria-hidden', 'false');
+    if (first) { const x = $lb.querySelector('.lb-x'); x && x.focus({ preventScroll: true }); }
   }
   function lbHide() {
     if (lbI < 0) return; lbI = -1;
-    $lb.classList.remove('open'); $lb.setAttribute('aria-hidden', 'true'); $lb.innerHTML = '';       // also stops a playing video / embed
+    $lb.classList.remove('open'); $lb.setAttribute('aria-hidden', 'true');
+    $lb.querySelectorAll('video').forEach(v => v.pause());
+    $lb.querySelectorAll('iframe').forEach(f => { f.src = 'about:blank'; });                         // stops a playing embed at once; the frame then fades out with the rest
+    clearTimeout(lbT); lbT = setTimeout(() => { if (lbI < 0) $lb.innerHTML = ''; }, LB_MS());           // content stays until the fade is over
     $sheet.focus({ preventScroll: true });
   }
-  function lbStep(d) { const g = D.byId.get(openId), n = (g && g.media && g.media.length) || 0; if (n > 1 && lbI >= 0) lbShow((lbI + d + n) % n); }
-  let drag = null;                                     // mouse drag-to-scroll on the media strip
-  $sheet.addEventListener('pointerdown', e => { const s = e.pointerType === 'mouse' && !e.button && e.target.closest && e.target.closest('.mstrip'); if (s) { drag = { s, x: e.clientX, l: s.scrollLeft }; dragMoved = false; } });
-  root.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x; if (Math.abs(dx) > 5) { dragMoved = true; drag.s.scrollLeft = drag.l - dx; } });
-  root.addEventListener('pointerup', () => { drag = null; setTimeout(() => { dragMoved = false; }, 0); });
+  function lbStep(d) { const g = D.byId.get(openId), n = (g && g.media && g.media.length) || 0; if (n > 1 && lbI >= 0) lbShow((lbI + d + n) % n, d); }
+
+  /* ── media strip: edge fades, a smooth glide for Shift+wheel, drag with momentum ── */
+  let dragMoved = false, drag = null, glide = null, coast = 0;
+  const FADE = 56;
+  const stripFade = s => { const max = s.scrollWidth - s.clientWidth; s.style.setProperty('--fl', Math.max(0, Math.min(FADE, s.scrollLeft)) + 'px'); s.style.setProperty('--fr', Math.max(0, Math.min(FADE, max - s.scrollLeft)) + 'px'); };
+  function stripReady() {                                                                              // after every paint: fade state, and thumbnails fade in as they load
+    const s = $sheet.querySelector('.mstrip'); if (s && !s.__fade) { s.__fade = 1; s.addEventListener('scroll', () => stripFade(s), { passive: true }); }
+    if (s) stripFade(s);
+    $sheet.querySelectorAll('.mt img:not([data-f])').forEach(im => { im.dataset.f = '1'; const ok = () => im.classList.add('ld'); im.complete && im.naturalWidth ? ok() : (im.addEventListener('load', ok, { once: true }), im.addEventListener('error', ok, { once: true })); });
+  }
+  const stopMotion = () => { if (glide) { cancelAnimationFrame(glide.raf); glide = null; } cancelAnimationFrame(coast); coast = 0; };
+  /** Shift+wheel: one continuous glide towards a moving target (no per-notch animation that stops and restarts, no snapping). */
+  function glideBy(s, dx) {
+    const max = s.scrollWidth - s.clientWidth; cancelAnimationFrame(coast);
+    const from = glide && glide.s === s ? glide.to : s.scrollLeft, to = Math.max(0, Math.min(max, from + dx));
+    if (glide && glide.s === s) { glide.to = to; return; }
+    glide = { s, to, t: performance.now(), raf: 0 };
+    const tick = now => {
+      if (!glide) return; const dt = Math.min(48, now - glide.t); glide.t = now;
+      const diff = glide.to - s.scrollLeft;
+      if (Math.abs(diff) < .5) { s.scrollLeft = glide.to; glide = null; return; }
+      s.scrollLeft += diff * (1 - Math.exp(-dt / (reduced() ? 1 : 85)));
+      glide.raf = requestAnimationFrame(tick);
+    };
+    glide.raf = requestAnimationFrame(tick);
+  }
+  $sheet.addEventListener('wheel', e => {
+    const s = e.target.closest && e.target.closest('.mstrip'); if (!s || s.scrollWidth <= s.clientWidth + 1) return;
+    if (!e.shiftKey || e.ctrlKey) return;                                                              // only Shift+wheel is taken over; plain wheel keeps scrolling the sheet, trackpads keep their own physics
+    const d = (e.deltaY || e.deltaX) * (e.deltaMode === 1 ? 34 : e.deltaMode === 2 ? s.clientWidth : 1);
+    if (!d) return; e.preventDefault(); glideBy(s, d);
+  }, { passive: false });
+  $sheet.addEventListener('pointerdown', e => {
+    const s = e.pointerType === 'mouse' && !e.button && e.target.closest && e.target.closest('.mstrip');
+    if (!s) return; stopMotion();
+    drag = { s, id: e.pointerId, x: e.clientX, l: s.scrollLeft, last: e.clientX, t: performance.now(), v: 0 }; dragMoved = false;
+  });
+  root.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x;
+    if (!dragMoved) { if (Math.abs(dx) < 5) return; dragMoved = true; drag.s.classList.add('is-drag'); try { drag.s.setPointerCapture(drag.id); } catch (err) { /* ignore */ } }
+    const now = performance.now(), dt = now - drag.t;
+    if (dt > 0) drag.v = .8 * drag.v + .2 * ((drag.last - e.clientX) / dt);                                // px per ms, smoothed
+    drag.last = e.clientX; drag.t = now;
+    drag.s.scrollLeft = drag.l - dx;
+  });
+  const endDrag = e => {
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    const { s, v } = drag, moved = dragMoved; drag = null;
+    s.classList.remove('is-drag'); try { s.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    if (moved && Math.abs(v) > .15 && !reduced()) {                                                    // let go while moving: keep gliding, slowing down
+      let vel = v, last = performance.now();
+      const tick = now => { const dt = Math.min(48, now - last); last = now; s.scrollLeft += vel * dt; vel *= Math.exp(-dt / 320); if (Math.abs(vel) > .02 && s.scrollLeft > 0 && s.scrollLeft < s.scrollWidth - s.clientWidth - 1) coast = requestAnimationFrame(tick); };
+      coast = requestAnimationFrame(tick);
+    }
+    setTimeout(() => { dragMoved = false; }, 0);                                                       // (the click that ends a drag must not open the viewer)
+  };
+  root.addEventListener('pointerup', endDrag); root.addEventListener('pointercancel', endDrag);
+  $sheet.addEventListener('dragstart', e => { if (e.target.closest && e.target.closest('.mstrip')) e.preventDefault(); });
 
   function toggleSaved(id, btn) {
     const g = D.byId.get(String(id)); if (!g) return;
@@ -252,7 +334,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     }
     if (q('[data-lb-close]')) return lbHide();
     if ((el = q('[data-lb-step]'))) return lbStep(+el.dataset.lbStep);
-    if (t === $lb) return lbHide();                                  // the dark area around the media
+    if (t === $lb || t.classList.contains('lb-m')) return lbHide();   // the dark area around the media
     if ((el = q('[data-media]'))) return dragMoved ? undefined : lbShow(+el.dataset.media);
     if ((el = q('[data-get]'))) { e.stopPropagation(); return doGet(el.dataset.get, el); }
     if ((el = q('[data-wish]'))) return toggleSaved(el.dataset.wish, el);

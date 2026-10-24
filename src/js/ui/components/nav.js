@@ -26,7 +26,8 @@ export function cornerHtml(D) {
   const avatar = !u ? ''
     : u.avatarUrl && safeUrl(u.avatarUrl) ? `<button class="av" data-user aria-label="${label}"><img src="${esc(safeUrl(u.avatarUrl))}" alt=""></button>`
     : u.initials ? `<button class="av" data-user aria-label="${label}">${esc(u.initials)}</button>` : '';
-  return `<button class="mark" data-nav="home" aria-label="${esc(D.site.name)} — home">${esc(D.site.mark)}</button><div class="bar-r">${avatar}</div>`;
+  const logo = safeUrl(D.site.logo);                                   // site.logo: the site's own logo image; the letter (site.mark) shows until it has loaded, and stays if it never does
+  return `<button class="mark${logo ? ' has-img' : ''}" data-nav="home" aria-label="${esc(D.site.name)} — home"><span>${esc(D.site.mark)}</span>${logo ? `<img src="${esc(logo)}" alt="" decoding="async" draggable="false">` : ''}</button><div class="bar-r">${avatar}</div>`;
 }
 
 /** Drop-down search field that lives under the pill. */

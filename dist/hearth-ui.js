@@ -1,4 +1,4 @@
-/*! hearth-kit v0.4.0 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.5.0 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthUI=(function(){
 'use strict';
 /* ── src/js/shared/util.js ── */
@@ -696,7 +696,8 @@ function cornerHtml(D) {
   const avatar = !u ? ''
     : u.avatarUrl && safeUrl(u.avatarUrl) ? `<button class="av" data-user aria-label="${label}"><img src="${esc(safeUrl(u.avatarUrl))}" alt=""></button>`
     : u.initials ? `<button class="av" data-user aria-label="${label}">${esc(u.initials)}</button>` : '';
-  return `<button class="mark" data-nav="home" aria-label="${esc(D.site.name)} — home">${esc(D.site.mark)}</button><div class="bar-r">${avatar}</div>`;
+  const logo = safeUrl(D.site.logo);                                   // site.logo: the site's own logo image; the letter (site.mark) shows until it has loaded, and stays if it never does
+  return `<button class="mark${logo ? ' has-img' : ''}" data-nav="home" aria-label="${esc(D.site.name)} — home"><span>${esc(D.site.mark)}</span>${logo ? `<img src="${esc(logo)}" alt="" decoding="async" draggable="false">` : ''}</button><div class="bar-r">${avatar}</div>`;
 }
 
 /** Drop-down search field that lives under the pill. */
@@ -708,23 +709,24 @@ function searchHtml() {
 /** The media strip (trailers + screenshots) under the sheet's header. Skeleton tiles while the details are still loading and a Steam id is known. */
 function mediaHtml(g, { pending = false } = {}) {
   const items = g.media || [];
-  if (!items.length) return pending && (g.steamAppId || g.steamUrl) ? `<div class="media"><div class="mstrip">${'<i class="mt sk"></i>'.repeat(3)}</div></div>` : '';
+  if (!items.length) return pending && (g.steamAppId || g.steamUrl) ? `<div class="media" data-k="media"><div class="mstrip">${'<i class="mt sk"></i>'.repeat(3)}</div></div>` : '';
   const tiles = items.map((m, i) => `<button type="button" class="mt${m.type === 'image' ? '' : ' vid'}" data-media="${i}" aria-label="${esc(m.title || (m.type === 'image' ? 'Screenshot ' + (i + 1) : 'Trailer'))}"><img src="${esc(safeUrl(m.thumb))}" alt="" loading="lazy" decoding="async" draggable="false">${m.type === 'image' ? '' : `<span class="mt-play">${ic(ICON.play, 18, 2)}</span>`}</button>`).join('');
-  return `<div class="media"><div class="mstrip" tabindex="0" aria-label="Trailers and screenshots">${tiles}</div></div>`;
+  return `<div class="media" data-k="media"><div class="mstrip" tabindex="0" aria-label="Trailers and screenshots">${tiles}</div></div>`;
 }
 
-/** Full-size viewer for one media item. Lives in the modal (outside the sheet) so a sheet re-render never closes it. */
-function lightboxInner(items, i) {
-  const m = items[i]; if (!m) return '';
-  let body;
-  if (m.type === 'video') body = `<video controls autoplay playsinline poster="${esc(safeUrl(m.thumb))}">${m.sources.map(s => `<source src="${esc(safeUrl(s.src))}"${s.type ? ` type="${esc(s.type)}"` : ''}>`).join('')}</video><div class="lb-err" hidden>This video can’t be played here.</div>`;
-  else if (m.type === 'embed') body = `<iframe src="${esc(safeUrl(m.src))}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
-  else body = `<img src="${esc(safeUrl(m.src))}" alt="" decoding="async">`;
-  const many = items.length > 1;
+/** The viewer's frame: close button, previous / next, the stage the slides fade in and out of, and the counter. Built once per opening. */
+function lightboxShell(many) {
   return `<button type="button" class="lb-x" data-lb-close aria-label="Close">${ic(ICON.close, 18)}</button>
     ${many ? `<button type="button" class="lb-n lb-p" data-lb-step="-1" aria-label="Previous">${ic(ICON.prev, 22)}</button><button type="button" class="lb-n lb-nx" data-lb-step="1" aria-label="Next">${ic(ICON.next, 22)}</button>` : ''}
-    <div class="lb-m">${body}</div>
-    <div class="lb-c">${many ? `${i + 1} / ${items.length}` : ''}</div>`;
+    <div class="lb-m"></div>
+    <div class="lb-c"></div>`;
+}
+
+/** One slide (a screenshot, a video or an embed). Slides live in the stage; changing item fades the old one out and the new one in. */
+function lightboxSlide(m) {
+  if (m.type === 'video') return `<video controls autoplay playsinline poster="${esc(safeUrl(m.thumb))}">${m.sources.map(s => `<source src="${esc(safeUrl(s.src))}"${s.type ? ` type="${esc(s.type)}"` : ''}>`).join('')}</video><div class="lb-err" hidden>This video can’t be played here.</div>`;
+  if (m.type === 'embed') return `<iframe src="${esc(safeUrl(m.src))}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  return `<img src="${esc(safeUrl(m.src))}" alt="" decoding="async">`;
 }
 
 /* ── src/js/ui/components/detail.js ── */
@@ -775,23 +777,66 @@ function detailHtml(D, g, { saved = false, placeholders = false, pending = false
   const base = [['Developer', g.developer], ['Publisher', g.publisher], ['Released', g.releaseYear], ['Reception', g.rating], ['Genre', g.genres[0]], ['Size', g.size]];
   const extra = g.facts || [];
   const facts = [...base.map(([k, v]) => [k, (extra.find(f => f.label === k) || {}).value || v]), ...extra.filter(f => !base.some(([k]) => k === f.label)).map(f => [f.label, f.value])].filter(([, v]) => v);
-  const upd = g.update ? `<div class="upd">${g.update.version ? `<span class="v">${esc(verLabel(g.update.version))}</span>` : ''}<div><b>${g.update.date ? 'Updated ' + esc(g.update.date) : 'Latest update'}</b>${g.update.text ? `<span>${esc(g.update.text)}</span>` : ''}</div></div>` : '';
+  const upd = g.update ? `<div class="upd" data-k="upd">${g.update.version ? `<span class="v">${esc(verLabel(g.update.version))}</span>` : ''}<div><b>${g.update.date ? 'Updated ' + esc(g.update.date) : 'Latest update'}</b>${g.update.text ? `<span>${esc(g.update.text)}</span>` : ''}</div></div>` : '';
   const sim = similar(D, g);
-  return `<button class="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>
-  <div class="dh">${layer(g, 'hero')}${logoSlot(g)}</div>
-  <div class="db"><div>
+  // Every region carries data-k: mount.js updates the sheet region by region (core/morph.js), so a region whose HTML did not change keeps its DOM
+  // (no image created / loaded twice, the media strip keeps its scroll position). `data-art` makes the header re-render only when its image URLs change.
+  const rg = (k, inner) => (inner ? `<div class="rg" data-k="${k}">${inner}</div>` : '');
+  const art = [...candidates(g, 'hero'), '|', ...candidates(g, 'logo')].join(' ');
+  return `<button class="x" data-k="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>
+  <div class="dh" data-k="dh" data-art="${esc(art)}">${layer(g, 'hero')}${logoSlot(g)}</div>
+  <div class="db" data-k="db" data-morph><div data-k="main" data-morph>
     ${mediaHtml(g, { pending })}
-    ${g.description ? `<h4>About</h4><p>${esc(g.description)}</p>` : ''}
+    ${rg('about', g.description ? `<h4>About</h4><p>${esc(g.description)}</p>` : '')}
     ${upd}
-    ${guideHtml(g, pending)}
-    ${shotsHtml ? `<h4>Screenshots</h4><div class="shots">${shotsHtml}</div>` : ''}
-    ${req ? `<h4>System requirements</h4><div class="req">${reqBox('Minimum', req.minimum)}${reqBox('Recommended', req.recommended)}</div>` : ''}
+    ${rg('guide', guideHtml(g, pending))}
+    ${rg('shots', shotsHtml ? `<h4>Screenshots</h4><div class="shots">${shotsHtml}</div>` : '')}
+    ${rg('req', req ? `<h4>System requirements</h4><div class="req">${reqBox('Minimum', req.minimum)}${reqBox('Recommended', req.recommended)}</div>` : '')}
   </div>
-  <aside class="side">${getBox(g, { pending, dlOpen })}
-    ${actsHtml(g, saved)}
-    ${facts.length ? `<div class="facts">${facts.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : ''}
-    ${sim.length ? `<h4 class="sh4">Similar</h4>${sim.map(x => `<div class="sim" tabindex="0" role="button" data-open="${esc(x.id)}"><div class="sa is-skel">${artImg(x, 'header')}</div>${esc(x.title)}</div>`).join('')}` : ''}
+  <aside class="side" data-k="side" data-morph>${rg('get', getBox(g, { pending, dlOpen }))}
+    ${rg('acts', actsHtml(g, saved))}
+    ${facts.length ? `<div class="facts" data-k="facts">${facts.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : ''}
+    ${rg('sim', sim.length ? `<h4 class="sh4">Similar</h4>${sim.map(x => `<div class="sim" tabindex="0" role="button" data-open="${esc(x.id)}"><div class="sa is-skel">${artImg(x, 'header')}</div>${esc(x.title)}</div>`).join('')}` : '')}
   </aside></div>`;
+}
+
+/* ── src/js/ui/core/morph.js ── */
+/**
+ * SHEET UPDATES WITHOUT RE-CREATING WHAT DID NOT CHANGE
+ * detailHtml() marks every region with data-k (and containers with data-morph). morphInto() renders new HTML next to the old one and,
+ * region by region, keeps the DOM node when its source HTML is identical (so an image that is already on screen is never created and
+ * loaded a second time, a scrolled media strip stays where it is, a playing thing keeps playing) and replaces only what changed.
+ * Regions that are new or replaced fade in (`.rg-in`, unless `animate` is false); regions that are gone are removed.
+ */
+function morphInto(parent, html, { animate = true } = {}) {
+  const t = document.createElement('template'); t.innerHTML = html;
+  morphKids(parent, [...t.content.children], animate);
+}
+
+function morphKids(parent, next, animate) {
+  const old = new Map();
+  const want = new Set(next.map(n => n.dataset.k || ''));
+  for (const c of [...parent.children]) { const k = c.dataset.k || ''; if (want.has(k) && !old.has(k)) old.set(k, c); else c.remove(); }   // gone regions go first, so a kept one is never moved (moving a node resets its scroll position)
+  let prev = null;
+  const after = () => (prev ? prev.nextSibling : parent.firstChild);
+  for (const n of next) {
+    const k = n.dataset.k || '', o = old.get(k), src = n.outerHTML;
+    old.delete(k);
+    if (o && o.__src === src) {                                     // identical: keep the node (move it only if the order changed)
+      if (o.previousElementSibling !== prev) parent.insertBefore(o, after());
+      prev = o; continue;
+    }
+    if (o && n.hasAttribute('data-morph')) {                        // a container: look inside it
+      o.__src = src; o.className = n.className;
+      if (o.previousElementSibling !== prev) parent.insertBefore(o, after());
+      morphKids(o, [...n.children], animate); prev = o; continue;
+    }
+    n.__src = src;
+    if (animate) n.classList.add('rg-in');
+    if (o) parent.replaceChild(n, o); else parent.insertBefore(n, after());
+    if (n.classList.contains('rg-in')) n.addEventListener('animationend', () => n.classList.remove('rg-in'), { once: true });
+    prev = n;
+  }
 }
 
 /* ── src/js/ui/components/profile.js ── */
@@ -975,6 +1020,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   function renderBar() {
     $bar.innerHTML = barHtml(D, route) + searchHtml();
     $top.innerHTML = cornerHtml(D);
+    $top.querySelectorAll('.mark img').forEach(im => { const ok = () => im.parentNode && im.parentNode.classList.add('ok'); im.complete && im.naturalWidth ? ok() : im.addEventListener('load', ok, { once: true }); });   // the site's own logo fades in over the letter
     $search = $bar.querySelector('.searchbox'); $input = $search.querySelector('input');
     $input.addEventListener('input', debounce(onSearch, 180));
   }
@@ -1020,10 +1066,17 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     if (openId !== g.id) dlOpen = false;
     profileOpen = false;
     enrich.applyCached(g);
+    // One paint for the sheet: regions whose HTML did not change keep their DOM (no image is created or loaded twice, the media strip keeps its scroll).
+    // `again` = the same game is already showing (details arriving): new regions fade in. A different game / the account sheet is painted from scratch.
     const fill = () => {
-      const old = $sheet.querySelector('.mstrip'), sl = old ? old.scrollLeft : 0;
-      $sheet.classList.remove('is-profile'); $sheet.innerHTML = detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }); art.hydrate($sheet); $sheet.scrollTop = 0;
-      const ns = sl && $sheet.querySelector('.mstrip'); if (ns) ns.scrollLeft = sl;       // a re-render (details arriving) keeps the strip where the person scrolled it
+      const again = $sheet.dataset.gid === g.id && !$sheet.classList.contains('is-profile');
+      if (!again) $sheet.textContent = '';
+      $sheet.classList.remove('is-profile'); $sheet.dataset.gid = g.id;
+      const sl = ($sheet.querySelector('.mstrip') || {}).scrollLeft || 0, strip0 = $sheet.querySelector('.mstrip');
+      morphInto($sheet, detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }), { animate: again });
+      art.hydrate($sheet); if (!again) $sheet.scrollTop = 0;
+      const ns = $sheet.querySelector('.mstrip'); if (ns && ns !== strip0 && sl) ns.scrollLeft = sl;   // the strip was replaced (not kept): put it back where the person had scrolled it
+      stripReady();
     };
     const sig = () => [g.description, g.developer, g.publisher, g.releaseYear, g.rating].join('|'), s0 = sig();
     if (!$modal.classList.contains('open')) {
@@ -1047,7 +1100,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     if (profileOpen && $modal.classList.contains('open')) return closeGame();       // the avatar toggles the sheet
     if (prof.done && !prof.data && opt.resolveProfile) { prof.done = false; prof.call = null; }   // the last attempt failed: try again
     profileOpen = true; openId = null;
-    const fill = () => { $sheet.classList.add('is-profile'); $sheet.innerHTML = profileHtml(D.site.user || u, prof.data, { pending: !prof.done }); $sheet.scrollTop = 0; };
+    const fill = () => { delete $sheet.dataset.gid; $sheet.classList.add('is-profile'); $sheet.innerHTML = profileHtml(D.site.user || u, prof.data, { pending: !prof.done }); $sheet.scrollTop = 0; };
     if (!$modal.classList.contains('open')) {
       lastFocus = active(); fill();
       $modal.classList.add('open'); $modal.setAttribute('aria-hidden', 'false'); $scroll.classList.add('is-locked');
@@ -1063,7 +1116,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     lbHide();
     $modal.classList.remove('open'); $modal.setAttribute('aria-hidden', 'true'); $scroll.classList.remove('is-locked');
     const was = D.byId.get(openId);
-    openId = null; profileOpen = false;
+    openId = null; profileOpen = false; delete $sheet.dataset.gid;       // the next opening paints from scratch (and from the top)
     opt.onClose && was && opt.onClose(was);
     lastFocus && lastFocus.focus && lastFocus.focus({ preventScroll: true });
     if (route.filter && route.filter.saved) refresh();
@@ -1090,25 +1143,98 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     const bl = btn && btn.querySelector('.bl');
     if (bl && !btn.dataset.busy) { btn.dataset.busy = '1'; const t = bl.textContent; bl.textContent = 'Starting…'; setTimeout(() => { bl.textContent = t; delete btn.dataset.busy; }, 1600); }
   }
-  /* ── media viewer ── */
-  let lbI = -1, dragMoved = false;
-  function lbShow(i) {
+  /* ── media viewer: opens / closes with a fade, and every change of item cross-fades (the new slide waits for its image, so there is never a blank flash) ── */
+  let lbI = -1, lbT = 0;
+  const LB_MS = () => (reduced() ? 0 : T.base + 60);
+  function lbRetire(old, dir) {
+    old.classList.remove('in'); old.classList.add('out'); old.style.setProperty('--dx', (-dir * 28) + 'px');
+    old.querySelectorAll('video').forEach(v => v.pause());
+    setTimeout(() => old.remove(), LB_MS());
+  }
+  function lbShow(i, dir = 0) {
     const g = D.byId.get(openId), items = (g && g.media) || []; if (!items[i]) return;
-    lbI = i; $lb.innerHTML = lightboxInner(items, i); $lb.classList.add('open'); $lb.setAttribute('aria-hidden', 'false');
-    const v = $lb.querySelector('video');
-    if (v) { const s = v.querySelectorAll('source'); s[s.length - 1].addEventListener('error', () => { v.hidden = true; $lb.querySelector('.lb-err').hidden = false; }); }   // every source failed (e.g. blocked by the page's CSP)
-    const x = $lb.querySelector('.lb-x'); x && x.focus({ preventScroll: true });
+    const first = lbI < 0; lbI = i; clearTimeout(lbT);
+    if (first || !$lb.querySelector('.lb-m')) $lb.innerHTML = lightboxShell(items.length > 1);
+    const stage = $lb.querySelector('.lb-m');
+    $lb.querySelector('.lb-c').textContent = items.length > 1 ? `${i + 1} / ${items.length}` : '';
+    stage.querySelectorAll('.lb-s:not(.out)').forEach(o => lbRetire(o, dir));
+    const sl = document.createElement('div'); sl.className = 'lb-s'; sl.style.setProperty('--dx', (dir * 28) + 'px'); sl.innerHTML = lightboxSlide(items[i]); stage.appendChild(sl);
+    const v = sl.querySelector('video');
+    if (v) { const s = v.querySelectorAll('source'); s[s.length - 1].addEventListener('error', () => { v.hidden = true; sl.querySelector('.lb-err').hidden = false; }); }   // every source failed (e.g. blocked by the page's CSP)
+    const on = () => { if (sl.isConnected && !sl.classList.contains('out')) sl.classList.add('in'); }, img = sl.querySelector('img');
+    if (img && !(img.complete && img.naturalWidth)) { img.addEventListener('load', on, { once: true }); img.addEventListener('error', on, { once: true }); setTimeout(on, 4000); }   // a picture fades in when it has arrived
+    else requestAnimationFrame(() => requestAnimationFrame(on));
+    $lb.classList.add('open'); $lb.setAttribute('aria-hidden', 'false');
+    if (first) { const x = $lb.querySelector('.lb-x'); x && x.focus({ preventScroll: true }); }
   }
   function lbHide() {
     if (lbI < 0) return; lbI = -1;
-    $lb.classList.remove('open'); $lb.setAttribute('aria-hidden', 'true'); $lb.innerHTML = '';       // also stops a playing video / embed
+    $lb.classList.remove('open'); $lb.setAttribute('aria-hidden', 'true');
+    $lb.querySelectorAll('video').forEach(v => v.pause());
+    $lb.querySelectorAll('iframe').forEach(f => { f.src = 'about:blank'; });                         // stops a playing embed at once; the frame then fades out with the rest
+    clearTimeout(lbT); lbT = setTimeout(() => { if (lbI < 0) $lb.innerHTML = ''; }, LB_MS());           // content stays until the fade is over
     $sheet.focus({ preventScroll: true });
   }
-  function lbStep(d) { const g = D.byId.get(openId), n = (g && g.media && g.media.length) || 0; if (n > 1 && lbI >= 0) lbShow((lbI + d + n) % n); }
-  let drag = null;                                     // mouse drag-to-scroll on the media strip
-  $sheet.addEventListener('pointerdown', e => { const s = e.pointerType === 'mouse' && !e.button && e.target.closest && e.target.closest('.mstrip'); if (s) { drag = { s, x: e.clientX, l: s.scrollLeft }; dragMoved = false; } });
-  root.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x; if (Math.abs(dx) > 5) { dragMoved = true; drag.s.scrollLeft = drag.l - dx; } });
-  root.addEventListener('pointerup', () => { drag = null; setTimeout(() => { dragMoved = false; }, 0); });
+  function lbStep(d) { const g = D.byId.get(openId), n = (g && g.media && g.media.length) || 0; if (n > 1 && lbI >= 0) lbShow((lbI + d + n) % n, d); }
+
+  /* ── media strip: edge fades, a smooth glide for Shift+wheel, drag with momentum ── */
+  let dragMoved = false, drag = null, glide = null, coast = 0;
+  const FADE = 56;
+  const stripFade = s => { const max = s.scrollWidth - s.clientWidth; s.style.setProperty('--fl', Math.max(0, Math.min(FADE, s.scrollLeft)) + 'px'); s.style.setProperty('--fr', Math.max(0, Math.min(FADE, max - s.scrollLeft)) + 'px'); };
+  function stripReady() {                                                                              // after every paint: fade state, and thumbnails fade in as they load
+    const s = $sheet.querySelector('.mstrip'); if (s && !s.__fade) { s.__fade = 1; s.addEventListener('scroll', () => stripFade(s), { passive: true }); }
+    if (s) stripFade(s);
+    $sheet.querySelectorAll('.mt img:not([data-f])').forEach(im => { im.dataset.f = '1'; const ok = () => im.classList.add('ld'); im.complete && im.naturalWidth ? ok() : (im.addEventListener('load', ok, { once: true }), im.addEventListener('error', ok, { once: true })); });
+  }
+  const stopMotion = () => { if (glide) { cancelAnimationFrame(glide.raf); glide = null; } cancelAnimationFrame(coast); coast = 0; };
+  /** Shift+wheel: one continuous glide towards a moving target (no per-notch animation that stops and restarts, no snapping). */
+  function glideBy(s, dx) {
+    const max = s.scrollWidth - s.clientWidth; cancelAnimationFrame(coast);
+    const from = glide && glide.s === s ? glide.to : s.scrollLeft, to = Math.max(0, Math.min(max, from + dx));
+    if (glide && glide.s === s) { glide.to = to; return; }
+    glide = { s, to, t: performance.now(), raf: 0 };
+    const tick = now => {
+      if (!glide) return; const dt = Math.min(48, now - glide.t); glide.t = now;
+      const diff = glide.to - s.scrollLeft;
+      if (Math.abs(diff) < .5) { s.scrollLeft = glide.to; glide = null; return; }
+      s.scrollLeft += diff * (1 - Math.exp(-dt / (reduced() ? 1 : 85)));
+      glide.raf = requestAnimationFrame(tick);
+    };
+    glide.raf = requestAnimationFrame(tick);
+  }
+  $sheet.addEventListener('wheel', e => {
+    const s = e.target.closest && e.target.closest('.mstrip'); if (!s || s.scrollWidth <= s.clientWidth + 1) return;
+    if (!e.shiftKey || e.ctrlKey) return;                                                              // only Shift+wheel is taken over; plain wheel keeps scrolling the sheet, trackpads keep their own physics
+    const d = (e.deltaY || e.deltaX) * (e.deltaMode === 1 ? 34 : e.deltaMode === 2 ? s.clientWidth : 1);
+    if (!d) return; e.preventDefault(); glideBy(s, d);
+  }, { passive: false });
+  $sheet.addEventListener('pointerdown', e => {
+    const s = e.pointerType === 'mouse' && !e.button && e.target.closest && e.target.closest('.mstrip');
+    if (!s) return; stopMotion();
+    drag = { s, id: e.pointerId, x: e.clientX, l: s.scrollLeft, last: e.clientX, t: performance.now(), v: 0 }; dragMoved = false;
+  });
+  root.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x;
+    if (!dragMoved) { if (Math.abs(dx) < 5) return; dragMoved = true; drag.s.classList.add('is-drag'); try { drag.s.setPointerCapture(drag.id); } catch (err) { /* ignore */ } }
+    const now = performance.now(), dt = now - drag.t;
+    if (dt > 0) drag.v = .8 * drag.v + .2 * ((drag.last - e.clientX) / dt);                                // px per ms, smoothed
+    drag.last = e.clientX; drag.t = now;
+    drag.s.scrollLeft = drag.l - dx;
+  });
+  const endDrag = e => {
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    const { s, v } = drag, moved = dragMoved; drag = null;
+    s.classList.remove('is-drag'); try { s.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    if (moved && Math.abs(v) > .15 && !reduced()) {                                                    // let go while moving: keep gliding, slowing down
+      let vel = v, last = performance.now();
+      const tick = now => { const dt = Math.min(48, now - last); last = now; s.scrollLeft += vel * dt; vel *= Math.exp(-dt / 320); if (Math.abs(vel) > .02 && s.scrollLeft > 0 && s.scrollLeft < s.scrollWidth - s.clientWidth - 1) coast = requestAnimationFrame(tick); };
+      coast = requestAnimationFrame(tick);
+    }
+    setTimeout(() => { dragMoved = false; }, 0);                                                       // (the click that ends a drag must not open the viewer)
+  };
+  root.addEventListener('pointerup', endDrag); root.addEventListener('pointercancel', endDrag);
+  $sheet.addEventListener('dragstart', e => { if (e.target.closest && e.target.closest('.mstrip')) e.preventDefault(); });
 
   function toggleSaved(id, btn) {
     const g = D.byId.get(String(id)); if (!g) return;
@@ -1132,7 +1258,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     }
     if (q('[data-lb-close]')) return lbHide();
     if ((el = q('[data-lb-step]'))) return lbStep(+el.dataset.lbStep);
-    if (t === $lb) return lbHide();                                  // the dark area around the media
+    if (t === $lb || t.classList.contains('lb-m')) return lbHide();   // the dark area around the media
     if ((el = q('[data-media]'))) return dragMoved ? undefined : lbShow(+el.dataset.media);
     if ((el = q('[data-get]'))) { e.stopPropagation(); return doGet(el.dataset.get, el); }
     if ((el = q('[data-wish]'))) return toggleSaved(el.dataset.wish, el);
@@ -1190,9 +1316,9 @@ function adopt(scope, css) {
 }
 
 /* ── src/js/ui/index.js ── */
-const version = '0.4.0';
+const version = '0.5.0';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-const features = { lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true };
+const features = { lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true };
 
 return {mount, validate, steam, normalize, version, features};
 })();

@@ -1,27 +1,36 @@
 /* Media strip (trailers + screenshots) in the detail sheet, its viewer, and the Save / Open Steam row */
 .media { margin: 0 0 26px; }
-.mstrip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 12px; scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: var(--line) transparent; cursor: grab; outline: 0; overscroll-behavior-x: contain; }
-.mstrip:active { cursor: grabbing; }
+.mstrip { --fl: 0px; --fr: 0px; display: flex; gap: 10px; overflow-x: auto; padding: 6px 0 12px; margin-top: -6px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; cursor: grab; outline: 0; overscroll-behavior-x: contain; user-select: none; -webkit-user-select: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%); }   /* the ends fade out (their width follows the scroll position, set from JS) instead of being cut off */
+.mstrip.is-drag { cursor: grabbing; }
+.mstrip.is-drag .mt { pointer-events: none; transform: none; }
 .mstrip::-webkit-scrollbar { height: 6px; }
 .mstrip::-webkit-scrollbar-track { background: transparent; }
 .mstrip::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; }
-.mt { position: relative; flex: none; width: 216px; aspect-ratio: 16/9; border-radius: 12px; overflow: hidden; background: var(--s2); scroll-snap-align: start; padding: 0; transition: transform var(--tb) var(--ease), box-shadow var(--tb) var(--ease); }
+.mt { position: relative; flex: none; width: 216px; aspect-ratio: 16/9; border-radius: 12px; overflow: hidden; background: var(--s2); padding: 0; transition: transform var(--tb) var(--ease), box-shadow var(--tb) var(--ease); }
 .mt:hover { transform: scale(1.03); }
 .mt:focus-visible { box-shadow: 0 0 0 2px var(--ac); outline: 0; }
-.mt img { width: 100%; height: 100%; object-fit: cover; display: block; user-select: none; -webkit-user-drag: none; }
+.mt img { width: 100%; height: 100%; object-fit: cover; display: block; user-select: none; -webkit-user-drag: none; opacity: 0; transition: opacity var(--tb) var(--ease); }
+.mt img.ld { opacity: 1; }
 .mt .mt-play { position: absolute; inset: 0; margin: auto; width: 46px; height: 46px; padding: 0; gap: 0; border-radius: 50%; display: grid; place-items: center; background: rgba(20, 22, 26, .62); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #fff; transition: transform var(--tb) var(--ease), background var(--tf); }
 .mt .mt-play svg { fill: currentColor; margin-left: 3px; width: 18px; height: 18px; }
 .mt.vid:hover .mt-play { transform: scale(1.12); background: var(--ac); color: var(--ink); }
 .mt.sk { background: linear-gradient(100deg, var(--s2) 30%, var(--line) 50%, var(--s2) 70%) 0 0 / 220% 100%; animation: mt-sh 1.4s linear infinite; }
 @keyframes mt-sh { to { background-position: -120% 0; } }
-@media (prefers-reduced-motion: reduce) { .mt.sk { animation: none; } .mt, .mt .mt-play { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .mt.sk { animation: none; } .mt, .mt .mt-play, .mt img { transition: none; } .lb-s, .lb-m { transition: none; transform: none; } }
 
-.lb { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: 56px 72px; background: rgba(12, 13, 16, .92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); opacity: 0; visibility: hidden; transition: opacity var(--tb) var(--ease), visibility 0s var(--tb); }
-.lb.open { opacity: 1; visibility: visible; transition-delay: 0s; }
-.lb-m { width: min(1280px, 100%); max-height: 100%; display: grid; place-items: center; }
+.lb { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: 56px 72px; background: rgba(12, 13, 16, .92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); opacity: 0; visibility: hidden; transition: opacity var(--tb) var(--ein), visibility 0s var(--tb); }
+.lb.open { opacity: 1; visibility: visible; transition: opacity var(--tb) var(--ease), visibility 0s; }
+.lb-m { width: min(1280px, 100%); max-height: 100%; display: grid; place-items: center; transform: scale(.965); transition: transform var(--tb) var(--ein); }
+.lb.open .lb-m { transform: none; transition: transform var(--ts) var(--ease); }
+/* slides share one grid cell: the new one fades in (and slides a little in the direction of travel) while the old one fades out */
+.lb-s { grid-area: 1 / 1; width: 100%; min-width: 0; max-width: 100%; display: grid; place-items: center; opacity: 0; transform: translateX(var(--dx, 0px)) scale(.985); transition: opacity var(--tb) var(--ein), transform var(--tb) var(--ein); }
+.lb-s.in { opacity: 1; transform: none; transition: opacity var(--ts) var(--ease), transform var(--ts) var(--ease); }
+.lb-s.out { pointer-events: none; }
 .lb-m img, .lb-m video { max-width: 100%; max-height: calc(100vh - 140px); border-radius: 14px; background: #000; display: block; }
-.lb-m iframe { width: 100%; aspect-ratio: 16/9; max-height: calc(100vh - 140px); border: 0; border-radius: 14px; background: #000; }
+.lb-m iframe { width: min(1280px, 100%); aspect-ratio: 16/9; max-height: calc(100vh - 140px); border: 0; border-radius: 14px; background: #000; }
 .lb-err { color: var(--mu); font-size: 14px; padding: 40px; }
+.lb-c { transition: opacity var(--tb) var(--ease); }
 .lb-x, .lb-n { position: absolute; z-index: 2; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .12); color: #fff; transition: background var(--tf), transform var(--tb) var(--ease); }
 .lb-x:hover, .lb-n:hover { background: rgba(255, 255, 255, .26); }
 .lb-x { top: 16px; right: 16px; }

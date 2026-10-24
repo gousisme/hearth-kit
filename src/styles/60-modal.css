@@ -16,7 +16,12 @@
 .db { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; padding: 6px 40px 40px; }
 .db > * { min-width: 0; }
 .db h4 { font: 700 12px var(--fb); letter-spacing: .14em; text-transform: uppercase; color: var(--mu); margin: 28px 0 12px; }
-.db h4:first-child { margin-top: 0; }
+.db > div > h4:first-child, .db > div > .rg:first-child > h4:first-child { margin-top: 0; }
+/* a region of the sheet (see core/morph.js): fades in when it appears or is replaced after the sheet is already open */
+.rg-in { animation: hf-rg var(--tb) var(--ease) backwards; }
+@keyframes hf-rg { from { opacity: 0; transform: translateY(8px); } }
+.side > .rg { display: flex; flex-direction: column; gap: 12px; }
+@media (prefers-reduced-motion: reduce) { .rg-in { animation: none; } }
 .db p { color: #cfd3da; }
 .shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .shots > div { aspect-ratio: 16/9; border-radius: 10px; overflow: hidden; position: relative; background: var(--s2); transition: transform var(--tb) var(--ease); }

@@ -27,7 +27,7 @@ This is **the** interface between a scraper and the UI. A scraper only has to re
 
 | Field | Default when omitted |
 |---|---|
-| `site.name` / `mark` | "Hearth" / first letter. `mark` is the 1-character logo tile. `footer` is a small line under the page. `user` is `{name, avatarUrl?, initials?, href?}` for a signed-in visitor, and is what the avatar button and its account sheet are built from. **When nobody is signed in, omit `user` or set it to `null`: no avatar is drawn** (never pass a placeholder object). The avatar sits at the top of the page and scrolls away with it; only the nav pill stays fixed. |
+| `site.name` / `mark` / `logo` | "Hearth" / first letter / none. `mark` is the 1-character logo tile; `logo` (optional http(s) image URL) is the site's own logo, drawn in the tile once it has loaded (the letter shows until then and stays if the image never loads). Feature flag: `HearthUI.features.siteLogo`. `footer` is a small line under the page. `user` is `{name, avatarUrl?, initials?, href?}` for a signed-in visitor, and is what the avatar button and its account sheet are built from. **When nobody is signed in, omit `user` or set it to `null`: no avatar is drawn** (never pass a placeholder object). The avatar sits at the top of the page and scrolls away with it; only the nav pill stays fixed. |
 | `nav` | Discover (home) · Games (browse) · Library (saved) · New (sorted by year). Item: `{id, label, view:'home'\|'browse'\|'external', filter?, href?}`; `filter` is a browse filter (below). `external` + `href` opens a link. |
 | `categories` | up to 9 most frequent genres. `id` must match values in `game.categories`. |
 | `hero` | first 5 games that have a `steamAppId` or `art.hero`. Slides are game references, not copies. `eyebrow` default "Featured"/"Trending now". |
@@ -104,5 +104,5 @@ With 2+ `downloads` the Get button in the sheet unfolds them directly beneath it
   { "type": "image", "thumb": "https://…600x338.jpg", "src": "https://…1920x1080.jpg" }
 ]
 ```
-`resolveDetail(game, push)` may call `push(partialPatch)` any number of times (the sheet re-renders each time) before returning the final patch. A patch may also carry `steamAppId` and `art{poster,hero,logo,header,fallback}`: they are merged into the game, so a Steam id found late (e.g. from the page's own Steam link) fixes the sheet's hero/logo. Feature flags: `HearthUI.features.media / steamLink / detailPush`.
+`resolveDetail(game, push)` may call `push(partialPatch)` any number of times (the sheet updates region by region: a region whose HTML did not change keeps its DOM, so nothing that is already on screen is created or loaded a second time; new / changed regions fade in) before returning the final patch. A patch may also carry `steamAppId` and `art{poster,hero,logo,header,fallback}`: they are merged into the game, so a Steam id found late (e.g. from the page's own Steam link) fixes the sheet's hero/logo. Feature flags: `HearthUI.features.media / steamLink / detailPush`.
 

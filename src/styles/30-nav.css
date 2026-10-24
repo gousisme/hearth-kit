@@ -5,7 +5,9 @@
 .top { position: absolute; z-index: 40; top: 42px; left: 0; right: 0; min-height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 calc(max(0px, (100% - var(--max)) / 2) + var(--gut) + 26px); pointer-events: none; transition: opacity var(--ts) var(--ease), transform var(--ts) var(--ease); }
 .top > * { pointer-events: auto; }
 .hearth:not(.ready) .bar, .hearth:not(.ready) .top { opacity: 0; transform: translateY(-14px); }
-.mark { width: 44px; height: 44px; border-radius: 14px; background: var(--ac); color: var(--ink); display: grid; place-items: center; font: 800 22px var(--fd); transition: transform var(--tb) var(--ease); }
+.mark { position: relative; overflow: hidden; width: 44px; height: 44px; border-radius: 14px; background: var(--ac); color: var(--ink); display: grid; place-items: center; font: 800 22px var(--fd); transition: transform var(--tb) var(--ease); }
+.mark img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--tb) var(--ease); }
+.mark.ok img { opacity: 1; }
 .mark:hover { transform: rotate(-6deg) scale(1.06); }
 .mark:active { transform: scale(.92); }
 .bar-r { pointer-events: none; }
