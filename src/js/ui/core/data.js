@@ -72,8 +72,9 @@ export function similar(D, game, n = 3) {
 
 /**
  * Append games to an already-normalized D (used by the grid's loadMore and by app.add()).
- * Games already present are kept, but any new `genres` (search tags) are merged into them.
- * Returns { added: [new games], merged: number of existing games that gained genres }.
+ * Games already present are kept, but any new `genres` (search tags) and `categories` are merged into them (a game can belong to a category
+ * its own URL does not say, e.g. a racing game filed under /sandbox/: only the category's own page reveals it).
+ * Returns { added: [new games], merged: number of existing games that gained genres or categories }.
  */
 export function addGames(D, list) {
   const added = []; let merged = 0;
@@ -82,6 +83,8 @@ export function addGames(D, list) {
     if (!ex) { D.games.push(g); D.byId.set(g.id, g); added.push(g); return; }
     const more = g.genres.filter(t => !ex.genres.includes(t));
     if (more.length) { ex.genres.push(...more); merged++; }
+    const cats = g.categories.filter(c => !ex.categories.includes(c));
+    if (cats.length) { ex.categories.push(...cats); merged++; }
   });
   return { added, merged };
 }

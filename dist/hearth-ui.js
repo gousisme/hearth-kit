@@ -1,4 +1,4 @@
-/*! hearth-kit v0.5.9 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.5.10 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthUI=(function(){
 'use strict';
 /* ── src/js/shared/util.js ── */
@@ -197,8 +197,9 @@ function similar(D, game, n = 3) {
 
 /**
  * Append games to an already-normalized D (used by the grid's loadMore and by app.add()).
- * Games already present are kept, but any new `genres` (search tags) are merged into them.
- * Returns { added: [new games], merged: number of existing games that gained genres }.
+ * Games already present are kept, but any new `genres` (search tags) and `categories` are merged into them (a game can belong to a category
+ * its own URL does not say, e.g. a racing game filed under /sandbox/: only the category's own page reveals it).
+ * Returns { added: [new games], merged: number of existing games that gained genres or categories }.
  */
 function addGames(D, list) {
   const added = []; let merged = 0;
@@ -207,6 +208,8 @@ function addGames(D, list) {
     if (!ex) { D.games.push(g); D.byId.set(g.id, g); added.push(g); return; }
     const more = g.genres.filter(t => !ex.genres.includes(t));
     if (more.length) { ex.genres.push(...more); merged++; }
+    const cats = g.categories.filter(c => !ex.categories.includes(c));
+    if (cats.length) { ex.categories.push(...cats); merged++; }
   });
   return { added, merged };
 }
@@ -1436,7 +1439,7 @@ function adopt(scope, css) {
 }
 
 /* ── src/js/ui/index.js ── */
-const version = '0.5.9';
+const version = '0.5.10';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
 const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true };
 
