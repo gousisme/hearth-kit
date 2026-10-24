@@ -1,4 +1,4 @@
-/*! hearth-kit v0.5.7 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.5.8 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthUI=(function(){
 'use strict';
 /* ── src/js/shared/util.js ── */
@@ -525,12 +525,11 @@ function icf(path, size = 18) {
 function ic(path, size = 18, stroke = 2.4) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
 }
-/** The Get button's download glyph: a tray line that stays put + ONE group holding two arrows 17 units apart (the second parked above the first, clipped away).
- *  Sliding the group down by 17 makes the first arrow leave into the line while the second arrives; at 17 the picture equals the resting one. The arrows live in a nested <svg>
- *  so everything below its edge is clipped. Played once per hover by core/dl-loop.js. */
+/** The Get button's download glyph: a tray line that stays put + ONE arrow (shaft + head) inside a nested <svg>, so everything past its edge is clipped.
+ *  Played once per hover by core/dl-loop.js: the arrow drops into the line, a new one is drawn in from the top. At rest it is exactly the plain "arrow over a line" icon.
+ *  The shaft is dashed ("11 22" = its own length, then a gap) so the slide can draw it; the head is a separate polyline so it can travel on its own. */
 function dlGlyph(size = 18, stroke = 2.4) {
-  const arrow = 'M12 4v11m0 0-5-5m5 5 5-5';
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20h14"/><svg x="0" y="0" width="24" height="18.5" viewBox="0 0 24 18.5" overflow="hidden"><g class="ar-g"><path d="${arrow}"/><path d="${arrow}" transform="translate(0 -17)"/></g></svg></svg>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20h14"/><svg x="0" y="0" width="24" height="18.5" viewBox="0 0 24 18.5" overflow="hidden"><g class="ar-g"><path class="ar-s" d="M12 4v11" stroke-dasharray="11 22"/><path class="ar-h" d="M7 10l5 5 5-5"/></g></svg></svg>`;
 }
 
 /* ── src/js/ui/components/button.js ── */
@@ -540,7 +539,7 @@ function dlGlyph(size = 18, stroke = 2.4) {
  * `attrs` is raw HTML attributes (already escaped by the caller).
  */
 function button(label, { icon = ICON.download, attrs = '', cls = '' } = {}) {
-  const dl = icon === ICON.download;                  // the download glyph is one SVG (line + slidable arrow); every other icon is two copies that swap on hover
+  const dl = icon === ICON.download;                  // the download glyph is one SVG (line + drawable arrow); every other icon is two copies that swap on hover
   return `<button class="btn ${cls}" ${attrs}><span class="bl">${esc(label)}</span><span class="d"${dl ? ' data-dl' : ''}>${dl ? dlGlyph() : ic(icon) + ic(icon)}</span></button>`;
 }
 
@@ -851,21 +850,49 @@ function morphKids(parent, next, animate) {
 
 /* ── src/js/ui/core/dl-loop.js ── */
 /**
- * The Get button's arrow: ONE slide per hover (Web Animations API), no loop.
- * The glyph (see dlGlyph) is one group holding two arrows 17 units apart; sliding the group down by 17 makes the arrow leave into the line while the next one arrives from
- * above, and at 17 the picture is identical to the resting one (offset 0) — so the animation always ends exactly where it began and cannot be left half-way, whatever the pointer does.
- *   dlPlay(disc) — the pointer / keyboard focus reached the button: play once (ignored while it is still playing; plays again on the next hover)
+ * The Get button's arrow: ONE hand-style slide per hover (Web Animations API), modelled on the designer's "hover-slide":
+ *   1. the arrow drops down into the line and out of sight (accelerating),
+ *   2. a new arrow is drawn in from the top, head first — the head travels down, the shaft stretches behind it (decelerating).
+ * It is ONE arrow (a shaft + a head), animated through both phases, and every animated value ends exactly on its resting value (shaft fully drawn, head and group at
+ * offset 0, opacity 1). So when the animation ends nothing is swapped or re-placed: it cannot end "half-way" or jump, whatever the pointer does.
+ * The curves are sampled into plain keyframes (no CSS easing at the end of the slide), so how soft the landing is can be tuned in one place (ENTER_POW).
+ *   dlPlay(disc) — the pointer / keyboard focus reached the button: play once (ignored while playing; plays again on the next hover)
  */
-const DIST = 17, MS = 560, EASE = 'cubic-bezier(.45, 0, .2, 1)';
-const KF = [{ transform: 'translateY(0px)' }, { transform: `translateY(${DIST}px)` }];
+const DIST = 17, SHAFT = 11, MS = 700, EXIT = 0.3, EPS = 0.002, N_EXIT = 8, N_ENTER = 24, EXIT_POW = 2.2, ENTER_POW = 2;
+const px = v => `${Math.round(v * 100) / 100}px`;
+
+/** keyframes for the three parts: g = the whole arrow, h = its head, s = its shaft (drawn with stroke-dasharray = "11 22", so dashoffset 11 = nothing, 0 = all) */
+function buildKeyframes() {
+  const g = [], h = [], s = [];
+  for (let i = 0; i <= N_EXIT; i++) {                          // 1 · drop out
+    const u = i / N_EXIT, t = EXIT * u;
+    g.push({ offset: t, transform: `translateY(${px(DIST * Math.pow(u, EXIT_POW))})` });
+    h.push({ offset: t, transform: 'translateY(0px)' });
+    s.push({ offset: t, strokeDashoffset: '0px', opacity: 1 });
+  }
+  for (let i = 0; i <= N_ENTER; i++) {                         // 2 · drawn in from the top (starts out of sight, while the old arrow is already gone)
+    const u = i / N_ENTER, t = EXIT + EPS + (1 - EXIT - EPS) * u, e = 1 - Math.pow(1 - u, ENTER_POW);
+    const off = -DIST * (1 - e), drawn = Math.min(1, Math.max(0, (SHAFT + off) / SHAFT));     // the shaft reaches from the top (y 4) to the head's tip (y 15 + off)
+    g.push({ offset: t, transform: 'translateY(0px)' });
+    h.push({ offset: t, transform: `translateY(${px(off)})` });
+    s.push({ offset: t, strokeDashoffset: px(SHAFT * (1 - drawn)), opacity: drawn > 0 ? 1 : 0 });
+  }
+  return { g, h, s };
+}
+
+let KF = null;
 const busy = new WeakSet();                                   // discs that are playing right now
 
 function dlPlay(d) {
   if (!d || reduced() || busy.has(d)) return;
-  const g = d.querySelector('.ar-g'); if (!g || !g.animate) return;
+  const g = d.querySelector('.ar-g'), h = d.querySelector('.ar-h'), s = d.querySelector('.ar-s');
+  if (!g || !h || !s || !g.animate) return;
+  KF = KF || buildKeyframes();
   busy.add(d);
-  const a = g.animate(KF, { duration: MS, easing: EASE });    // fill: none → back to the resting transform when it ends (which looks the same)
-  a.onfinish = a.oncancel = () => busy.delete(d);
+  const o = { duration: MS, easing: 'linear' };                // fill: none → back to the resting values at the end, which are exactly the last keyframe
+  const done = () => busy.delete(d);
+  const a = g.animate(KF.g, o); h.animate(KF.h, o); s.animate(KF.s, o);
+  a.onfinish = a.oncancel = done;
 }
 
 /* ── src/js/ui/components/profile.js ── */
@@ -1376,7 +1403,7 @@ function adopt(scope, css) {
 }
 
 /* ── src/js/ui/index.js ── */
-const version = '0.5.7';
+const version = '0.5.8';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
 const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true };
 

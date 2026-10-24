@@ -7,7 +7,7 @@ import { ic, dlGlyph, ICON } from '../core/icons.js';
  * `attrs` is raw HTML attributes (already escaped by the caller).
  */
 export function button(label, { icon = ICON.download, attrs = '', cls = '' } = {}) {
-  const dl = icon === ICON.download;                  // the download glyph is one SVG (line + slidable arrow); every other icon is two copies that swap on hover
+  const dl = icon === ICON.download;                  // the download glyph is one SVG (line + drawable arrow); every other icon is two copies that swap on hover
   return `<button class="btn ${cls}" ${attrs}><span class="bl">${esc(label)}</span><span class="d"${dl ? ' data-dl' : ''}>${dl ? dlGlyph() : ic(icon) + ic(icon)}</span></button>`;
 }
 
