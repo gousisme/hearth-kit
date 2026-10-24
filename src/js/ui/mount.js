@@ -4,7 +4,7 @@ import { createArt } from './core/art.js';
 import { createEnrich } from './core/enrich.js';
 import { reveal, swap, T, reduced } from './core/motion.js';
 import { heroHtml, initHero } from './components/hero.js';
-import { chipsHtml } from './components/chips.js';
+import { genresHtml } from './components/genres.js';
 import { featuredHtml } from './components/featured.js';
 import { shelfHtml, initShelves } from './components/shelf.js';
 import { barHtml, cornerHtml, searchHtml, navActive } from './components/nav.js';
@@ -71,7 +71,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
   /* ── render ─────────────────────────────────────────────────────────────────────────────── */
   function homeHtml() {
     if (!D.games.length) return `<div class="empty has-bar"><h3>No games to show</h3><p>The page was read, but no games were found. Check the scraper selectors.</p></div>`;
-    return heroHtml(D.hero) + chipsHtml(D.categories, '') + featuredHtml(D.featured) + D.shelves.map(shelfHtml).join('');
+    return heroHtml(D.hero) + featuredHtml(D.featured) + genresHtml(D) + D.shelves.map(shelfHtml).join('');
   }
 
   function paint() {

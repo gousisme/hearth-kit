@@ -19,7 +19,12 @@
 .sh-h h2 { font: 700 22px var(--fd); letter-spacing: -.01em; }
 .more { color: var(--mu); font-size: 14px; transition: color var(--tf); }
 .more:hover { color: var(--ac); }
-.rw { position: relative; }
+.rw { position: relative; --fl: 0; --fr: 0; }
+/* The ends of a row fade into the page while there is more to scroll (opacity follows the scroll position, set from JS in initShelves). Two overlays, so the cards
+   themselves are never masked or re-rasterised (same approach as the media strip). The arrows (.nx) sit above them. */
+.rw::before, .rw::after { content: ""; position: absolute; top: 0; bottom: 0; width: 72px; z-index: 2; pointer-events: none; }
+.rw::before { left: 0; opacity: var(--fl); background: linear-gradient(90deg, var(--bg) 6%, transparent); }
+.rw::after { right: 0; opacity: var(--fr); background: linear-gradient(270deg, var(--bg) 6%, transparent); }
 .row { display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 10px 0 18px; margin: -10px 0 -18px; }
 .row::-webkit-scrollbar { display: none; }
 .nx { position: absolute; top: calc(50% - 26px); right: -22px; z-index: 5; width: 46px; height: 46px; border-radius: 50%; background: var(--tx); color: var(--ink); display: grid; place-items: center; opacity: 0; transform: scale(.8); pointer-events: none; transition: opacity var(--tb) var(--ease), transform var(--tb) var(--ease); }

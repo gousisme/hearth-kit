@@ -1,4 +1,4 @@
-/*! hearth-kit v0.5.8 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.5.9 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthUI=(function(){
 'use strict';
 /* ── src/js/shared/util.js ── */
@@ -615,12 +615,32 @@ function initHero(hero, { autoplay = true, ms = 7000, warm = null } = {}) {
   return { go, destroy() { clearTimeout(timer); clearTimeout(warmTimer); document.removeEventListener('visibilitychange', vis); io && io.disconnect(); } };
 }
 
-/* ── src/js/ui/components/chips.js ── */
-/** Category pills. `active` is a category id, or '' for "All". */
-function chipsHtml(categories, active = '') {
-  if (!categories.length) return '';
-  const chip = (id, label) => `<button class="chip${id === active ? ' on' : ''}" data-cat="${esc(id)}" aria-pressed="${id === active}">${esc(label)}</button>`;
-  return `<div class="chips" role="group" aria-label="Categories">${chip('', 'All')}${categories.map(c => chip(c.id, c.label)).join('')}</div>`;
+/* ── src/js/ui/components/genres.js ── */
+/** A stable hue (0-359) from a category id, so every category keeps its own colour between visits. */
+function hueOf(id) { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
+
+/**
+ * "Browse by category" tiles (Steam style): a few of the category's games blended into a tinted collage with the name in a pill.
+ * Reuses the shelf markup (.rw / .row / .nx), so initShelves() gives it the arrows and the edge fades; a tile is a [data-cat] button,
+ * so the existing category click handler opens Browse filtered to it. The pseudo category "updated" has its own nav entry and is skipped.
+ */
+function genresHtml(D, { title = 'Browse by category', max = 14 } = {}) {
+  const list = D.categories.filter(c => c.id && c.id !== 'updated');
+  if (!list.length) return '';
+  const hasArt = g => (g.steamAppId || (g.art && (g.art.header || g.art.hero || g.art.poster))) ? 1 : 0;
+  const used = new Map();                                            // a game is shown on as few tiles as possible, so neighbouring tiles do not look alike
+  const tile = c => {
+    const pool = D.games.filter(g => g.categories.includes(c.id)).sort((a, b) => hasArt(b) - hasArt(a) || (used.get(a.id) || 0) - (used.get(b.id) || 0));
+    const pick = pool.slice(0, 3); pick.forEach(g => used.set(g.id, (used.get(g.id) || 0) + 1));
+    return `<button type="button" class="gt rv" data-cat="${esc(c.id)}" style="--h:${hueOf(c.id)}" aria-label="${esc(c.label)}">
+      <span class="gt-art" aria-hidden="true">${pick.map(g => `<span class="gt-a">${layer(g, 'header')}</span>`).join('')}</span>
+      <span class="gt-name">${esc(c.label)}</span></button>`;
+  };
+  return `<section class="shelf genres" data-shelf="genres">
+    <div class="sh-h rv"><h2>${esc(title)}</h2></div>
+    <div class="rw"><button class="nx pv is-end" aria-label="Scroll back" tabindex="-1">${ic(ICON.prev, 20, 2.6)}</button>
+      <div class="row">${list.slice(0, max).map(tile).join('')}</div>
+      <button class="nx" aria-label="Scroll forward" tabindex="-1">${ic(ICON.next, 20, 2.6)}</button></div></section>`;
 }
 
 /* ── src/js/ui/components/featured.js ── */
@@ -661,12 +681,17 @@ function shelfHtml(s) {
       <button class="nx" aria-label="Scroll forward" tabindex="-1">${ic(ICON.next, 20, 2.6)}</button></div></section>`;
 }
 
-/** Wire scroll buttons; they hide at either end. Returns a cleanup fn. */
+/** Wire scroll buttons; they hide at either end, and the row's edges fade out while there is more to scroll (--fl / --fr on .rw, same idea as the media strip). Returns a cleanup fn. */
 function initShelves(root) {
-  const cleanups = [];
+  const cleanups = [], FADE = 72;
   root.querySelectorAll('.rw').forEach(rw => {
     const row = rw.querySelector('.row'), [pv, nx] = rw.querySelectorAll('.nx');
-    const sync = () => { pv.classList.toggle('is-end', row.scrollLeft < 8); nx.classList.toggle('is-end', row.scrollLeft + row.clientWidth > row.scrollWidth - 8); };
+    const sync = () => {
+      const max = row.scrollWidth - row.clientWidth;
+      pv.classList.toggle('is-end', row.scrollLeft < 8); nx.classList.toggle('is-end', row.scrollLeft + row.clientWidth > row.scrollWidth - 8);
+      rw.style.setProperty('--fl', Math.max(0, Math.min(1, row.scrollLeft / FADE)).toFixed(3));
+      rw.style.setProperty('--fr', Math.max(0, Math.min(1, (max - row.scrollLeft) / FADE)).toFixed(3));
+    };
     const by = dir => row.scrollBy({ left: dir * row.clientWidth * .8, behavior: 'smooth' });
     pv.onclick = () => by(-1); nx.onclick = () => by(1);
     row.addEventListener('scroll', sync, { passive: true });
@@ -923,6 +948,14 @@ function profileHtml(u, p, { pending = false } = {}) {
   </div>`;
 }
 
+/* ── src/js/ui/components/chips.js ── */
+/** Category pills. `active` is a category id, or '' for "All". */
+function chipsHtml(categories, active = '') {
+  if (!categories.length) return '';
+  const chip = (id, label) => `<button class="chip${id === active ? ' on' : ''}" data-cat="${esc(id)}" aria-pressed="${id === active}">${esc(label)}</button>`;
+  return `<div class="chips" role="group" aria-label="Categories">${chip('', 'All')}${categories.map(c => chip(c.id, c.label)).join('')}</div>`;
+}
+
 /* ── src/js/ui/components/browse.js ── */
 /** The grid renders in chunks: a few hundred cards at once is ~12k DOM nodes and a visible stall on every tab change. */
 const GRID_CHUNK = 24;
@@ -1050,7 +1083,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   /* ── render ─────────────────────────────────────────────────────────────────────────────── */
   function homeHtml() {
     if (!D.games.length) return `<div class="empty has-bar"><h3>No games to show</h3><p>The page was read, but no games were found. Check the scraper selectors.</p></div>`;
-    return heroHtml(D.hero) + chipsHtml(D.categories, '') + featuredHtml(D.featured) + D.shelves.map(shelfHtml).join('');
+    return heroHtml(D.hero) + featuredHtml(D.featured) + genresHtml(D) + D.shelves.map(shelfHtml).join('');
   }
 
   function paint() {
@@ -1403,7 +1436,7 @@ function adopt(scope, css) {
 }
 
 /* ── src/js/ui/index.js ── */
-const version = '0.5.8';
+const version = '0.5.9';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
 const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true };
 

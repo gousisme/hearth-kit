@@ -1,0 +1,15 @@
+/* "Browse by category" tiles: a tinted collage of the category's games with the name in a pill. Lives in a normal shelf row (.rw / .row), so it gets arrows + edge fades. */
+.genres .row { gap: 14px; }
+.gt { position: relative; flex: none; width: 250px; height: 140px; border-radius: 14px; overflow: hidden; isolation: isolate; scroll-snap-align: start; cursor: pointer; display: grid; place-items: center; padding: 0 14px; background: hsl(var(--h) 38% 22%); transition: transform var(--tb) var(--ease), box-shadow var(--tb) var(--ease); }
+.gt:hover { transform: translateY(-4px); box-shadow: 0 14px 30px rgba(0, 0, 0, .35); }
+.gt-art { position: absolute; inset: 0; display: flex; z-index: -2; }
+.gt-a { position: relative; flex: 1; min-width: 0; opacity: .8; transition: transform var(--ts) var(--ease); }
+.gt-a .layer { background: transparent; }
+.gt:hover .gt-a { transform: scale(1.06); }
+/* tint: the category's colour fades in from the left and bottom so the collage melts together and the pill stays readable */
+.gt::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(115deg, hsl(var(--h) 55% 30% / .9), hsl(calc(var(--h) + 35) 50% 22% / .45) 70%, hsl(calc(var(--h) + 35) 50% 18% / .6)); }
+.gt-name { max-width: 100%; padding: 8px 16px; border-radius: 8px; background: var(--tx); color: var(--ink); font: 700 14px/1.25 var(--fd); letter-spacing: .08em; text-transform: uppercase; text-align: center; transition: background var(--tf), transform var(--tb) var(--ease); }
+.gt:hover .gt-name { background: var(--ac); transform: scale(1.04); }
+.gt:active { transform: scale(.98); }
+@media (max-width: 820px) { .gt { width: 210px; height: 120px; } }
+@media (prefers-reduced-motion: reduce) { .gt, .gt-a, .gt-name { transition: none; } }

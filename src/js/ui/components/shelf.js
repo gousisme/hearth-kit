@@ -12,12 +12,17 @@ export function shelfHtml(s) {
       <button class="nx" aria-label="Scroll forward" tabindex="-1">${ic(ICON.next, 20, 2.6)}</button></div></section>`;
 }
 
-/** Wire scroll buttons; they hide at either end. Returns a cleanup fn. */
+/** Wire scroll buttons; they hide at either end, and the row's edges fade out while there is more to scroll (--fl / --fr on .rw, same idea as the media strip). Returns a cleanup fn. */
 export function initShelves(root) {
-  const cleanups = [];
+  const cleanups = [], FADE = 72;
   root.querySelectorAll('.rw').forEach(rw => {
     const row = rw.querySelector('.row'), [pv, nx] = rw.querySelectorAll('.nx');
-    const sync = () => { pv.classList.toggle('is-end', row.scrollLeft < 8); nx.classList.toggle('is-end', row.scrollLeft + row.clientWidth > row.scrollWidth - 8); };
+    const sync = () => {
+      const max = row.scrollWidth - row.clientWidth;
+      pv.classList.toggle('is-end', row.scrollLeft < 8); nx.classList.toggle('is-end', row.scrollLeft + row.clientWidth > row.scrollWidth - 8);
+      rw.style.setProperty('--fl', Math.max(0, Math.min(1, row.scrollLeft / FADE)).toFixed(3));
+      rw.style.setProperty('--fr', Math.max(0, Math.min(1, (max - row.scrollLeft) / FADE)).toFixed(3));
+    };
     const by = dir => row.scrollBy({ left: dir * row.clientWidth * .8, behavior: 'smooth' });
     pv.onclick = () => by(-1); nx.onclick = () => by(1);
     row.addEventListener('scroll', sync, { passive: true });
