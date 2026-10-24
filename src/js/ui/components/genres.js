@@ -2,6 +2,10 @@ import { esc } from '../../shared/util.js';
 import { layer } from '../core/art.js';
 import { ic, ICON } from '../core/icons.js';
 
+/** Brick slots (row * 4 + col) ordered by distance from the middle of the tilted wall. The middle row is shifted ~0.44 of a brick to the right and a brick is ~0.68 as tall as it is wide. */
+const ORDER = Array.from({ length: 12 }, (_, i) => i).sort((a, b) => dist(a) - dist(b));
+function dist(i) { const r = Math.floor(i / 4), c = i % 4, x = c - 1.5 + (r === 1 ? 0.44 : 0), y = (r - 1) * 0.68; return Math.hypot(x, y); }
+
 /** A stable hue (0-359) from a category id, so every category keeps its own colour between visits. */
 function hueOf(id) { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
 
@@ -17,10 +21,12 @@ export function genresHtml(D, { title = 'Browse by category', max = 14 } = {}) {
   const used = new Map();                                            // a game is shown on as few tiles as possible, so neighbouring tiles do not look alike
   const tile = c => {
     const pool = D.games.filter(g => g.categories.includes(c.id)).sort((a, b) => hasArt(b) - hasArt(a) || (used.get(a.id) || 0) - (used.get(b.id) || 0));
-    const pick = pool.slice(0, 8); pick.forEach(g => used.set(g.id, (used.get(g.id) || 0) + 1));
-    // a wall of 3 rows x 4 bricks; the real artwork sits on most of them, the rest are plain tinted bricks. Only the art costs a request.
-    const at = [1, 2, 3, 4, 5, 6, 8, 10].slice(0, pick.length), bricks = Array.from({ length: 12 }, (_, i) => { const k = at.indexOf(i); return k < 0 ? '<span class="gt-b"></span>' : `<span class="gt-b has">${layer(pick[k], 'header')}</span>`; });
-    const rows = [0, 1, 2].map(r => `<span class="gt-r">${bricks.slice(r * 4, r * 4 + 4).join('')}</span>`).join('');
+    const pick = pool.slice(0, 6); pick.forEach(g => used.set(g.id, (used.get(g.id) || 0) + 1));
+    // a wall of 3 rows x 4 bricks, filled from the CENTRE outwards with the category's games, looping through them when there are fewer games than bricks
+    // (the best-looking games therefore sit where the eye lands, and the wall never has bare patches). Only the nearest bricks to the centre are the ones you really see.
+    const bricks = ORDER.map(i => pick.length ? `<span class="gt-b has">${layer(pick[ORDER.indexOf(i) % pick.length], 'header')}</span>` : '<span class="gt-b"></span>');
+    const cells = []; ORDER.forEach((slot, rank) => { cells[slot] = bricks[rank]; });
+    const rows = [0, 1, 2].map(r => `<span class="gt-r">${cells.slice(r * 4, r * 4 + 4).join('')}</span>`).join('');
     return `<button type="button" class="gt rv" data-cat="${esc(c.id)}" style="--h:${hueOf(c.id)}" aria-label="${esc(c.label)}">
       <span class="gt-art" aria-hidden="true">${rows}</span>
       <span class="gt-name">${esc(c.label)}</span></button>`;
