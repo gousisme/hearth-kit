@@ -1,7 +1,12 @@
 /* Media strip (trailers + screenshots) in the detail sheet, its viewer, and the Save / Open Steam row */
 .media { margin: 0 0 26px; }
-.mstrip { --fl: 0px; --fr: 0px; display: flex; gap: 10px; overflow-x: auto; padding: 6px 0 12px; margin-top: -6px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; cursor: grab; outline: 0; overscroll-behavior-x: contain; user-select: none; -webkit-user-select: none;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%); }   /* the ends fade out (their width follows the scroll position, set from JS) instead of being cut off */
+.media { position: relative; --fl: 0; --fr: 0; }
+/* The ends of the strip fade into the sheet: two gradient overlays whose opacity follows the scroll position (set from JS). Nothing is masked or re-rasterised,
+   so the thumbnails themselves are never touched (a mask on the scroller made them flicker while images loaded and tiles scaled on hover). */
+.media::before, .media::after { content: ""; position: absolute; top: 0; bottom: 12px; width: 64px; z-index: 2; pointer-events: none; }
+.media::before { left: 0; opacity: var(--fl); background: linear-gradient(90deg, var(--s1) 8%, transparent); }
+.media::after { right: 0; opacity: var(--fr); background: linear-gradient(270deg, var(--s1) 8%, transparent); }
+.mstrip { display: flex; gap: 10px; overflow-x: auto; padding: 6px 0 12px; margin-top: -6px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; cursor: grab; outline: 0; overscroll-behavior-x: contain; user-select: none; -webkit-user-select: none; }
 .mstrip.is-drag { cursor: grabbing; }
 .mstrip.is-drag .mt { pointer-events: none; transform: none; }
 .mstrip::-webkit-scrollbar { height: 6px; }

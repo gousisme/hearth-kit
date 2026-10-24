@@ -1,4 +1,4 @@
-/*! hearth-kit v0.5.0 — DO NOT EDIT, edit src/styles/ and run `npm run build` */
+/*! hearth-kit v0.5.1 — DO NOT EDIT, edit src/styles/ and run `npm run build` */
 
 /* ── src/styles/00-tokens.css ── */
 /* TOKENS — everything visual that is a decision lives here. Override from options.theme
@@ -132,11 +132,15 @@ a.btn { text-decoration: none; }
 
 /* the only "glass" in the system: the floating bar and a few chips over imagery */
 .gl { background: rgba(32, 34, 40, .5); backdrop-filter: blur(20px) saturate(1.2); -webkit-backdrop-filter: blur(20px) saturate(1.2); border: 1px solid rgba(255, 255, 255, .1); }
-.pill { display: flex; gap: 2px; padding: 5px; border-radius: 99px; }
-.pill button { padding: 10px 22px; border-radius: 99px; font-weight: 600; color: #d5d8de; transition: background var(--tb) var(--ease), color var(--tf), transform var(--tf) var(--ease); }
+.pill { position: relative; display: flex; gap: 2px; padding: 5px; border-radius: 99px; }
+.pill button { position: relative; z-index: 1; padding: 10px 22px; border-radius: 99px; font-weight: 600; color: #d5d8de; transition: color var(--tf), transform var(--tf) var(--ease); }
 .pill button:hover { color: #fff; }
 .pill button:active { transform: scale(.95); }
-.pill button.on { background: var(--ac); color: var(--ink); }
+.pill button.on { color: var(--ink); }
+/* the selection: ONE shape that glides to the chosen item. Its two edges have their own timing (set from JS: the leading edge is quick, the trailing edge follows),
+   so it stretches while it travels and settles back to the item's width, like a liquid pill. */
+.pill .ind { position: absolute; top: 5px; bottom: 5px; left: 0; right: 0; border-radius: 99px; background: var(--ac); pointer-events: none; opacity: 0; transition: left 380ms var(--ease), right 380ms var(--ease), opacity var(--tf); }
+.pill .ind.no-anim { transition: none; }
 .pill .sb { padding: 10px 14px; }
 
 /* search drop-down under the pill */
@@ -355,8 +359,13 @@ a.dl:hover .da { color: var(--ac); transform: translate(2px, -2px); }
 /* ── src/styles/63-media.css ── */
 /* Media strip (trailers + screenshots) in the detail sheet, its viewer, and the Save / Open Steam row */
 .media { margin: 0 0 26px; }
-.mstrip { --fl: 0px; --fr: 0px; display: flex; gap: 10px; overflow-x: auto; padding: 6px 0 12px; margin-top: -6px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; cursor: grab; outline: 0; overscroll-behavior-x: contain; user-select: none; -webkit-user-select: none;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%); }   /* the ends fade out (their width follows the scroll position, set from JS) instead of being cut off */
+.media { position: relative; --fl: 0; --fr: 0; }
+/* The ends of the strip fade into the sheet: two gradient overlays whose opacity follows the scroll position (set from JS). Nothing is masked or re-rasterised,
+   so the thumbnails themselves are never touched (a mask on the scroller made them flicker while images loaded and tiles scaled on hover). */
+.media::before, .media::after { content: ""; position: absolute; top: 0; bottom: 12px; width: 64px; z-index: 2; pointer-events: none; }
+.media::before { left: 0; opacity: var(--fl); background: linear-gradient(90deg, var(--s1) 8%, transparent); }
+.media::after { right: 0; opacity: var(--fr); background: linear-gradient(270deg, var(--s1) 8%, transparent); }
+.mstrip { display: flex; gap: 10px; overflow-x: auto; padding: 6px 0 12px; margin-top: -6px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; cursor: grab; outline: 0; overscroll-behavior-x: contain; user-select: none; -webkit-user-select: none; }
 .mstrip.is-drag { cursor: grabbing; }
 .mstrip.is-drag .mt { pointer-events: none; transform: none; }
 .mstrip::-webkit-scrollbar { height: 6px; }

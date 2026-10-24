@@ -11,7 +11,7 @@ export function navActive(n, route) {
 
 /** Floating glass pill: sections + search. It is the only part of the top bar that stays on screen while scrolling. */
 export function barHtml(D, route) {
-  return `<header class="bar"><nav class="gl pill" aria-label="Sections">
+  return `<header class="bar"><nav class="gl pill" aria-label="Sections"><i class="ind" aria-hidden="true"></i>
       ${D.nav.map(n => `<button data-nav-id="${esc(n.id)}"${navActive(n, route) ? ' class="on" aria-current="page"' : ''}>${esc(n.label)}</button>`).join('')}
       <button class="sb" data-search-toggle aria-label="Search" aria-expanded="false">${ic(ICON.search)}</button>
     </nav></header>`;

@@ -11,7 +11,7 @@ export function heroHtml(slides) {
     return `<article class="slide${i ? '' : ' on'}" aria-roledescription="slide" ${i ? 'aria-hidden="true"' : ''}>
       <div class="art">${layer(g, 'hero')}</div>
       <div class="info">
-        <div class="chip-new"><i></i>${esc(eyebrow)}${g.tagline ? ' · ' + esc(g.tagline) : ''}</div>
+        <div class="chip-new"><i></i>${esc(eyebrow)}</div>
         ${logoSlot(g)}
         <div class="tags">${meta}</div>
         <div class="acts">${button('Get game', { attrs: `data-get="${esc(g.id)}"` })}${glassButton('Details', `data-open="${esc(g.id)}"`)}</div>

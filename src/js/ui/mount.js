@@ -97,7 +97,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     $bar.innerHTML = barHtml(D, route) + searchHtml();
     $top.innerHTML = cornerHtml(D);
     $top.querySelectorAll('.mark img').forEach(im => { const ok = () => im.parentNode && im.parentNode.classList.add('ok'); im.complete && im.naturalWidth ? ok() : im.addEventListener('load', ok, { once: true }); });   // the site's own logo fades in over the letter
-    $search = $bar.querySelector('.searchbox'); $input = $search.querySelector('input');
+    $search = $bar.querySelector('.searchbox'); $input = $search.querySelector('input'); watchInd(); moveInd(true);
     $input.addEventListener('input', debounce(onSearch, 180));
   }
   let $search, $input;
@@ -106,7 +106,31 @@ export function mount({ target = document.body, data, css = null, shadow, option
       const b = $bar.querySelector(`[data-nav-id="${CSS.escape(n.id)}"]`); if (!b) return;
       const on = navActive(n, route); b.classList.toggle('on', on); on ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current');
     });
+    moveInd(true);
   }
+  /** The selection pill glides to the active item. Moving right the right edge leads and the left edge follows (and the other way round), so it stretches on the way. */
+  let indPos = null;                                   // where the pill last was ({ l, r } in px), also across a re-render of the bar
+  function moveInd(animate) {
+    const pill = $bar.querySelector('.pill'), ind = pill && pill.querySelector('.ind'); if (!ind) return;
+    const on = pill.querySelector('[data-nav-id].on');
+    if (!on || !pill.clientWidth) { ind.style.opacity = '0'; return; }
+    const l = on.offsetLeft, r = pill.clientWidth - l - on.offsetWidth;
+    if (!ind.__init) {                                 // a new bar: start where the old pill was (so a re-render still animates), or right at the item
+      ind.__init = 1; ind.classList.add('no-anim');
+      const from = animate && indPos || { l, r }; ind.style.left = from.l + 'px'; ind.style.right = from.r + 'px'; ind.style.opacity = '1';
+      void ind.offsetWidth; ind.classList.remove('no-anim');
+    }
+    if (!animate) ind.classList.add('no-anim');
+    if (indPos && indPos.l === l && indPos.r === r && ind.__init && !ind.classList.contains('no-anim')) { ind.style.opacity = '1'; return; }   // already there (syncNav runs twice per navigation): leave the running glide alone
+    const from = indPos || { l, r }, right = l > from.l || (l === from.l && r < from.r), dist = Math.abs(l - from.l) + Math.abs(r - from.r);
+    const lead = Math.round(230 + Math.min(dist, 600) * .12), trail = Math.round(lead * 1.9);
+    ind.style.transition = animate ? `left ${right ? trail : lead}ms var(--ease), right ${right ? lead : trail}ms var(--ease), opacity var(--tf)` : '';
+    ind.style.left = l + 'px'; ind.style.right = r + 'px'; ind.style.opacity = '1';
+    if (!animate) { void ind.offsetWidth; ind.classList.remove('no-anim'); }
+    indPos = { l, r };
+  }
+  let indRO = null;                                    // keep the pill on its item when the bar's size changes (fonts arriving, window resize, the host being shown again)
+  const watchInd = () => { indRO && indRO.disconnect(); const pill = $bar.querySelector('.pill'); if (pill && typeof ResizeObserver === 'function') { indRO = new ResizeObserver(() => moveInd(false)); indRO.observe(pill); } };
 
   function go(view, filter = {}) {
     route = { view, filter: { ...filter } };
@@ -255,8 +279,8 @@ export function mount({ target = document.body, data, css = null, shadow, option
 
   /* ── media strip: edge fades, a smooth glide for Shift+wheel, drag with momentum ── */
   let dragMoved = false, drag = null, glide = null, coast = 0;
-  const FADE = 56;
-  const stripFade = s => { const max = s.scrollWidth - s.clientWidth; s.style.setProperty('--fl', Math.max(0, Math.min(FADE, s.scrollLeft)) + 'px'); s.style.setProperty('--fr', Math.max(0, Math.min(FADE, max - s.scrollLeft)) + 'px'); };
+  const FADE = 64;
+  const stripFade = s => { const m = s.parentNode, max = s.scrollWidth - s.clientWidth; if (!m) return; m.style.setProperty('--fl', Math.max(0, Math.min(1, s.scrollLeft / FADE)).toFixed(3)); m.style.setProperty('--fr', Math.max(0, Math.min(1, (max - s.scrollLeft) / FADE)).toFixed(3)); };
   function stripReady() {                                                                              // after every paint: fade state, and thumbnails fade in as they load
     const s = $sheet.querySelector('.mstrip'); if (s && !s.__fade) { s.__fade = 1; s.addEventListener('scroll', () => stripFade(s), { passive: true }); }
     if (s) stripFade(s);
@@ -382,7 +406,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 

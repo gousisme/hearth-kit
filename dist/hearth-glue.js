@@ -1,4 +1,4 @@
-/*! hearth-kit v0.5.0 · HearthGlue · built from src/js/glue/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.5.1 · HearthGlue · built from src/js/glue/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthGlue=(function(){
 'use strict';
 /* ── src/js/shared/wait.js ── */
