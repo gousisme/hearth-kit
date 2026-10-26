@@ -809,6 +809,11 @@ function actsHtml(g, saved) {
   return `<div class="acts">${wish}<a class="btn glass alt steam" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${icf(LOGO.steam, 20)}<span>Open in Steam</span></a></div>`;
 }
 
+/** The facts card (label / value rows). */
+function factsHtml(rows) {
+  return rows.length ? `<div class="facts" data-k="facts">${rows.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : '';
+}
+
 /** Game detail sheet (rendered into the modal). Sections with no data are omitted. */
 function detailHtml(D, g, { saved = false, placeholders = false, pending = false, dlOpen = false } = {}) {
   const req = (g.requirements.minimum && Object.keys(g.requirements.minimum).length) || Object.keys(g.requirements.recommended).length ? g.requirements : placeholders ? DEMO_REQ : null;
@@ -841,7 +846,7 @@ function detailHtml(D, g, { saved = false, placeholders = false, pending = false
   </div>
   <aside class="side" data-k="side" data-morph>${rg('get', getBox(g, { pending, dlOpen }))}
     ${rg('acts', actsHtml(g, saved))}
-    ${facts.length ? `<div class="facts" data-k="facts">${facts.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : ''}
+    ${factsHtml(facts)}
     ${rg('sim', sim.length ? `<h4 class="sh4">Similar</h4>${sim.map(x => `<div class="sim" tabindex="0" role="button" data-open="${esc(x.id)}"><div class="sa is-skel">${artImg(x, 'header')}</div>${esc(x.title)}</div>`).join('')}` : '')}
   </aside></div>`;
 }
@@ -1459,8 +1464,11 @@ function adopt(scope, css) {
 /* ── src/js/ui/index.js ── */
 const version = '0.5.12';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true };
+const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true, parts: true };
 
-return {mount, validate, steam, normalize, version, features};
+/** The sheet's own building blocks, for pages a userscript draws next to the sheet (so they look exactly like it and never re-implement it). */
+const parts = { getBox, guideHtml, actsHtml, factsHtml, logoSlot, layer, morphInto, ic, icf, ICON, LOGO };
+
+return {mount, validate, steam, normalize, version, features, parts};
 })();
 if(typeof window!=='undefined')window.HearthUI=HearthUI;

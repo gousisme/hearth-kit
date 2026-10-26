@@ -11,7 +11,7 @@ const KIND_ICON = { hosters: ICON.cloud, drive: ICON.drive, fix: ICON.fix, torre
 const verLabel = v => (/^v?\d/i.test(v) ? 'v' + v.replace(/^v/i, '') : v);
 
 /** The download list that opens directly under the Get button (one card, not a floating menu). */
-function getBox(g, { pending, dlOpen }) {
+export function getBox(g, { pending, dlOpen }) {
   const dl = g.downloads, expandable = dl.length > 1 || pending;
   const label = 'Get game' + (g.size ? ' · ' + g.size : '');
   if (!expandable) return button(label, { attrs: `data-get="${esc(g.id)}"`, cls: 'w' });
@@ -23,7 +23,7 @@ function getBox(g, { pending, dlOpen }) {
 }
 
 /** "How to connect": install / launch / join / host, as numbered cards. Skeleton lines while it is being fetched. */
-function guideHtml(g, pending) {
+export function guideHtml(g, pending) {
   if (!g.guide.length) return pending ? '<h4>How to connect</h4><div class="guide"><section class="gsec sk"><i></i><i></i><i></i></section><section class="gsec sk"><i></i><i></i></section></div>' : '';
   return `<h4>How to connect</h4><div class="guide">${g.guide.map(s => `<section class="gsec">${s.title ? `<h5>${esc(s.title)}</h5>` : ''}<ol>${s.steps.map(t => `<li><span>${esc(t)}</span></li>`).join('')}</ol></section>`).join('')}</div>`;
 }
@@ -32,12 +32,17 @@ function guideHtml(g, pending) {
  *  The button only appears when the userscript supplied `steamUrl` (a page it KNOWS is the game's Steam page). `steamAppId` alone never shows it:
  *  that id can come from a title search for art, and a game that is not on Steam (Microsoft Store, Epic, ...) could match a different game.
  *  It opens the Steam store website in a new tab, not the Steam client (steam://). */
-function actsHtml(g, saved) {
+export function actsHtml(g, saved) {
   const href = safeUrl(g.steamUrl);
   const off = href ? 'Save' : 'Save for later';
   const wish = `<button class="btn glass alt wish${saved ? ' on' : ''}" data-wish="${esc(g.id)}" data-off="${off}" aria-label="${saved ? 'Saved' : 'Save for later'}" title="${saved ? 'Saved' : 'Save for later'}">${ic(ICON.heart, 20)}${href ? '' : `<span>${saved ? 'Saved' : off}</span>`}</button>`;
   if (!href) return wish;
   return `<div class="acts">${wish}<a class="btn glass alt steam" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${icf(LOGO.steam, 20)}<span>Open in Steam</span></a></div>`;
+}
+
+/** The facts card (label / value rows). */
+export function factsHtml(rows) {
+  return rows.length ? `<div class="facts" data-k="facts">${rows.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : '';
 }
 
 /** Game detail sheet (rendered into the modal). Sections with no data are omitted. */
@@ -72,7 +77,7 @@ export function detailHtml(D, g, { saved = false, placeholders = false, pending 
   </div>
   <aside class="side" data-k="side" data-morph>${rg('get', getBox(g, { pending, dlOpen }))}
     ${rg('acts', actsHtml(g, saved))}
-    ${facts.length ? `<div class="facts" data-k="facts">${facts.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : ''}
+    ${factsHtml(facts)}
     ${rg('sim', sim.length ? `<h4 class="sh4">Similar</h4>${sim.map(x => `<div class="sim" tabindex="0" role="button" data-open="${esc(x.id)}"><div class="sa is-skel">${artImg(x, 'header')}</div>${esc(x.title)}</div>`).join('')}` : '')}
   </aside></div>`;
 }
