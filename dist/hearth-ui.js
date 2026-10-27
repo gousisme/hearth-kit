@@ -1,4 +1,4 @@
-/*! hearth-kit v0.5.12 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
+/*! hearth-kit v0.6.0 · HearthUI · built from src/js/ui/index.js — DO NOT EDIT, edit src/ and run `npm run build` */
 var HearthUI=(function(){
 'use strict';
 /* ── src/js/shared/util.js ── */
@@ -517,6 +517,7 @@ const ICON = {
   bookmark: '<path d="M6 4h12v16l-6-4-6 4Z"/>',
   play: '<path d="M8 5.5v13l11-6.5Z"/>',
   steam: '<circle cx="15.5" cy="8.5" r="3.5"/><circle cx="8" cy="16" r="2.4"/><path d="m3 14.2 3.6 1.5M10 14.7l3.4-3.2M12.3 18.2A7 7 0 1 0 5 12"/>',
+  full: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   logout: '<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M16 8l4 4-4 4M20 12H9"/>',
 };
 
@@ -792,9 +793,9 @@ function getBox(g, { pending, dlOpen }) {
 }
 
 /** "How to connect": install / launch / join / host, as numbered cards. Skeleton lines while it is being fetched. */
-function guideHtml(g, pending) {
-  if (!g.guide.length) return pending ? '<h4>How to connect</h4><div class="guide"><section class="gsec sk"><i></i><i></i><i></i></section><section class="gsec sk"><i></i><i></i></section></div>' : '';
-  return `<h4>How to connect</h4><div class="guide">${g.guide.map(s => `<section class="gsec">${s.title ? `<h5>${esc(s.title)}</h5>` : ''}<ol>${s.steps.map(t => `<li><span>${esc(t)}</span></li>`).join('')}</ol></section>`).join('')}</div>`;
+function guideHtml(g, pending, title = 'How to connect') {
+  if (!g.guide.length) return pending ? `<h4>${esc(title)}</h4><div class="guide"><section class="gsec sk"><i></i><i></i><i></i></section><section class="gsec sk"><i></i><i></i></section></div>` : '';
+  return `<h4>${esc(title)}</h4><div class="guide">${g.guide.map(s => `<section class="gsec">${s.title ? `<h5>${esc(s.title)}</h5>` : ''}<ol>${s.steps.map(t => `<li><span>${esc(t)}</span></li>`).join('')}</ol></section>`).join('')}</div>`;
 }
 
 /** Save-for-later, plus an "Open in Steam" button when the game has a Steam page (Save then shrinks to a round heart button).
@@ -814,10 +815,22 @@ function factsHtml(rows) {
   return rows.length ? `<div class="facts" data-k="facts">${rows.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : '';
 }
 
+/** "System requirements" cards (minimum / recommended). Empty string when there is nothing to show. */
+function reqHtml(req) {
+  const box = (title, o) => (o && Object.keys(o).length ? `<div><b>${title}</b>${Object.entries(o).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join('<br>')}</div>` : '');
+  return req && ((req.minimum && Object.keys(req.minimum).length) || (req.recommended && Object.keys(req.recommended).length)) ? `<h4>System requirements</h4><div class="req">${box('Minimum', req.minimum)}${box('Recommended', req.recommended)}</div>` : '';
+}
+
+/** The "latest update" strip (version pill + date + note), or the red "Guide closed" one. */
+function updHtml(u) {
+  if (!u) return '';
+  const closed = !!u.closed, pill = closed ? '<span class="v">Guide closed</span>' : u.version ? `<span class="v">${esc(verLabel(u.version))}</span>` : '';
+  return `<div class="upd${closed ? ' closed' : ''}" data-k="upd">${pill}<div><b>${u.date ? 'Updated ' + esc(u.date) : 'Latest update'}</b>${u.text && !(closed && /^guide closed\.?$/i.test(u.text)) ? `<span>${esc(u.text)}</span>` : ''}</div></div>`;
+}
+
 /** Game detail sheet (rendered into the modal). Sections with no data are omitted. */
-function detailHtml(D, g, { saved = false, placeholders = false, pending = false, dlOpen = false } = {}) {
+function detailHtml(D, g, { saved = false, placeholders = false, pending = false, dlOpen = false, page = false } = {}) {
   const req = (g.requirements.minimum && Object.keys(g.requirements.minimum).length) || Object.keys(g.requirements.recommended).length ? g.requirements : placeholders ? DEMO_REQ : null;
-  const reqBox = (title, o) => (o && Object.keys(o).length ? `<div><b>${title}</b>${Object.entries(o).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join('<br>')}</div>` : '');
   const shots = g.screenshots.map(safeUrl).filter(Boolean);
   const shotsHtml = shots.length
     ? shots.slice(0, 6).map(u => `<div><img src="${esc(u)}" alt="" loading="lazy" decoding="async"></div>`).join('')
@@ -826,23 +839,20 @@ function detailHtml(D, g, { saved = false, placeholders = false, pending = false
   const base = [['Developer', g.developer], ['Publisher', g.publisher], ['Released', g.releaseYear], ['Reception', g.rating], ['Genre', g.genres[0]], ['Size', g.size]];
   const extra = g.facts || [];
   const facts = [...base.map(([k, v]) => [k, (extra.find(f => f.label === k) || {}).value || v]), ...extra.filter(f => !base.some(([k]) => k === f.label)).map(f => [f.label, f.value])].filter(([, v]) => v);
-  const closed = !!(g.update && g.update.closed);
-  const pill = g.update && (closed ? '<span class="v">Guide closed</span>' : g.update.version ? `<span class="v">${esc(verLabel(g.update.version))}</span>` : '');
-  const upd = g.update ? `<div class="upd${closed ? ' closed' : ''}" data-k="upd">${pill}<div><b>${g.update.date ? 'Updated ' + esc(g.update.date) : 'Latest update'}</b>${g.update.text && !(closed && /^guide closed\.?$/i.test(g.update.text)) ? `<span>${esc(g.update.text)}</span>` : ''}</div></div>` : '';
   const sim = similar(D, g);
   // Every region carries data-k: mount.js updates the sheet region by region (core/morph.js), so a region whose HTML did not change keeps its DOM
   // (no image created / loaded twice, the media strip keeps its scroll position). `data-art` makes the header re-render only when its image URLs change.
   const rg = (k, inner) => (inner ? `<div class="rg" data-k="${k}">${inner}</div>` : '');
   const art = [...candidates(g, 'hero'), '|', ...candidates(g, 'logo')].join(' ');
-  return `<button class="x" data-k="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>
+  return `<button class="x" data-k="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>${page ? `<button class="x pg" data-k="pg" data-page="${esc(g.id)}" title="Open the full game page">${ic(ICON.full, 16)}<span>Full page</span></button>` : ''}
   <div class="dh" data-k="dh" data-art="${esc(art)}">${layer(g, 'hero')}${logoSlot(g)}</div>
   <div class="db" data-k="db" data-morph><div data-k="main" data-morph>
     ${mediaHtml(g, { pending })}
     ${rg('about', g.description ? `<h4>About</h4><p>${esc(g.description)}</p>` : '')}
-    ${upd}
+    ${updHtml(g.update)}
     ${rg('guide', guideHtml(g, pending))}
     ${rg('shots', shotsHtml ? `<h4>Screenshots</h4><div class="shots">${shotsHtml}</div>` : '')}
-    ${rg('req', req ? `<h4>System requirements</h4><div class="req">${reqBox('Minimum', req.minimum)}${reqBox('Recommended', req.recommended)}</div>` : '')}
+    ${rg('req', reqHtml(req))}
   </div>
   <aside class="side" data-k="side" data-morph>${rg('get', getBox(g, { pending, dlOpen }))}
     ${rg('acts', actsHtml(g, saved))}
@@ -853,23 +863,70 @@ function detailHtml(D, g, { saved = false, placeholders = false, pending = false
 
 /* ── src/js/ui/core/morph.js ── */
 /**
- * SHEET UPDATES WITHOUT RE-CREATING WHAT DID NOT CHANGE
- * detailHtml() marks every region with data-k (and containers with data-morph). morphInto() renders new HTML next to the old one and,
+ * UPDATES WITHOUT RE-CREATING WHAT DID NOT CHANGE
+ * detailHtml() / pageHtml() mark every region with data-k (and containers with data-morph). morphInto() renders new HTML next to the old one and,
  * region by region, keeps the DOM node when its source HTML is identical (so an image that is already on screen is never created and
  * loaded a second time, a scrolled media strip stays where it is, a playing thing keeps playing) and replaces only what changed.
- * Regions that are new or replaced fade in (`.rg-in`, unless `animate` is false); regions that are gone are removed.
+ *
+ * Region attributes:
+ *   data-morph   look inside: the children are matched by data-k the same way
+ *   data-live    patch the existing node IN PLACE (attributes, text, children) instead of replacing it, so CSS transitions run
+ *                (a tab that becomes .on, a pager whose current page moves, a button that gets disabled). No fade.
+ *   data-na      replace without the fade-in
+ * Regions that are new or replaced fade in (`.rg-in`, cascaded 45 ms apart through --d); with { ghost: true } a replaced or removed region
+ * also fades OUT: a clone is left in its place for a moment (`.rg-out`), so a skeleton turning into content cross-fades instead of blinking.
  */
-function morphInto(parent, html, { animate = true } = {}) {
+function morphInto(parent, html, { animate = true, ghost = false } = {}) {
   const t = document.createElement('template'); t.innerHTML = html;
-  morphKids(parent, [...t.content.children], animate);
+  morphKids(parent, [...t.content.children], { animate, ghost: ghost && animate && !reduced(), fresh: 0 });
 }
 
-function morphKids(parent, next, animate) {
+/** Out → change → in for a container (a tab body, a comment page): the old content fades out, `change()` swaps it, the new one fades in. */
+async function swapRegion(el, change) {
+  if (!el) return change();
+  el.classList.add('is-out');
+  await new Promise(r => setTimeout(r, reduced() ? 0 : T.fast));
+  change();
+  void el.offsetWidth;
+  el.classList.remove('is-out');
+}
+
+function ghostOut(c, parent) {
+  if (c.__ghost) return;
+  const g = c.cloneNode(true), s = g.style;
+  s.position = 'absolute'; s.top = c.offsetTop + 'px'; s.left = c.offsetLeft + 'px'; s.width = c.offsetWidth + 'px'; s.height = c.offsetHeight + 'px'; s.margin = '0';
+  g.__ghost = 1; g.removeAttribute('id'); g.classList.add('rg-out'); g.setAttribute('aria-hidden', 'true');
+  parent.appendChild(g);
+  c.remove();
+  setTimeout(() => g.remove(), T.base);
+}
+
+/** Make `o` look like `n` without replacing it. Returns false when the tags differ (the caller then replaces). */
+function patchNode(o, n) {
+  if (o.nodeType !== 1 || n.nodeType !== 1 || o.tagName !== n.tagName) return false;
+  for (const a of [...o.attributes]) if (!n.hasAttribute(a.name)) o.removeAttribute(a.name);
+  for (const a of n.attributes) if (o.getAttribute(a.name) !== a.value) o.setAttribute(a.name, a.value);
+  const oc = [...o.childNodes], nc = [...n.childNodes];
+  nc.forEach((b, i) => {
+    const a = oc[i];
+    if (!a) o.appendChild(b);
+    else if (a.nodeType === 3 && b.nodeType === 3) { if (a.data !== b.data) a.data = b.data; }
+    else if (!patchNode(a, b)) o.replaceChild(b, a);
+  });
+  while (o.childNodes.length > nc.length) o.lastChild.remove();
+  return true;
+}
+
+function morphKids(parent, next, ctx) {
   const old = new Map();
   const want = new Set(next.map(n => n.dataset.k || ''));
-  for (const c of [...parent.children]) { const k = c.dataset.k || ''; if (want.has(k) && !old.has(k)) old.set(k, c); else c.remove(); }   // gone regions go first, so a kept one is never moved (moving a node resets its scroll position)
+  for (const c of [...parent.children]) {
+    if (c.__ghost) continue;
+    const k = c.dataset.k || '';
+    if (want.has(k) && !old.has(k)) old.set(k, c); else ctx.ghost ? ghostOut(c, parent) : c.remove();   // gone regions go first, so a kept one is never moved (moving a node resets its scroll position)
+  }
   let prev = null;
-  const after = () => (prev ? prev.nextSibling : parent.firstChild);
+  const after = () => { let n = prev ? prev.nextSibling : parent.firstChild; return n; };
   for (const n of next) {
     const k = n.dataset.k || '', o = old.get(k), src = n.outerHTML;
     old.delete(k);
@@ -877,15 +934,18 @@ function morphKids(parent, next, animate) {
       if (o.previousElementSibling !== prev) parent.insertBefore(o, after());
       prev = o; continue;
     }
+    if (o && n.hasAttribute('data-live') && patchNode(o, n)) { o.__src = src; prev = o; continue; }   // same node, new state: transitions run
     if (o && n.hasAttribute('data-morph')) {                        // a container: look inside it
       o.__src = src; o.className = n.className;
       if (o.previousElementSibling !== prev) parent.insertBefore(o, after());
-      morphKids(o, [...n.children], animate); prev = o; continue;
+      morphKids(o, [...n.children], ctx); prev = o; continue;
     }
-    n.__src = src;
-    if (animate) n.classList.add('rg-in');
-    if (o) parent.replaceChild(n, o); else parent.insertBefore(n, after());
-    if (n.classList.contains('rg-in')) n.addEventListener('animationend', () => n.classList.remove('rg-in'), { once: true });
+    n.__src = src; n.querySelectorAll('[data-k]').forEach(c => { c.__src = c.outerHTML; });
+    const fade = ctx.animate && !n.hasAttribute('data-na');
+    if (fade) { n.classList.add('rg-in'); n.style.setProperty('--d', Math.min(ctx.fresh++, 8) * 45 + 'ms'); }
+    if (o) { if (ctx.ghost && fade) { const at = o.nextSibling; ghostOut(o, parent); parent.insertBefore(n, at); } else parent.replaceChild(n, o); }
+    else parent.insertBefore(n, after());
+    if (fade) n.addEventListener('animationend', () => { n.classList.remove('rg-in'); n.style.removeProperty('--d'); }, { once: true });
     prev = n;
   }
 }
@@ -1065,6 +1125,7 @@ function initGrid(root, D, route, savedIds, art, loadMore) {
  *             resolveDetail(game, push) → Promise<patch|null> // called once, the first time a game's sheet opens: { description, downloads[{label,href,kind,hint}], password, guide[{title,steps[]}], update{date,version,text}, facts[{label,value}], steamUrl, media[{type,thumb,src,sources,title}], steamAppId, art{} }; call push(partial) to show data early
  *             resolveArt(game) → Promise<patch|null>   // called lazily, once per game, right before its first image loads; patch = { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … }
  *             resolveProfile(user) → Promise<profile|null>  // called when the avatar is first clicked: { name, avatarUrl, badge, stats[{label,value}], facts[{label,value}], links[{label,href,hint,kind}] }
+ *             onPage(game)   // when set, the sheet gets a "Full page" button that calls it (the page itself is drawn with HearthUI.parts.page*)
  *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on),
  *             resolveLogo(game, triedUrls) → Promise<url|''>   // optional: last-chance logo source (asked only when every Steam URL failed)
  *             artDeadlineMs (default 4000): longest a card waits for resolveArt before it loads with what it already has; imageTimeoutMs (default 12000): longest one image URL may take
@@ -1215,7 +1276,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
       if (!again) $sheet.textContent = '';
       $sheet.classList.remove('is-profile'); $sheet.dataset.gid = g.id;
       const sl = ($sheet.querySelector('.mstrip') || {}).scrollLeft || 0, strip0 = $sheet.querySelector('.mstrip');
-      morphInto($sheet, detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }), { animate: again });
+      morphInto($sheet, detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen, page: typeof opt.onPage === 'function' }), { animate: again });
       art.hydrate($sheet); if (!again) $sheet.scrollTop = 0;
       const ns = $sheet.querySelector('.mstrip'); if (ns && ns !== strip0 && sl) ns.scrollLeft = sl;   // the strip was replaced (not kept): put it back where the person had scrolled it
       stripReady();
@@ -1274,9 +1335,9 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   /* ── actions ────────────────────────────────────────────────────────────────────────────── */
   function doGet(id, btn) {
     const g = D.byId.get(String(id)); if (!g) return;
-    if (btn && btn.closest('.sheet')) {              // inside the sheet the options unfold under the button instead of a floating menu
+    if (btn && btn.closest('.sheet, .dp')) {         // inside the sheet / the full page the options unfold under the button instead of a floating menu
       const box = btn.closest('.getbox');
-      if (box) { dlOpen = !dlOpen; box.classList.toggle('open', dlOpen); btn.setAttribute('aria-expanded', String(dlOpen)); return; }
+      if (box) { const open = !box.classList.contains('open'); if (btn.closest('.sheet')) dlOpen = open; box.classList.toggle('open', open); btn.setAttribute('aria-expanded', String(open)); return; }
       if (g.downloads.length === 1) { window.open(safeUrl(g.downloads[0].href), '_blank', 'noopener'); return; }
     }
     let r; try { r = opt.onGet && opt.onGet(g, { button: btn }); } catch (e) { console.error('[hearth] onGet failed', e); }
@@ -1403,6 +1464,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     if (t === $lb || t.classList.contains('lb-m')) return lbHide();   // the dark area around the media
     if ((el = q('[data-media]'))) return dragMoved ? undefined : lbShow(+el.dataset.media);
     if ((el = q('[data-get]'))) { e.stopPropagation(); return doGet(el.dataset.get, el); }
+    if ((el = q('[data-page]'))) { e.stopPropagation(); const pg = D.byId.get(el.dataset.page); if (pg) { try { opt.onPage(pg); } catch (err) { console.error('[hearth] onPage failed', err); } } return; }
     if ((el = q('[data-wish]'))) return toggleSaved(el.dataset.wish, el);
     if (q('[data-close]')) return closeGame();
     if ((el = q('[data-nav-id]'))) { const n = D.nav.find(x => x.id === el.dataset.navId); return n && navTo(n); }
@@ -1461,13 +1523,159 @@ function adopt(scope, css) {
   catch (e) { const s = document.createElement('style'); s.textContent = css; scope.appendChild(s); }
 }
 
+/* ── src/js/ui/components/page.js ── */
+/**
+ * THE FULL GAME PAGE: every visual of it lives here (markup) and in styles/66-page.css (looks and motion). A userscript only supplies data and decides when to
+ * paint what; it writes no CSS, no icons and no inline styles. Builders return HTML strings (everything escaped), meant for morphInto() regions (data-k).
+ *   pageOpen(root, game) → element         pageClose(el, instant)
+ *   pageArt(el, { hero, logo }, final)     hero / logo URL lists, tried in order; the slots stop being skeletons when one loads
+ *   stageHtml / showSlide / mediaReady     gallery (stage + thumbnails) and its cross-fade
+ *   ratingHtml, histHtml, reviewHtml, commentHtml, pagerHtml, tabsHtml, noteHtml, skelHtml, aboutHtml   content blocks
+ *   expand(el)                             animated "Read more" for .dp-clampbox / .dp-rt
+ */
+const num = n => (n == null || isNaN(n) ? '' : Number(n).toLocaleString('en-US'));
+const when = ts => new Date(ts * 1000).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' });
+const tone = d => (/positive/i.test(d || '') ? 'pos' : /negative/i.test(d || '') ? 'neg' : 'mix');
+
+function pageHtml(g) {
+  return `<div class="dp-scroll"><div class="dp-hero"><div class="layer is-skel is-busy"><img class="art-img" alt=""></div>
+    <div class="dp-hin"><div class="dp-nav"><button class="dp-back" data-dp-act="close">${ic(ICON.prev, 18)}Back</button><small>Esc to close</small></div>
+    <div class="lg"><div class="fbt">${esc(g.title)}</div><img class="art-img logo" alt="${esc(g.title)}"></div></div></div>
+    <div class="dp-wrap"><div class="dp-grid"><div><div class="dp-sec" id="dp-media"></div><div class="dp-sec" id="dp-about"></div><div class="dp-sec u" id="dp-upd"></div><div class="dp-sec" id="dp-guide"></div><div class="dp-sec" id="dp-req"></div><div class="dp-sec" id="dp-comm"></div></div>
+    <aside class="side dp-side" id="dp-side"></aside></div></div></div>`;
+}
+function pageOpen(root, g) {
+  const el = document.createElement('div');
+  el.className = 'dp'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', g.title); el.tabIndex = -1; el.innerHTML = pageHtml(g);
+  root.appendChild(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
+  el.focus({ preventScroll: true });
+  return el;
+}
+function pageClose(el, instant) {
+  if (instant) return el.remove();
+  el.classList.remove('in'); el.classList.add('out');
+  setTimeout(() => el.remove(), reduced() ? 0 : T.base + 40);
+}
+
+/** One art slot (the hero layer or the logo): try the URLs in turn; the first that loads is shown (fades in over the skeleton). `final` = no more URLs will come. */
+function slotFill(box, urls, final, done, miss) {
+  const img = box && box.querySelector('img'); if (!img || box.dataset.ok) return;
+  const key = urls.join('|');
+  if (!urls.length) { if (final && miss) miss(); return; }
+  if (box.dataset.k === key) return; box.dataset.k = key;
+  let i = 0;
+  const next = () => {
+    if (!box.isConnected || box.dataset.k !== key) return;
+    if (i >= urls.length) return miss && miss();
+    const im = new Image(), u = urls[i++];
+    im.onload = () => { if (!box.isConnected || box.dataset.k !== key) return; img.src = u; box.dataset.ok = '1'; requestAnimationFrame(() => { img.classList.add('is-loaded'); done && done(); }); };
+    im.onerror = next; im.src = u;
+  };
+  next();
+}
+function pageArt(el, { hero = [], logo = [] }, final) {
+  const list = a => [...new Set(a.map(safeUrl).filter(Boolean))];
+  const layer = el.querySelector('.dp-hero .layer'), lg = el.querySelector('.dp-hero .lg');
+  slotFill(layer, list(hero), final, () => layer.classList.remove('is-skel', 'is-busy'), () => { layer.classList.remove('is-busy'); layer.classList.add('is-failed'); });
+  slotFill(lg, list(logo), final, () => lg.classList.add('has-logo'));
+}
+
+/* ── gallery ─────────────────────────────────────────────────────────────────────────────── */
+const slideHtml = m => {
+  const src = safeUrl(m.src || (m.sources && m.sources[0] && m.sources[0].src) || m.thumb);
+  return m.type === 'video' && m.sources ? `<video controls autoplay muted playsinline poster="${esc(safeUrl(m.thumb))}">${m.sources.map(s => `<source src="${esc(safeUrl(s.src))}" type="${esc(s.type)}">`).join('')}</video>`
+    : m.type === 'embed' ? `<iframe src="${esc(safeUrl(m.src))}" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>` : `<img src="${esc(src)}" alt="">`;
+};
+const stageHtml = (items, i) => `<div class="dp-stage"><div class="dp-sl in">${slideHtml(items[i])}</div></div><div class="dp-strip"><div class="dp-thumbs">${items.map((x, k) => `<button class="dp-th${k === i ? ' on' : ''}${x.type !== 'image' ? ' v' : ''}" data-dp-m="${k}" aria-label="Media ${k + 1}"><img src="${esc(safeUrl(x.thumb || x.src))}" alt="" decoding="async"></button>`).join('')}</div></div>`;
+const thumbFade = s => { const m = s.parentNode, max = s.scrollWidth - s.clientWidth; m.style.setProperty('--fl', Math.max(0, Math.min(1, s.scrollLeft / 64)).toFixed(3)); m.style.setProperty('--fr', Math.max(0, Math.min(1, (max - s.scrollLeft) / 64)).toFixed(3)); };
+/** After the gallery is painted: the strip fades at its ends while there is more to scroll, thumbnails fade in as they load. */
+function mediaReady(el) {
+  const s = el.querySelector('.dp-thumbs'); if (!s) return;
+  if (!s.__fade) { s.__fade = 1; s.addEventListener('scroll', () => thumbFade(s), { passive: true }); if (window.ResizeObserver) new ResizeObserver(() => thumbFade(s)).observe(s); }
+  thumbFade(s);
+  s.querySelectorAll('img:not([data-f])').forEach(im => { im.dataset.f = '1'; const ok = () => im.classList.add('ld'); im.complete && im.naturalWidth ? ok() : (im.addEventListener('load', ok, { once: true }), im.addEventListener('error', ok, { once: true })); });
+}
+/** Switch the stage: the new slide fades in over the old one, which fades out and is removed (that also stops a playing video). */
+function showSlide(el, items, i) {
+  const st = el.querySelector('.dp-stage'); if (!st || !items[i]) return;
+  const old = [...st.querySelectorAll('.dp-sl')], d = document.createElement('div'); d.className = 'dp-sl'; d.innerHTML = slideHtml(items[i]); st.appendChild(d);
+  requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add('in')));
+  old.forEach(o => { o.classList.remove('in'); setTimeout(() => o.remove(), T.slow); });
+  const th = el.querySelectorAll('.dp-th'); th.forEach((b, k) => b.classList.toggle('on', k === i));
+  const s = th[i] && th[i].parentNode; if (s) s.scrollTo({ left: th[i].offsetLeft - (s.clientWidth - th[i].offsetWidth) / 2, behavior: 'smooth' });
+}
+
+/* ── content blocks ──────────────────────────────────────────────────────────────────────── */
+/** About text: lines starting with "##" are sub-headings. Long text starts clamped (expand() opens it). */
+function aboutHtml(txt) {
+  const long = txt.length >= 700;
+  return `<h4>About this game</h4><div class="dp-clampbox${long ? ' cl' : ''}"><div class="dp-text">${txt.split('\n').map(l => (l.startsWith('##') ? `<h5>${esc(l.slice(2))}</h5>` : `<p>${esc(l)}</p>`)).join('')}</div></div>${long ? '<button class="dp-more" data-dp-act="about">Read more</button>' : ''}`;
+}
+/** Open a clamped box (.cl) with a height transition. */
+function expand(box, animate = true) {
+  if (!box || !box.classList.contains('cl')) return;
+  const more = box.parentNode && box.parentNode.querySelector(':scope > .dp-more'); if (more) more.remove();
+  if (!animate || reduced()) { box.classList.remove('cl'); return; }
+  box.style.maxHeight = box.offsetHeight + 'px'; void box.offsetWidth;
+  box.classList.remove('cl'); box.style.maxHeight = box.scrollHeight + 'px';
+  setTimeout(() => { box.style.maxHeight = ''; }, T.slow + 60);
+}
+/** Steam's review summary ({ total_reviews, total_positive, total_negative, review_score_desc }) as the side card. '' when there is none. */
+function ratingHtml(R) {
+  if (!R || !R.total_reviews) return '';
+  const pos = R.total_positive || 0, pct = Math.round(100 * pos / Math.max(pos + (R.total_negative || 0), 1)), t = tone(R.review_score_desc);
+  return `<div class="dp-card"><h4>Steam reviews</h4><div class="dp-rate"><div class="dp-pct ${t}">${pct}%</div><div class="dp-lab ${t}">${esc(R.review_score_desc || '')}</div><div class="dp-sub">${num(R.total_reviews)} reviews · ${num(pos)} positive</div><div class="dp-bar"><i style="--p:${pct}%"></i></div></div></div>`;
+}
+/** Reviews per month, as bars. h = [{ d (unix seconds), up, down }]. */
+function histHtml(h) {
+  if (!h || h.length < 3) return '';
+  const mx = Math.max(...h.map(x => x.up + x.down), 1), w = 600 / h.length;
+  const bars = h.map((x, i) => { const hu = 66 * x.up / mx, hd = 66 * x.down / mx, X = (i * w + 1).toFixed(1), W = Math.max(w - 2, 1).toFixed(1); return `<rect x="${X}" y="${(70 - hu).toFixed(1)}" width="${W}" height="${hu.toFixed(1)}" rx="1.5" fill="var(--ac)"/><rect x="${X}" y="${(70 - hu - hd).toFixed(1)}" width="${W}" height="${hd.toFixed(1)}" rx="1.5" fill="var(--bad)"/>`; }).join('');
+  const lab = x => new Date(x.d * 1000).toLocaleDateString('en', { month: 'short', year: 'numeric' });
+  return `<div data-k="hist"><svg class="dp-hist" viewBox="0 0 600 70" preserveAspectRatio="none" role="img" aria-label="Reviews per month, positive and negative">${bars}</svg><div class="dp-histlab"><span>${esc(lab(h[0]))}</span><span>Reviews per month</span><span>${esc(lab(h[h.length - 1]))}</span></div></div>`;
+}
+/** r = { id, up, text, t (unix seconds) or when (text), hrs, votes, funny }. */
+function reviewHtml(r) {
+  const long = r.text.length > 420, c = r.up ? 'pos' : 'neg';
+  return `<div class="dp-rev" data-k="r${esc(r.id)}" data-id="${esc(r.id)}"><div class="dp-th2 ${c}" aria-hidden="true">${r.up ? '✓' : '✕'}</div><div class="dp-rh"><b class="${c}">${r.up ? 'Recommended' : 'Not recommended'}</b>${r.hrs ? `<span>${r.hrs.toFixed(r.hrs < 10 ? 1 : 0)} hrs on record</span>` : ''}${r.t || r.when ? `<span>${esc(r.t ? when(r.t) : r.when)}</span>` : ''}</div><div class="dp-rt${long ? ' cl' : ''}">${esc(r.text)}</div><div class="dp-ra">${long ? `<button data-dp-act="rmore" data-v="${esc(r.id)}">Read more</button>` : ''}${r.votes ? `<span>${num(r.votes)} found this helpful</span>` : ''}${r.funny ? `<span>${num(r.funny)} funny</span>` : ''}</div></div>`;
+}
+/** c = { id, name, href, av, text, when }; `shown` = the text to display (a translation, say); `offer` = '' | 'Translate' | 'Show original'. */
+function commentHtml(c, shown, offer) {
+  const name = c.href && /^https:\/\/online-fix\.me\//.test(c.href) ? `<a class="dp-un" href="${esc(c.href)}" target="_blank" rel="noopener noreferrer">${esc(c.name)}</a>` : esc(c.name);
+  return `<div class="dp-rev" data-k="c${esc(c.id)}"><div class="dp-th2">${esc(c.name.slice(0, 1).toUpperCase())}${c.av ? `<img src="${esc(safeUrl(c.av))}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}</div><div class="dp-rh"><b>${name}</b>${c.when ? `<span>${esc(c.when)}</span>` : ''}</div><div class="dp-rt">${esc(shown)}</div>${offer ? `<div class="dp-ra"><button data-dp-act="tr" data-v="${esc(c.id)}">${offer}</button></div>` : ''}</div>`;
+}
+/** 1 … 4 5 [6] 7 8 … 20, with previous / next. Patched in place, so the current page glides instead of blinking. */
+function pagerHtml(cur, total, key = 'pg') {
+  if (total < 2) return '';
+  const arr = [...new Set([1, total, cur - 2, cur - 1, cur, cur + 1, cur + 2].filter(n => n >= 1 && n <= total))].sort((a, b) => a - b); let out = '', prev = 0;
+  for (const n of arr) { if (n - prev > 1) out += '<span class="dp-pgd">…</span>'; out += `<button class="dp-pgb${n === cur ? ' on' : ''}" data-dp-cp="${n}" aria-label="Page ${n}"${n === cur ? ' aria-current="page"' : ''}>${n}</button>`; prev = n; }
+  return `<nav class="dp-pg" data-k="${key}" data-live aria-label="Pages"><button class="dp-pgb" data-dp-cp="${cur - 1}" aria-label="Previous page"${cur < 2 ? ' disabled' : ''}>${ic(ICON.prev, 16)}</button>${out}<button class="dp-pgb" data-dp-cp="${cur + 1}" aria-label="Next page"${cur >= total ? ' disabled' : ''}>${ic(ICON.next, 16)}</button></nav>`;
+}
+/** Tab row. tabs = [{ id, label }], sels = [{ attr, cur, items: [[value, label]] }] (filter pills on the right), btn = { act, label } (one more pill). */
+function tabsHtml({ tabs, tab, sels = [], btn = null }) {
+  const pills = sels.map(s => s.items.map(([k, l]) => `<button class="dp-sel${s.cur === k ? ' on' : ''}" ${s.attr}="${k}">${l}</button>`).join('')).join('');
+  return `<div class="dp-tabs" data-k="tabs" data-live>${tabs.map(t => `<button class="dp-tab${tab === t.id ? ' on' : ''}" data-dp-tab="${t.id}">${esc(t.label)}</button>`).join('')}<span class="sp"></span>${pills}${btn ? `<button class="dp-sel" data-dp-act="${btn.act}">${esc(btn.label)}</button>` : ''}</div>`;
+}
+/** A quiet message block; with `act` it gets a button, with `link` ({ href, label }) a link out. `hint` is the small print under the message. */
+function noteHtml(text, { act = '', label = '', link = null, hint = '' } = {}) {
+  return `<div class="dp-empty" data-k="empty"><span>${esc(text)}</span>${hint ? `<small>${esc(hint)}</small>` : ''}${act ? `<button class="dp-ghost" data-dp-act="${act}">${esc(label)}</button>` : ''}${link ? `<a class="dp-ghost ac" href="${esc(safeUrl(link.href))}" target="_blank" rel="noopener noreferrer">${esc(link.label)}</a>` : ''}</div>`;
+}
+/** n skeleton blocks of a kind ('about' | 'rev' | 'com' | 'card'). */
+const skelHtml = (kind, n = 1, key = 'sk') => Array.from({ length: n }, (_, i) => `<div class="is-skel is-busy sk-${kind}" data-k="${key}${i}"></div>`).join('');
+/** A wide "ghost" link-button (e.g. "Write a comment"). */
+const linkHtml = (href, label, key) => `<a class="dp-ghost ac" data-k="${key}" data-na href="${esc(safeUrl(href))}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
+/** A "Load more" pill. */
+const moreHtml = (label, busy) => `<button class="dp-ghost" data-k="more" data-live data-dp-act="rmoreList"${busy ? ' disabled' : ''}>${esc(label)}</button>`;
+
 /* ── src/js/ui/index.js ── */
-const version = '0.5.12';
+const version = '0.6.0';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true, parts: true };
+const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true, parts: true, page: true };
 
 /** The sheet's own building blocks, for pages a userscript draws next to the sheet (so they look exactly like it and never re-implement it). */
-const parts = { getBox, guideHtml, actsHtml, factsHtml, logoSlot, layer, morphInto, ic, icf, ICON, LOGO };
+const parts = { getBox, guideHtml, actsHtml, factsHtml, reqHtml, updHtml, logoSlot, layer, morphInto, swapRegion, ic, icf, ICON, LOGO,
+  page: { open: pageOpen, close: pageClose, art: pageArt, stage: stageHtml, show: showSlide, mediaReady, about: aboutHtml, expand, rating: ratingHtml, hist: histHtml, review: reviewHtml, comment: commentHtml, pager: pagerHtml, tabs: tabsHtml, note: noteHtml, skel: skelHtml, link: linkHtml, more: moreHtml } };
 
 return {mount, validate, steam, normalize, version, features, parts};
 })();

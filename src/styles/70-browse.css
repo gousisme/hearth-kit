@@ -6,3 +6,8 @@
 .grid .card { width: auto; }
 
 .more { height: 1px; margin-top: 1px; }
+
+/* one-line status under the search results */
+.hf-status { margin: -6px 0 18px; font: 600 13px var(--fb); color: var(--mu); }
+.hf-status.busy::after { content: ''; display: inline-block; width: 10px; height: 10px; margin-left: 8px; border-radius: 50%; border: 2px solid var(--ac); border-top-color: transparent; animation: hf-spin .8s linear infinite; vertical-align: -1px; }
+@keyframes hf-spin { to { transform: rotate(360deg); } }

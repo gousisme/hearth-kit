@@ -27,6 +27,7 @@ import { browseHtml, initGrid } from './components/browse.js';
  *             resolveDetail(game, push) → Promise<patch|null> // called once, the first time a game's sheet opens: { description, downloads[{label,href,kind,hint}], password, guide[{title,steps[]}], update{date,version,text}, facts[{label,value}], steamUrl, media[{type,thumb,src,sources,title}], steamAppId, art{} }; call push(partial) to show data early
  *             resolveArt(game) → Promise<patch|null>   // called lazily, once per game, right before its first image loads; patch = { steamAppId, art:{poster,hero,logo,header,fallback}, description, developer, … }
  *             resolveProfile(user) → Promise<profile|null>  // called when the avatar is first clicked: { name, avatarUrl, badge, stats[{label,value}], facts[{label,value}], links[{label,href,hint,kind}] }
+ *             onPage(game)   // when set, the sheet gets a "Full page" button that calls it (the page itself is drawn with HearthUI.parts.page*)
  *             onGet(game, {button}) → false to cancel the default, onOpen(game), onClose(game), onRoute(route), onSave(game, on),
  *             resolveLogo(game, triedUrls) → Promise<url|''>   // optional: last-chance logo source (asked only when every Steam URL failed)
  *             artDeadlineMs (default 4000): longest a card waits for resolveArt before it loads with what it already has; imageTimeoutMs (default 12000): longest one image URL may take
@@ -177,7 +178,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
       if (!again) $sheet.textContent = '';
       $sheet.classList.remove('is-profile'); $sheet.dataset.gid = g.id;
       const sl = ($sheet.querySelector('.mstrip') || {}).scrollLeft || 0, strip0 = $sheet.querySelector('.mstrip');
-      morphInto($sheet, detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen }), { animate: again });
+      morphInto($sheet, detailHtml(D, g, { saved: saved.has(g.id), placeholders: opt.placeholders, pending: !enrich.done(g.id), dlOpen, page: typeof opt.onPage === 'function' }), { animate: again });
       art.hydrate($sheet); if (!again) $sheet.scrollTop = 0;
       const ns = $sheet.querySelector('.mstrip'); if (ns && ns !== strip0 && sl) ns.scrollLeft = sl;   // the strip was replaced (not kept): put it back where the person had scrolled it
       stripReady();
@@ -236,9 +237,9 @@ export function mount({ target = document.body, data, css = null, shadow, option
   /* ── actions ────────────────────────────────────────────────────────────────────────────── */
   function doGet(id, btn) {
     const g = D.byId.get(String(id)); if (!g) return;
-    if (btn && btn.closest('.sheet')) {              // inside the sheet the options unfold under the button instead of a floating menu
+    if (btn && btn.closest('.sheet, .dp')) {         // inside the sheet / the full page the options unfold under the button instead of a floating menu
       const box = btn.closest('.getbox');
-      if (box) { dlOpen = !dlOpen; box.classList.toggle('open', dlOpen); btn.setAttribute('aria-expanded', String(dlOpen)); return; }
+      if (box) { const open = !box.classList.contains('open'); if (btn.closest('.sheet')) dlOpen = open; box.classList.toggle('open', open); btn.setAttribute('aria-expanded', String(open)); return; }
       if (g.downloads.length === 1) { window.open(safeUrl(g.downloads[0].href), '_blank', 'noopener'); return; }
     }
     let r; try { r = opt.onGet && opt.onGet(g, { button: btn }); } catch (e) { console.error('[hearth] onGet failed', e); }
@@ -365,6 +366,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     if (t === $lb || t.classList.contains('lb-m')) return lbHide();   // the dark area around the media
     if ((el = q('[data-media]'))) return dragMoved ? undefined : lbShow(+el.dataset.media);
     if ((el = q('[data-get]'))) { e.stopPropagation(); return doGet(el.dataset.get, el); }
+    if ((el = q('[data-page]'))) { e.stopPropagation(); const pg = D.byId.get(el.dataset.page); if (pg) { try { opt.onPage(pg); } catch (err) { console.error('[hearth] onPage failed', err); } } return; }
     if ((el = q('[data-wish]'))) return toggleSaved(el.dataset.wish, el);
     if (q('[data-close]')) return closeGame();
     if ((el = q('[data-nav-id]'))) { const n = D.nav.find(x => x.id === el.dataset.navId); return n && navTo(n); }

@@ -2,6 +2,7 @@ import { waitFor } from '../shared/wait.js';
 import { validate } from '../shared/schema.js';
 import { hideOriginal, showOriginal } from './hide.js';
 import { watchNavigation } from './navwatch.js';
+import { showSplash } from './splash.js';
 import { loadFonts, gmImageLoader, FONT_HREF } from './assets.js';
 
 /**
@@ -13,7 +14,8 @@ import { loadFonts, gmImageLoader, FONT_HREF } from './assets.js';
  *   hide: 'display' | 'visibility' | 'none',   fonts: 'link' | 'gm-inline' | 'none',   gmImages: boolean,
  *   ui: { ...HearthUI.mount options (onGet, onOpen, theme, autoplayMs, …) },
  *   failTimeoutMs (wait for `ready`), scrapeTimeoutMs, onNoMatch: 'original' | 'keep',
- *   toggleKey: 'Alt+Shift+H', debug
+ *   toggleKey: 'Alt+Shift+H', debug,
+ *   splash: { title, accentTitle, letter, logo, accent, ink, bg }   // optional loading screen on every route that matches (see glue/splash.js)
  * }
  *   route.match  RegExp | string (substring) | (url: string, u: URL) => boolean
  *   route.ready  selector | () => truthy      awaited before scrape(); use it for SPAs that render late
@@ -84,7 +86,7 @@ export function run(cfg) {
   // At document-start <html> may not exist yet in some engines/sandboxes: wait for it.
   const whenRoot = cb => { if (document.documentElement) return cb(); const mo = new MutationObserver(() => { if (document.documentElement) { mo.disconnect(); cb(); } }); mo.observe(document, { childList: true }); };
   whenRoot(() => {
-    if (matchRoute(location.href)) hideOriginal(C.hide);   // before first paint, to avoid a flash of the old site
+    if (matchRoute(location.href)) { hideOriginal(C.hide); if (C.splash) showSplash(C.splash); }   // before first paint, to avoid a flash of the old site
     loadFonts(C.fonts, C.fontHref || FONT_HREF).catch(e => log('fonts failed (system fonts will be used)', e));
     apply();
   });

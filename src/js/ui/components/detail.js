@@ -23,9 +23,9 @@ export function getBox(g, { pending, dlOpen }) {
 }
 
 /** "How to connect": install / launch / join / host, as numbered cards. Skeleton lines while it is being fetched. */
-export function guideHtml(g, pending) {
-  if (!g.guide.length) return pending ? '<h4>How to connect</h4><div class="guide"><section class="gsec sk"><i></i><i></i><i></i></section><section class="gsec sk"><i></i><i></i></section></div>' : '';
-  return `<h4>How to connect</h4><div class="guide">${g.guide.map(s => `<section class="gsec">${s.title ? `<h5>${esc(s.title)}</h5>` : ''}<ol>${s.steps.map(t => `<li><span>${esc(t)}</span></li>`).join('')}</ol></section>`).join('')}</div>`;
+export function guideHtml(g, pending, title = 'How to connect') {
+  if (!g.guide.length) return pending ? `<h4>${esc(title)}</h4><div class="guide"><section class="gsec sk"><i></i><i></i><i></i></section><section class="gsec sk"><i></i><i></i></section></div>` : '';
+  return `<h4>${esc(title)}</h4><div class="guide">${g.guide.map(s => `<section class="gsec">${s.title ? `<h5>${esc(s.title)}</h5>` : ''}<ol>${s.steps.map(t => `<li><span>${esc(t)}</span></li>`).join('')}</ol></section>`).join('')}</div>`;
 }
 
 /** Save-for-later, plus an "Open in Steam" button when the game has a Steam page (Save then shrinks to a round heart button).
@@ -45,10 +45,22 @@ export function factsHtml(rows) {
   return rows.length ? `<div class="facts" data-k="facts">${rows.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')}</div>` : '';
 }
 
+/** "System requirements" cards (minimum / recommended). Empty string when there is nothing to show. */
+export function reqHtml(req) {
+  const box = (title, o) => (o && Object.keys(o).length ? `<div><b>${title}</b>${Object.entries(o).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join('<br>')}</div>` : '');
+  return req && ((req.minimum && Object.keys(req.minimum).length) || (req.recommended && Object.keys(req.recommended).length)) ? `<h4>System requirements</h4><div class="req">${box('Minimum', req.minimum)}${box('Recommended', req.recommended)}</div>` : '';
+}
+
+/** The "latest update" strip (version pill + date + note), or the red "Guide closed" one. */
+export function updHtml(u) {
+  if (!u) return '';
+  const closed = !!u.closed, pill = closed ? '<span class="v">Guide closed</span>' : u.version ? `<span class="v">${esc(verLabel(u.version))}</span>` : '';
+  return `<div class="upd${closed ? ' closed' : ''}" data-k="upd">${pill}<div><b>${u.date ? 'Updated ' + esc(u.date) : 'Latest update'}</b>${u.text && !(closed && /^guide closed\.?$/i.test(u.text)) ? `<span>${esc(u.text)}</span>` : ''}</div></div>`;
+}
+
 /** Game detail sheet (rendered into the modal). Sections with no data are omitted. */
-export function detailHtml(D, g, { saved = false, placeholders = false, pending = false, dlOpen = false } = {}) {
+export function detailHtml(D, g, { saved = false, placeholders = false, pending = false, dlOpen = false, page = false } = {}) {
   const req = (g.requirements.minimum && Object.keys(g.requirements.minimum).length) || Object.keys(g.requirements.recommended).length ? g.requirements : placeholders ? DEMO_REQ : null;
-  const reqBox = (title, o) => (o && Object.keys(o).length ? `<div><b>${title}</b>${Object.entries(o).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join('<br>')}</div>` : '');
   const shots = g.screenshots.map(safeUrl).filter(Boolean);
   const shotsHtml = shots.length
     ? shots.slice(0, 6).map(u => `<div><img src="${esc(u)}" alt="" loading="lazy" decoding="async"></div>`).join('')
@@ -57,23 +69,20 @@ export function detailHtml(D, g, { saved = false, placeholders = false, pending 
   const base = [['Developer', g.developer], ['Publisher', g.publisher], ['Released', g.releaseYear], ['Reception', g.rating], ['Genre', g.genres[0]], ['Size', g.size]];
   const extra = g.facts || [];
   const facts = [...base.map(([k, v]) => [k, (extra.find(f => f.label === k) || {}).value || v]), ...extra.filter(f => !base.some(([k]) => k === f.label)).map(f => [f.label, f.value])].filter(([, v]) => v);
-  const closed = !!(g.update && g.update.closed);
-  const pill = g.update && (closed ? '<span class="v">Guide closed</span>' : g.update.version ? `<span class="v">${esc(verLabel(g.update.version))}</span>` : '');
-  const upd = g.update ? `<div class="upd${closed ? ' closed' : ''}" data-k="upd">${pill}<div><b>${g.update.date ? 'Updated ' + esc(g.update.date) : 'Latest update'}</b>${g.update.text && !(closed && /^guide closed\.?$/i.test(g.update.text)) ? `<span>${esc(g.update.text)}</span>` : ''}</div></div>` : '';
   const sim = similar(D, g);
   // Every region carries data-k: mount.js updates the sheet region by region (core/morph.js), so a region whose HTML did not change keeps its DOM
   // (no image created / loaded twice, the media strip keeps its scroll position). `data-art` makes the header re-render only when its image URLs change.
   const rg = (k, inner) => (inner ? `<div class="rg" data-k="${k}">${inner}</div>` : '');
   const art = [...candidates(g, 'hero'), '|', ...candidates(g, 'logo')].join(' ');
-  return `<button class="x" data-k="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>
+  return `<button class="x" data-k="x" data-close aria-label="Close">${ic(ICON.close, 16)}</button>${page ? `<button class="x pg" data-k="pg" data-page="${esc(g.id)}" title="Open the full game page">${ic(ICON.full, 16)}<span>Full page</span></button>` : ''}
   <div class="dh" data-k="dh" data-art="${esc(art)}">${layer(g, 'hero')}${logoSlot(g)}</div>
   <div class="db" data-k="db" data-morph><div data-k="main" data-morph>
     ${mediaHtml(g, { pending })}
     ${rg('about', g.description ? `<h4>About</h4><p>${esc(g.description)}</p>` : '')}
-    ${upd}
+    ${updHtml(g.update)}
     ${rg('guide', guideHtml(g, pending))}
     ${rg('shots', shotsHtml ? `<h4>Screenshots</h4><div class="shots">${shotsHtml}</div>` : '')}
-    ${rg('req', req ? `<h4>System requirements</h4><div class="req">${reqBox('Minimum', req.minimum)}${reqBox('Recommended', req.recommended)}</div>` : '')}
+    ${rg('req', reqHtml(req))}
   </div>
   <aside class="side" data-k="side" data-morph>${rg('get', getBox(g, { pending, dlOpen }))}
     ${rg('acts', actsHtml(g, saved))}

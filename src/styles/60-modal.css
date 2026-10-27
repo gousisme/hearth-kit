@@ -13,15 +13,25 @@
 .dh .fbt { font-size: clamp(32px, 4.4vw, 60px); }
 .x { position: absolute; z-index: 5; top: 16px; right: 16px; width: 42px; height: 42px; border-radius: 50%; background: rgba(24, 26, 30, .6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: grid; place-items: center; transition: transform var(--tb) var(--ease), background var(--tf); }
 .x:hover { transform: rotate(90deg); background: rgba(24, 26, 30, .85); }
+.x:active { transform: rotate(90deg) scale(.92); transition-duration: var(--tf); }
+/* "Full page": a pill beside the close button. Same family: frosted at rest, lime on hover; the corner arrows spread outwards */
+.x.pg { right: 66px; width: auto; padding: 0 18px 0 14px; gap: 8px; display: inline-flex; align-items: center; border-radius: 99px; font: 600 13px var(--fb); color: var(--tx); transition: transform var(--tb) var(--ease), background var(--tb) var(--ease), color var(--tb) var(--ease); }
+.x.pg:hover { transform: translateY(-2px); background: var(--ac); color: var(--ink); }
+.x.pg:active { transform: scale(.95); transition-duration: var(--tf); }
+.x.pg svg { transition: transform var(--tb) var(--ease); }
+.x.pg:hover svg { transform: scale(1.22); }
 .db { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; padding: 6px 40px 40px; }
 .db > * { min-width: 0; }
 .db h4 { font: 700 12px var(--fb); letter-spacing: .14em; text-transform: uppercase; color: var(--mu); margin: 28px 0 12px; }
 .db > div > h4:first-child, .db > div > .rg:first-child > h4:first-child { margin-top: 0; }
 /* a region of the sheet (see core/morph.js): fades in when it appears or is replaced after the sheet is already open */
-.rg-in { animation: hf-rg var(--tb) var(--ease) backwards; }
+.rg-in { animation: hf-rg var(--tb) var(--ease) var(--d, 0ms) backwards; }
+/* a region that was replaced or removed leaves a clone behind for a moment (core/morph.js, ghost): it fades out while the new one fades in */
+.rg-out { pointer-events: none; animation: hf-out var(--tf) var(--ein) forwards; }
+@keyframes hf-out { to { opacity: 0; transform: translateY(-4px); } }
 @keyframes hf-rg { from { opacity: 0; transform: translateY(8px); } }
 .side > .rg { display: flex; flex-direction: column; gap: 12px; }
-@media (prefers-reduced-motion: reduce) { .rg-in { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .rg-in, .rg-out { animation: none; } .rg-out { display: none; } }
 .db p { color: #cfd3da; }
 .shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .shots > div { aspect-ratio: 16/9; border-radius: 10px; overflow: hidden; position: relative; background: var(--s2); transition: transform var(--tb) var(--ease); }
