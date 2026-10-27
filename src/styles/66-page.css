@@ -41,6 +41,9 @@
 .dp-sl { position: absolute; inset: 0; opacity: 0; transition: opacity var(--tb) var(--ein); }
 .dp-sl.in { opacity: 1; transition: opacity var(--ts) var(--ease); }
 .dp-sl img, .dp-sl video, .dp-sl iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; object-fit: contain; background: #000; }
+.dp-sl-note { display: none; position: absolute; left: 0; right: 0; bottom: 0; padding: 60px 16px 18px; text-align: center; color: var(--tx); font: 600 14px var(--fb); background: linear-gradient(0deg, rgba(0, 0, 0, .75), transparent); pointer-events: none; }
+.dp-sl.is-failed .dp-sl-note { display: grid; gap: 10px; justify-items: center; }
+.dp-sl-note a { pointer-events: auto; }
 .dp-strip { position: relative; --fl: 0; --fr: 0; margin-top: 6px; }
 .dp-strip::before, .dp-strip::after { content: ""; position: absolute; top: 0; bottom: 8px; width: 64px; z-index: 2; pointer-events: none; }
 .dp-strip::before { left: 0; opacity: var(--fl); background: linear-gradient(90deg, var(--bg) 8%, transparent); }
