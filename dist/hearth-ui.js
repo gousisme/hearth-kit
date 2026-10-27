@@ -1528,7 +1528,7 @@ function adopt(scope, css) {
  * THE FULL GAME PAGE: every visual of it lives here (markup) and in styles/66-page.css (looks and motion). A userscript only supplies data and decides when to
  * paint what; it writes no CSS, no icons and no inline styles. Builders return HTML strings (everything escaped), meant for morphInto() regions (data-k).
  *   pageOpen(root, game) → element         pageClose(el, instant)
- *   pageArt(el, { hero, logo }, final)     hero / logo URL lists, tried in order; the slots stop being skeletons when one loads
+ *   pageArt(el, { hero, logo }, final, onMiss)   hero / logo URL lists, tried in order; the slots stop being skeletons when one loads; onMiss('logo') when every logo URL failed
  *   stageHtml / showSlide / mediaReady     gallery (stage + thumbnails) and its cross-fade
  *   ratingHtml, histHtml, reviewHtml, commentHtml, pagerHtml, tabsHtml, noteHtml, skelHtml, aboutHtml   content blocks
  *   expand(el)                             animated "Read more" for .dp-clampbox / .dp-rt
@@ -1574,11 +1574,11 @@ function slotFill(box, urls, final, done, miss) {
   };
   next();
 }
-function pageArt(el, { hero = [], logo = [] }, final) {
+function pageArt(el, { hero = [], logo = [] }, final, onMiss) {
   const list = a => [...new Set(a.map(safeUrl).filter(Boolean))];
   const layer = el.querySelector('.dp-hero .layer'), lg = el.querySelector('.dp-hero .lg');
   slotFill(layer, list(hero), final, () => layer.classList.remove('is-skel', 'is-busy'), () => { layer.classList.remove('is-busy'); layer.classList.add('is-failed'); });
-  slotFill(lg, list(logo), final, () => lg.classList.add('has-logo'));
+  slotFill(lg, list(logo), final, () => lg.classList.add('has-logo'), () => onMiss && onMiss('logo'));
 }
 
 /* ── gallery ─────────────────────────────────────────────────────────────────────────────── */

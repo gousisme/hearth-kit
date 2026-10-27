@@ -133,10 +133,10 @@
 @media (max-width: 980px) { .dp-grid { grid-template-columns: 1fr; } .dp-side { order: -1; } }
 @media (prefers-reduced-motion: reduce) { .dp, .dp .rg-in, .dp-bar i { transition: none; animation: none; } }
 
-/* ── section images inside "About" (Steam's own) ── */
-.dp-fig { margin: 4px 0; border-radius: 12px; overflow: hidden; min-height: 120px; background: var(--s2); }
-.dp-fig img, .dp-fig video { display: block; width: 100%; height: auto; opacity: 1; transition: opacity var(--ts) var(--ease); }
-.dp-fig video { width: 100%; height: auto; transition: opacity var(--ts) var(--ease); }
+/* ── section images inside "About" (Steam's own): no backdrop - many are transparent dividers / banners; the skeleton only shows while one loads ── */
+.dp-fig { margin: 6px 0; text-align: center; }
+.dp-fig img, .dp-fig video { display: inline-block; max-width: 100%; height: auto; border-radius: 12px; opacity: 1; transition: opacity var(--ts) var(--ease); }
+.dp-fig.is-skel { min-height: 120px; border-radius: 12px; }
 .dp-fig.is-skel img, .dp-fig.is-skel video { opacity: 0; }
 
 /* ── rating tiers: each Steam verdict has its own look, flat like the rest of the site (tinted surface, no glows or shadows) ──
