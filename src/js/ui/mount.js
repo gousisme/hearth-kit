@@ -72,7 +72,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
   /* ── render ─────────────────────────────────────────────────────────────────────────────── */
   function homeHtml() {
     if (!D.games.length) return `<div class="empty has-bar"><h3>No games to show</h3><p>The page was read, but no games were found. Check the scraper selectors.</p></div>`;
-    return heroHtml(D.hero) + featuredHtml(D.featured) + genresHtml(D) + D.shelves.map(shelfHtml).join('');
+    return heroHtml(D.hero, { page: typeof opt.onPage === 'function' }) + featuredHtml(D.featured) + genresHtml(D) + D.shelves.map(shelfHtml).join('');
   }
 
   function paint() {

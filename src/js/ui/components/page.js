@@ -85,10 +85,19 @@ export function showSlide(el, items, i) {
 }
 
 /* ── content blocks ──────────────────────────────────────────────────────────────────────── */
-/** About text: lines starting with "##" are sub-headings. Long text starts clamped (expand() opens it). */
-export function aboutHtml(txt) {
-  const long = txt.length >= 700;
-  return `<h4>About this game</h4><div class="dp-clampbox${long ? ' cl' : ''}"><div class="dp-text">${txt.split('\n').map(l => (l.startsWith('##') ? `<h5>${esc(l.slice(2))}</h5>` : `<p>${esc(l)}</p>`)).join('')}</div></div>${long ? '<button class="dp-more" data-dp-act="about">Read more</button>' : ''}`;
+/** About: a string (lines starting with "##" are sub-headings) or Steam-style blocks [{ h } | { t } | { img, alt }]. Long content starts clamped (expand() opens it). */
+export function aboutHtml(src) {
+  const blocks = typeof src === 'string' ? src.split('\n').filter(Boolean).map(l => (l.startsWith('##') ? { h: l.slice(2) } : { t: l })) : src;
+  const weight = blocks.reduce((n, b) => n + (b.img ? 220 : (b.t || b.h || '').length), 0), long = weight >= 700 || blocks.filter(b => b.img).length > 1;
+  const one = b => (b.img ? `<figure class="dp-fig is-skel is-busy"><img src="${esc(safeUrl(b.img))}" alt="${esc(b.alt || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer"></figure>` : b.h ? `<h5>${esc(b.h)}</h5>` : `<p>${esc(b.t)}</p>`);
+  return `<h4>About this game</h4><div class="dp-clampbox${long ? ' cl' : ''}"><div class="dp-text">${blocks.map(one).join('')}</div></div>${long ? '<button class="dp-more" data-dp-act="about">Read more</button>' : ''}`;
+}
+/** Section images fade in as they load (the figure shows the kit's skeleton until then; a failed one disappears). */
+export function imgReady(el) {
+  el.querySelectorAll('.dp-fig img:not([data-f])').forEach(im => {
+    im.dataset.f = '1'; const fig = im.parentNode, ok = () => fig.classList.remove('is-skel', 'is-busy'), bad = () => fig.remove();
+    im.complete ? (im.naturalWidth ? ok() : bad()) : (im.addEventListener('load', ok, { once: true }), im.addEventListener('error', bad, { once: true }));
+  });
 }
 /** Open a clamped box (.cl) with a height transition. */
 export function expand(box, animate = true) {
@@ -99,11 +108,14 @@ export function expand(box, animate = true) {
   box.classList.remove('cl'); box.style.maxHeight = box.scrollHeight + 'px';
   setTimeout(() => { box.style.maxHeight = ''; }, T.slow + 60);
 }
+/** How a Steam verdict looks: op overwhelmingly positive (sparkles + shine), vp very positive (glow), po positive, mx mixed, ng negative, vn very negative (glow), on overwhelmingly negative (embers). */
+const tier = d => { d = String(d || '').toLowerCase(); return /overwhelmingly positive/.test(d) ? 'op' : /very positive/.test(d) ? 'vp' : /positive/.test(d) ? 'po' : /overwhelmingly negative/.test(d) ? 'on' : /very negative/.test(d) ? 'vn' : /negative/.test(d) ? 'ng' : 'mx'; };
 /** Steam's review summary ({ total_reviews, total_positive, total_negative, review_score_desc }) as the side card. '' when there is none. */
 export function ratingHtml(R) {
   if (!R || !R.total_reviews) return '';
-  const pos = R.total_positive || 0, pct = Math.round(100 * pos / Math.max(pos + (R.total_negative || 0), 1)), t = tone(R.review_score_desc);
-  return `<div class="dp-card"><h4>Steam reviews</h4><div class="dp-rate"><div class="dp-pct ${t}">${pct}%</div><div class="dp-lab ${t}">${esc(R.review_score_desc || '')}</div><div class="dp-sub">${num(R.total_reviews)} reviews · ${num(pos)} positive</div><div class="dp-bar"><i style="--p:${pct}%"></i></div></div></div>`;
+  const pos = R.total_positive || 0, pct = Math.round(100 * pos / Math.max(pos + (R.total_negative || 0), 1)), t = tone(R.review_score_desc), k = tier(R.review_score_desc);
+  const fx = k === 'op' || k === 'on' ? `<span class="dp-fx" aria-hidden="true">${'<i></i>'.repeat(k === 'op' ? 7 : 9)}</span>` : '';
+  return `<div class="dp-card" data-tier="${k}">${fx}<h4>Steam reviews</h4><div class="dp-rate"><div class="dp-pct ${t}">${pct}%</div><div class="dp-lab ${t}">${esc(R.review_score_desc || '')}</div><div class="dp-sub">${num(R.total_reviews)} reviews · ${num(pos)} positive</div><div class="dp-bar"><i style="--p:${pct}%"></i></div></div></div>`;
 }
 /** Reviews per month, as bars. h = [{ d (unix seconds), up, down }]. */
 export function histHtml(h) {

@@ -3,7 +3,7 @@ import { validate } from '../shared/schema.js';
 import { steam, logoSlot, layer } from './core/art.js';
 import { normalize } from './core/data.js';
 import { getBox, guideHtml, actsHtml, factsHtml, reqHtml, updHtml } from './components/detail.js';
-import { pageOpen, pageClose, pageArt, stageHtml, showSlide, mediaReady, aboutHtml, expand, ratingHtml, histHtml, reviewHtml, commentHtml, pagerHtml, tabsHtml, noteHtml, skelHtml, linkHtml, moreHtml } from './components/page.js';
+import { pageOpen, pageClose, pageArt, stageHtml, showSlide, mediaReady, aboutHtml, imgReady, expand, ratingHtml, histHtml, reviewHtml, commentHtml, pagerHtml, tabsHtml, noteHtml, skelHtml, linkHtml, moreHtml } from './components/page.js';
 import { morphInto, swapRegion } from './core/morph.js';
 import { ic, icf, ICON, LOGO } from './core/icons.js';
 
@@ -13,4 +13,4 @@ export const features = { downloadLoop: true, lazyGrid: true, skeletons: true, l
 export { mount, validate, steam, normalize };
 /** The sheet's own building blocks, for pages a userscript draws next to the sheet (so they look exactly like it and never re-implement it). */
 export const parts = { getBox, guideHtml, actsHtml, factsHtml, reqHtml, updHtml, logoSlot, layer, morphInto, swapRegion, ic, icf, ICON, LOGO,
-  page: { open: pageOpen, close: pageClose, art: pageArt, stage: stageHtml, show: showSlide, mediaReady, about: aboutHtml, expand, rating: ratingHtml, hist: histHtml, review: reviewHtml, comment: commentHtml, pager: pagerHtml, tabs: tabsHtml, note: noteHtml, skel: skelHtml, link: linkHtml, more: moreHtml } };
+  page: { open: pageOpen, close: pageClose, art: pageArt, stage: stageHtml, show: showSlide, mediaReady, about: aboutHtml, imgReady, expand, rating: ratingHtml, hist: histHtml, review: reviewHtml, comment: commentHtml, pager: pagerHtml, tabs: tabsHtml, note: noteHtml, skel: skelHtml, link: linkHtml, more: moreHtml } };

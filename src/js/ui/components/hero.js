@@ -3,8 +3,8 @@ import { layer, logoSlot } from '../core/art.js';
 import { reduced } from '../core/motion.js';
 import { button, glassButton } from './button.js';
 
-/** Hero carousel markup. `slides` = [{ game, eyebrow }]. */
-export function heroHtml(slides) {
+/** Hero carousel markup. `slides` = [{ game, eyebrow }]. With `page`, "Details" opens the full game page (data-page) instead of the popup sheet. */
+export function heroHtml(slides, { page = false } = {}) {
   if (!slides.length) return '';
   const slide = ({ game: g, eyebrow }, i) => {
     const meta = [g.genres[0], g.releaseYear, g.size, g.rating].filter(Boolean).map(v => `<span>${esc(v)}</span>`).join('<i></i>');
@@ -14,7 +14,7 @@ export function heroHtml(slides) {
         <div class="chip-new"><i></i>${esc(eyebrow)}</div>
         ${logoSlot(g)}
         <div class="tags">${meta}</div>
-        <div class="acts">${button('Get game', { attrs: `data-get="${esc(g.id)}"` })}${glassButton('Details', `data-open="${esc(g.id)}"`)}</div>
+        <div class="acts">${button('Get game', { attrs: `data-get="${esc(g.id)}"` })}${glassButton('Details', `${page ? 'data-page' : 'data-open'}="${esc(g.id)}"`)}</div>
       </div></article>`;
   };
   const segs = slides.length > 1 ? `<div class="segs" role="tablist" aria-label="Featured games">${slides.map(({ game: g }, i) => `<button class="sg${i ? '' : ' on'}" role="tab" aria-label="${esc(g.title)}" ${i ? '' : 'aria-current="true"'}><i></i></button>`).join('')}</div>` : '';

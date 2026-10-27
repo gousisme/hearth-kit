@@ -553,8 +553,8 @@ function glassButton(label, attrs = '', cls = '') {
 }
 
 /* ── src/js/ui/components/hero.js ── */
-/** Hero carousel markup. `slides` = [{ game, eyebrow }]. */
-function heroHtml(slides) {
+/** Hero carousel markup. `slides` = [{ game, eyebrow }]. With `page`, "Details" opens the full game page (data-page) instead of the popup sheet. */
+function heroHtml(slides, { page = false } = {}) {
   if (!slides.length) return '';
   const slide = ({ game: g, eyebrow }, i) => {
     const meta = [g.genres[0], g.releaseYear, g.size, g.rating].filter(Boolean).map(v => `<span>${esc(v)}</span>`).join('<i></i>');
@@ -564,7 +564,7 @@ function heroHtml(slides) {
         <div class="chip-new"><i></i>${esc(eyebrow)}</div>
         ${logoSlot(g)}
         <div class="tags">${meta}</div>
-        <div class="acts">${button('Get game', { attrs: `data-get="${esc(g.id)}"` })}${glassButton('Details', `data-open="${esc(g.id)}"`)}</div>
+        <div class="acts">${button('Get game', { attrs: `data-get="${esc(g.id)}"` })}${glassButton('Details', `${page ? 'data-page' : 'data-open'}="${esc(g.id)}"`)}</div>
       </div></article>`;
   };
   const segs = slides.length > 1 ? `<div class="segs" role="tablist" aria-label="Featured games">${slides.map(({ game: g }, i) => `<button class="sg${i ? '' : ' on'}" role="tab" aria-label="${esc(g.title)}" ${i ? '' : 'aria-current="true"'}><i></i></button>`).join('')}</div>` : '';
@@ -1170,7 +1170,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   /* ── render ─────────────────────────────────────────────────────────────────────────────── */
   function homeHtml() {
     if (!D.games.length) return `<div class="empty has-bar"><h3>No games to show</h3><p>The page was read, but no games were found. Check the scraper selectors.</p></div>`;
-    return heroHtml(D.hero) + featuredHtml(D.featured) + genresHtml(D) + D.shelves.map(shelfHtml).join('');
+    return heroHtml(D.hero, { page: typeof opt.onPage === 'function' }) + featuredHtml(D.featured) + genresHtml(D) + D.shelves.map(shelfHtml).join('');
   }
 
   function paint() {
@@ -1607,10 +1607,19 @@ function showSlide(el, items, i) {
 }
 
 /* ── content blocks ──────────────────────────────────────────────────────────────────────── */
-/** About text: lines starting with "##" are sub-headings. Long text starts clamped (expand() opens it). */
-function aboutHtml(txt) {
-  const long = txt.length >= 700;
-  return `<h4>About this game</h4><div class="dp-clampbox${long ? ' cl' : ''}"><div class="dp-text">${txt.split('\n').map(l => (l.startsWith('##') ? `<h5>${esc(l.slice(2))}</h5>` : `<p>${esc(l)}</p>`)).join('')}</div></div>${long ? '<button class="dp-more" data-dp-act="about">Read more</button>' : ''}`;
+/** About: a string (lines starting with "##" are sub-headings) or Steam-style blocks [{ h } | { t } | { img, alt }]. Long content starts clamped (expand() opens it). */
+function aboutHtml(src) {
+  const blocks = typeof src === 'string' ? src.split('\n').filter(Boolean).map(l => (l.startsWith('##') ? { h: l.slice(2) } : { t: l })) : src;
+  const weight = blocks.reduce((n, b) => n + (b.img ? 220 : (b.t || b.h || '').length), 0), long = weight >= 700 || blocks.filter(b => b.img).length > 1;
+  const one = b => (b.img ? `<figure class="dp-fig is-skel is-busy"><img src="${esc(safeUrl(b.img))}" alt="${esc(b.alt || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer"></figure>` : b.h ? `<h5>${esc(b.h)}</h5>` : `<p>${esc(b.t)}</p>`);
+  return `<h4>About this game</h4><div class="dp-clampbox${long ? ' cl' : ''}"><div class="dp-text">${blocks.map(one).join('')}</div></div>${long ? '<button class="dp-more" data-dp-act="about">Read more</button>' : ''}`;
+}
+/** Section images fade in as they load (the figure shows the kit's skeleton until then; a failed one disappears). */
+function imgReady(el) {
+  el.querySelectorAll('.dp-fig img:not([data-f])').forEach(im => {
+    im.dataset.f = '1'; const fig = im.parentNode, ok = () => fig.classList.remove('is-skel', 'is-busy'), bad = () => fig.remove();
+    im.complete ? (im.naturalWidth ? ok() : bad()) : (im.addEventListener('load', ok, { once: true }), im.addEventListener('error', bad, { once: true }));
+  });
 }
 /** Open a clamped box (.cl) with a height transition. */
 function expand(box, animate = true) {
@@ -1621,11 +1630,14 @@ function expand(box, animate = true) {
   box.classList.remove('cl'); box.style.maxHeight = box.scrollHeight + 'px';
   setTimeout(() => { box.style.maxHeight = ''; }, T.slow + 60);
 }
+/** How a Steam verdict looks: op overwhelmingly positive (sparkles + shine), vp very positive (glow), po positive, mx mixed, ng negative, vn very negative (glow), on overwhelmingly negative (embers). */
+const tier = d => { d = String(d || '').toLowerCase(); return /overwhelmingly positive/.test(d) ? 'op' : /very positive/.test(d) ? 'vp' : /positive/.test(d) ? 'po' : /overwhelmingly negative/.test(d) ? 'on' : /very negative/.test(d) ? 'vn' : /negative/.test(d) ? 'ng' : 'mx'; };
 /** Steam's review summary ({ total_reviews, total_positive, total_negative, review_score_desc }) as the side card. '' when there is none. */
 function ratingHtml(R) {
   if (!R || !R.total_reviews) return '';
-  const pos = R.total_positive || 0, pct = Math.round(100 * pos / Math.max(pos + (R.total_negative || 0), 1)), t = tone(R.review_score_desc);
-  return `<div class="dp-card"><h4>Steam reviews</h4><div class="dp-rate"><div class="dp-pct ${t}">${pct}%</div><div class="dp-lab ${t}">${esc(R.review_score_desc || '')}</div><div class="dp-sub">${num(R.total_reviews)} reviews · ${num(pos)} positive</div><div class="dp-bar"><i style="--p:${pct}%"></i></div></div></div>`;
+  const pos = R.total_positive || 0, pct = Math.round(100 * pos / Math.max(pos + (R.total_negative || 0), 1)), t = tone(R.review_score_desc), k = tier(R.review_score_desc);
+  const fx = k === 'op' || k === 'on' ? `<span class="dp-fx" aria-hidden="true">${'<i></i>'.repeat(k === 'op' ? 7 : 9)}</span>` : '';
+  return `<div class="dp-card" data-tier="${k}">${fx}<h4>Steam reviews</h4><div class="dp-rate"><div class="dp-pct ${t}">${pct}%</div><div class="dp-lab ${t}">${esc(R.review_score_desc || '')}</div><div class="dp-sub">${num(R.total_reviews)} reviews · ${num(pos)} positive</div><div class="dp-bar"><i style="--p:${pct}%"></i></div></div></div>`;
 }
 /** Reviews per month, as bars. h = [{ d (unix seconds), up, down }]. */
 function histHtml(h) {
@@ -1675,7 +1687,7 @@ const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore
 
 /** The sheet's own building blocks, for pages a userscript draws next to the sheet (so they look exactly like it and never re-implement it). */
 const parts = { getBox, guideHtml, actsHtml, factsHtml, reqHtml, updHtml, logoSlot, layer, morphInto, swapRegion, ic, icf, ICON, LOGO,
-  page: { open: pageOpen, close: pageClose, art: pageArt, stage: stageHtml, show: showSlide, mediaReady, about: aboutHtml, expand, rating: ratingHtml, hist: histHtml, review: reviewHtml, comment: commentHtml, pager: pagerHtml, tabs: tabsHtml, note: noteHtml, skel: skelHtml, link: linkHtml, more: moreHtml } };
+  page: { open: pageOpen, close: pageClose, art: pageArt, stage: stageHtml, show: showSlide, mediaReady, about: aboutHtml, imgReady, expand, rating: ratingHtml, hist: histHtml, review: reviewHtml, comment: commentHtml, pager: pagerHtml, tabs: tabsHtml, note: noteHtml, skel: skelHtml, link: linkHtml, more: moreHtml } };
 
 return {mount, validate, steam, normalize, version, features, parts};
 })();
