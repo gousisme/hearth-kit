@@ -29,7 +29,7 @@
 .lb-m { width: min(1280px, 100%); max-height: 100%; display: grid; place-items: center; transform: scale(.965); transition: transform var(--tb) var(--ein); }
 .lb.open .lb-m { transform: none; transition: transform var(--ts) var(--ease); }
 /* slides share one grid cell: the new one fades in (and slides a little in the direction of travel) while the old one fades out */
-.lb-s { grid-area: 1 / 1; width: 100%; min-width: 0; max-width: 100%; display: grid; place-items: center; opacity: 0; transform: translateX(var(--dx, 0px)) scale(.985); transition: opacity var(--tb) var(--ein), transform var(--tb) var(--ein); }
+.lb-s { position: relative; grid-area: 1 / 1; width: 100%; min-width: 0; max-width: 100%; display: grid; place-items: center; opacity: 0; transform: translateX(var(--dx, 0px)) scale(.985); transition: opacity var(--tb) var(--ein), transform var(--tb) var(--ein); }
 .lb-s.in { opacity: 1; transform: none; transition: opacity var(--ts) var(--ease), transform var(--ts) var(--ease); }
 .lb-s.out { pointer-events: none; }
 .lb-m img, .lb-m video { max-width: 100%; max-height: calc(100vh - 140px); border-radius: 14px; background: #000; display: block; }

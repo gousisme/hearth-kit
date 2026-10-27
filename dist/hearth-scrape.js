@@ -162,15 +162,16 @@ const kv = o => {
 const list = v => (Array.isArray(v) ? v : []);
 const http = u => /^https?:\/\//i.test(str(u));
 
-/** Media strip items: { type:'image'|'video'|'embed', thumb, src, sources:[{src,type}], title }. Items without a usable thumbnail or source are dropped. */
+/** Media strip items: { type:'image'|'video'|'embed', thumb, src, sources:[{src,type}], stream (a DASH .mpd URL, played with dash.js), page (where to watch it when it cannot play), title }. Items without a usable thumbnail or source are dropped. */
 function coerceMedia(v) {
   return list(v).map(m => {
     if (!m || typeof m !== 'object') return null;
     const type = m.type === 'video' || m.type === 'embed' ? m.type : 'image';
     const thumb = http(m.thumb) ? str(m.thumb) : '', src = http(m.src) ? str(m.src) : '';
     const sources = list(m.sources).filter(s => s && http(s.src)).map(s => ({ src: str(s.src), type: str(s.type) }));
-    if (!thumb || (type === 'image' ? !(src || thumb) : type === 'video' ? !sources.length : !src)) return null;
-    return { type, thumb, src: src || thumb, sources, title: str(m.title) };
+    const stream = type === 'video' && http(m.stream) ? str(m.stream) : '';
+    if (!thumb || (type === 'image' ? !(src || thumb) : type === 'video' ? !(sources.length || stream) : !src)) return null;
+    return { type, thumb, src: src || thumb, sources, ...(stream ? { stream, page: http(m.page) ? str(m.page) : '' } : {}), title: str(m.title) };
   }).filter(Boolean).slice(0, 16);
 }
 

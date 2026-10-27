@@ -1,3 +1,4 @@
+import { streamHtml } from '../core/stream.js';
 import { esc, safeUrl } from '../../shared/util.js';
 import { ic, ICON } from '../core/icons.js';
 
@@ -19,6 +20,7 @@ export function lightboxShell(many) {
 
 /** One slide (a screenshot, a video or an embed). Slides live in the stage; changing item fades the old one out and the new one in. */
 export function lightboxSlide(m) {
+  if (m.stream) return streamHtml(m, false);
   if (m.type === 'video') return `<video controls autoplay playsinline poster="${esc(safeUrl(m.thumb))}">${m.sources.map(s => `<source src="${esc(safeUrl(s.src))}"${s.type ? ` type="${esc(s.type)}"` : ''}>`).join('')}</video><div class="lb-err" hidden>This video can’t be played here.</div>`;
   if (m.type === 'embed') return `<iframe src="${esc(safeUrl(m.src))}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
   return `<img src="${esc(safeUrl(m.src))}" alt="" decoding="async">`;

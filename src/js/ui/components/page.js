@@ -1,6 +1,7 @@
 import { esc, safeUrl } from '../../shared/util.js';
 import { ic, ICON } from '../core/icons.js';
 import { T, reduced } from '../core/motion.js';
+import { streamHtml, attachStreams, stopStream } from '../core/stream.js';
 
 /**
  * THE FULL GAME PAGE: every visual of it lives here (markup) and in styles/66-page.css (looks and motion). A userscript only supplies data and decides when to
@@ -62,22 +63,11 @@ export function pageArt(el, { hero = [], logo = [] }, final, onMiss) {
 /* ── gallery ─────────────────────────────────────────────────────────────────────────────── */
 const slideHtml = m => {
   const src = safeUrl(m.src || (m.sources && m.sources[0] && m.sources[0].src) || m.thumb);
-  const note = `<div class="dp-sl-note"><span>This trailer can’t play here.</span>${m.page ? `<a class="dp-ghost ac" href="${esc(safeUrl(m.page))}" target="_blank" rel="noopener noreferrer">Watch it on Steam</a>` : ''}</div>`;
-  return m.stream ? `<video controls autoplay muted playsinline poster="${esc(safeUrl(m.thumb))}" data-dash="${esc(safeUrl(m.stream))}"></video>${note}`
+  return m.stream ? streamHtml(m)
     : m.type === 'video' && m.sources ? `<video controls autoplay muted playsinline poster="${esc(safeUrl(m.thumb))}">${m.sources.map(s => `<source src="${esc(safeUrl(s.src))}" type="${esc(s.type)}">`).join('')}</video>`
     : m.type === 'embed' ? `<iframe src="${esc(safeUrl(m.src))}" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>` : `<img src="${esc(src)}" alt="">`;
 };
 export const stageHtml = (items, i) => `<div class="dp-stage"><div class="dp-sl in">${slideHtml(items[i])}</div></div><div class="dp-strip"><div class="dp-thumbs">${items.map((x, k) => `<button class="dp-th${k === i ? ' on' : ''}${x.type !== 'image' ? ' v' : ''}" data-dp-m="${k}" aria-label="Media ${k + 1}"><img src="${esc(safeUrl(x.thumb || x.src))}" alt="" decoding="async"></button>`).join('')}</div></div>`;
-/** Steam trailers are DASH streams now (no mp4 / webm files any more): played with dash.js when the page has it (`window.dashjs`, a @require of the userscript). When it is missing or the stream errors,
-    the slide shows its poster and a "Watch it on Steam" link instead of a dead player. */
-function attachStreams(root) {
-  root.querySelectorAll('video[data-dash]:not([data-on])').forEach(v => {
-    v.dataset.on = '1'; const slide = v.closest('.dp-sl'), fail = () => { v.controls = false; v.pause(); if (slide) slide.classList.add('is-failed'); };
-    const dj = window.dashjs; if (!dj) return fail();
-    try { const p = dj.MediaPlayer().create(); v.__dash = p; p.on('error', fail); p.initialize(v, v.dataset.dash, true); } catch (e) { fail(); }
-  });
-}
-const stopStream = o => { const v = o.querySelector('video'); try { if (v && v.__dash) v.__dash.destroy(); } catch (e) { /* already gone */ } };
 const thumbFade = s => { const m = s.parentNode, max = s.scrollWidth - s.clientWidth; m.style.setProperty('--fl', Math.max(0, Math.min(1, s.scrollLeft / 64)).toFixed(3)); m.style.setProperty('--fr', Math.max(0, Math.min(1, (max - s.scrollLeft) / 64)).toFixed(3)); };
 /** After the gallery is painted: the strip fades at its ends while there is more to scroll, thumbnails fade in as they load. */
 export function mediaReady(el) {

@@ -5,6 +5,8 @@
 .top { position: absolute; z-index: 40; top: 42px; left: 0; right: 0; min-height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 calc(max(0px, (100% - var(--max)) / 2) + var(--gut) + 26px); pointer-events: none; transition: opacity var(--ts) var(--ease), transform var(--ts) var(--ease); }
 .top > * { pointer-events: auto; }
 .hearth:not(.ready) .bar, .hearth:not(.ready) .top { opacity: 0; transform: translateY(-14px); }
+.hearth { --spring: cubic-bezier(.34, 1.56, .64, 1); }
+@supports (transition-timing-function: linear(0, 1)) { .hearth { --spring: linear(0, .1 3%, .38 8%, .76 15%, 1.01 24%, 1.06 31%, 1.05 38%, 1.02 47%, .995 58%, 1 72%, 1); } }   /* a spring: overshoots, then settles */
 .mark { position: relative; overflow: hidden; width: 44px; height: 44px; border-radius: 14px; background: var(--ac); color: var(--ink); display: grid; place-items: center; font: 800 22px var(--fd); transition: transform var(--tb) var(--ease); }
 .mark img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--tb) var(--ease); }
 .mark.ok img { opacity: 1; }
@@ -16,6 +18,19 @@
 .av img { width: 100%; height: 100%; object-fit: cover; }
 
 /* the only "glass" in the system: the floating bar and a few chips over imagery */
+/* Docking: scrolled, the mark and the avatar leave the page's corners and slide to the pill (with a little overshoot), where they stay. Back at the top they slide out to the corners again.
+   The docked copies are offset (--dx-l / --dy-l, measured by mount.js) so that they start exactly on the corner ones; the corner ones fade out as they leave and back in when they are home. */
+.dk { position: relative; z-index: 2; flex: none; width: 46px; height: 46px; align-self: center; display: grid; place-items: center; margin: 0 12px; }
+.bar > .dk { pointer-events: none; }
+.dk-l > * { --dx: var(--dx-l, 0px); --dy: var(--dy-l, 0px); }
+.dk-r > * { --dx: var(--dx-r, 0px); --dy: var(--dy-r, 0px); }
+.dk > * { pointer-events: none; opacity: 0; translate: var(--dx) var(--dy); transition: translate 420ms var(--ease), opacity 140ms linear 280ms, transform var(--tb) var(--ease); }
+.docked .dk > * { pointer-events: auto; opacity: 1; translate: 0 0; transition: translate 760ms var(--spring), opacity 80ms linear, transform var(--tb) var(--ease); }
+.top .mark { transition: transform var(--tb) var(--ease), opacity 140ms linear 300ms; }
+.top .bar-r .av { transition: transform var(--tb) var(--ease), opacity 140ms linear 300ms; }
+.docked .top .mark, .docked .top .bar-r .av { opacity: 0; pointer-events: none; transition: transform var(--tb) var(--ease), opacity 60ms linear; }
+@media (prefers-reduced-motion: reduce) { .dk > *, .docked .dk > * { translate: 0 0; transition: opacity var(--tf) linear; } }
+
 .gl { background: rgba(32, 34, 40, .5); backdrop-filter: blur(20px) saturate(1.2); -webkit-backdrop-filter: blur(20px) saturate(1.2); border: 1px solid rgba(255, 255, 255, .1); }
 .pill { position: relative; display: flex; gap: 2px; padding: 5px; border-radius: 99px; }
 .pill button { position: relative; z-index: 1; padding: 10px 22px; border-radius: 99px; font-weight: 600; color: #d5d8de; transition: color var(--tf), transform var(--tf) var(--ease); }

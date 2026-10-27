@@ -10,6 +10,7 @@ import { shelfHtml, initShelves } from './components/shelf.js';
 import { barHtml, cornerHtml, searchHtml, navActive } from './components/nav.js';
 import { detailHtml } from './components/detail.js';
 import { lightboxShell, lightboxSlide } from './components/media.js';
+import { attachStreams, stopStream } from './core/stream.js';
 import { morphInto } from './core/morph.js';
 import { dlPlay } from './core/dl-loop.js';
 import { profileHtml } from './components/profile.js';
@@ -101,11 +102,27 @@ export function mount({ target = document.body, data, css = null, shadow, option
   function renderBar() {
     $bar.innerHTML = barHtml(D, route) + searchHtml();
     $top.innerHTML = cornerHtml(D);
-    $top.querySelectorAll('.mark img').forEach(im => { const ok = () => im.parentNode && im.parentNode.classList.add('ok'); im.complete && im.naturalWidth ? ok() : im.addEventListener('load', ok, { once: true }); });   // the site's own logo fades in over the letter
+    root.querySelectorAll('.top .mark img, .bar .mark img').forEach(im => { const ok = () => im.parentNode && im.parentNode.classList.add('ok'); im.complete && im.naturalWidth ? ok() : im.addEventListener('load', ok, { once: true }); });   // the site's own logo fades in over the letter
     $search = $bar.querySelector('.searchbox'); $input = $search.querySelector('input'); watchInd(); moveInd(true);
     $input.addEventListener('input', debounce(onSearch, 180));
+    $bar.querySelectorAll('.dk').forEach(d => { d.inert = !docked; }); dockMeasure();
   }
   let $search, $input;
+
+  /* The mark and the avatar join the pill once the page is scrolled: they slide in from their corners (offsets measured here, animated in styles/30-nav.css) and stay beside it. */
+  let docked = false;
+  function dockMeasure() {
+    const y = $scroll.scrollTop;
+    for (const [k, from] of [['l', '.top .mark'], ['r', '.top .av']]) {
+      const a = $top.querySelector(from), s = $bar.querySelector('.dk-' + k); if (!a || !s) continue;
+      const ra = a.getBoundingClientRect(), rs = s.getBoundingClientRect();
+      root.style.setProperty('--dx-' + k, Math.round(ra.left + ra.width / 2 - (rs.left + rs.width / 2)) + 'px');
+      root.style.setProperty('--dy-' + k, Math.round(ra.top + ra.height / 2 + y - (rs.top + rs.height / 2)) + 'px');
+    }
+  }
+  function setDock(on) { if (on === docked) return; if (on) dockMeasure(); docked = on; root.classList.toggle('docked', on); $bar.querySelectorAll('.dk').forEach(d => { d.inert = !on; }); }
+  $scroll.addEventListener('scroll', () => { const y = $scroll.scrollTop; setDock(docked ? y > 6 : y > 28); }, { passive: true });
+  if (window.ResizeObserver) new ResizeObserver(() => dockMeasure()).observe(root);
   function syncNav() {
     D.nav.forEach(n => {
       const b = $bar.querySelector(`[data-nav-id="${CSS.escape(n.id)}"]`); if (!b) return;
@@ -253,7 +270,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
   const LB_MS = () => (reduced() ? 0 : T.base + 60);
   function lbRetire(old, dir) {
     old.classList.remove('in'); old.classList.add('out'); old.style.setProperty('--dx', (-dir * 28) + 'px');
-    old.querySelectorAll('video').forEach(v => v.pause());
+    old.querySelectorAll('video').forEach(v => v.pause()); stopStream(old);
     setTimeout(() => old.remove(), LB_MS());
   }
   function lbShow(i, dir = 0) {
@@ -264,8 +281,8 @@ export function mount({ target = document.body, data, css = null, shadow, option
     $lb.querySelector('.lb-c').textContent = items.length > 1 ? `${i + 1} / ${items.length}` : '';
     stage.querySelectorAll('.lb-s:not(.out)').forEach(o => lbRetire(o, dir));
     const sl = document.createElement('div'); sl.className = 'lb-s'; sl.style.setProperty('--dx', (dir * 28) + 'px'); sl.innerHTML = lightboxSlide(items[i]); stage.appendChild(sl);
-    const v = sl.querySelector('video');
-    if (v) { const s = v.querySelectorAll('source'); s[s.length - 1].addEventListener('error', () => { v.hidden = true; sl.querySelector('.lb-err').hidden = false; }); }   // every source failed (e.g. blocked by the page's CSP)
+    const v = sl.querySelector('video'); attachStreams(sl);
+    if (v && !v.dataset.dash) { const s = v.querySelectorAll('source'); s[s.length - 1].addEventListener('error', () => { v.hidden = true; sl.querySelector('.lb-err').hidden = false; }); }   // every source failed (e.g. blocked by the page's CSP)
     const on = () => { if (sl.isConnected && !sl.classList.contains('out')) sl.classList.add('in'); }, img = sl.querySelector('img');
     if (img && !(img.complete && img.naturalWidth)) { img.addEventListener('load', on, { once: true }); img.addEventListener('error', on, { once: true }); setTimeout(on, 4000); }   // a picture fades in when it has arrived
     else requestAnimationFrame(() => requestAnimationFrame(on));
@@ -275,7 +292,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
   function lbHide() {
     if (lbI < 0) return; lbI = -1;
     $lb.classList.remove('open'); $lb.setAttribute('aria-hidden', 'true');
-    $lb.querySelectorAll('video').forEach(v => v.pause());
+    $lb.querySelectorAll('video').forEach(v => v.pause()); $lb.querySelectorAll('.lb-s').forEach(stopStream);
     $lb.querySelectorAll('iframe').forEach(f => { f.src = 'about:blank'; });                         // stops a playing embed at once; the frame then fades out with the rest
     clearTimeout(lbT); lbT = setTimeout(() => { if (lbI < 0) $lb.innerHTML = ''; }, LB_MS());           // content stays until the fade is over
     $sheet.focus({ preventScroll: true });

@@ -23,6 +23,7 @@
   .bar { justify-content: flex-end; padding: 0 20px; }
   .bar .pill { max-width: calc(100% - 84px); overflow-x: auto; scrollbar-width: none; }
   .top .bar-r { display: none; }
+  .dk { display: none; }
   .sheet.is-profile .ph { padding: 52px 20px 20px; }
   .sheet.is-profile .pb { padding: 4px 20px 24px; }
   .pill button { padding: 9px 9px; font-size: 13px; }

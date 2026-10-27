@@ -41,15 +41,16 @@ const kv = o => {
 const list = v => (Array.isArray(v) ? v : []);
 const http = u => /^https?:\/\//i.test(str(u));
 
-/** Media strip items: { type:'image'|'video'|'embed', thumb, src, sources:[{src,type}], title }. Items without a usable thumbnail or source are dropped. */
+/** Media strip items: { type:'image'|'video'|'embed', thumb, src, sources:[{src,type}], stream (a DASH .mpd URL, played with dash.js), page (where to watch it when it cannot play), title }. Items without a usable thumbnail or source are dropped. */
 function coerceMedia(v) {
   return list(v).map(m => {
     if (!m || typeof m !== 'object') return null;
     const type = m.type === 'video' || m.type === 'embed' ? m.type : 'image';
     const thumb = http(m.thumb) ? str(m.thumb) : '', src = http(m.src) ? str(m.src) : '';
     const sources = list(m.sources).filter(s => s && http(s.src)).map(s => ({ src: str(s.src), type: str(s.type) }));
-    if (!thumb || (type === 'image' ? !(src || thumb) : type === 'video' ? !sources.length : !src)) return null;
-    return { type, thumb, src: src || thumb, sources, title: str(m.title) };
+    const stream = type === 'video' && http(m.stream) ? str(m.stream) : '';
+    if (!thumb || (type === 'image' ? !(src || thumb) : type === 'video' ? !(sources.length || stream) : !src)) return null;
+    return { type, thumb, src: src || thumb, sources, ...(stream ? { stream, page: http(m.page) ? str(m.page) : '' } : {}), title: str(m.title) };
   }).filter(Boolean).slice(0, 16);
 }
 
@@ -724,31 +725,53 @@ function navActive(n, route) {
   return !!a.saved === !!b.saved && (a.sort || '') === (b.sort || '') && (a.category || '') === (b.category || '');
 }
 
-/** Floating glass pill: sections + search. It is the only part of the top bar that stays on screen while scrolling. */
-function barHtml(D, route) {
-  return `<header class="bar"><nav class="gl pill" aria-label="Sections"><i class="ind" aria-hidden="true"></i>
-      ${D.nav.map(n => `<button data-nav-id="${esc(n.id)}"${navActive(n, route) ? ' class="on" aria-current="page"' : ''}>${esc(n.label)}</button>`).join('')}
-      <button class="sb" data-search-toggle aria-label="Search" aria-expanded="false">${ic(ICON.search)}</button>
-    </nav></header>`;
+/** The site mark (left) and the account button (right), as buttons; `extra` adds classes (the docked copies get "dock"). No user (not signed in) → no account button, never the text "undefined". */
+function markHtml(D, extra = '') {
+  const logo = safeUrl(D.site.logo);                                   // site.logo: the site's own logo image; the letter (site.mark) shows until it has loaded, and stays if it never does
+  return `<button class="mark${logo ? ' has-img' : ''}${extra}" data-nav="home" aria-label="${esc(D.site.name)} — home"><span>${esc(D.site.mark)}</span>${logo ? `<img src="${esc(logo)}" alt="" decoding="async" draggable="false">` : ''}</button>`;
+}
+function avatarHtml(D, extra = '') {
+  const u = D.site.user, label = esc((u && u.name) || 'Account');
+  return !u ? ''
+    : u.avatarUrl && safeUrl(u.avatarUrl) ? `<button class="av${extra}" data-user aria-label="${label}"><img src="${esc(safeUrl(u.avatarUrl))}" alt=""></button>`
+    : u.initials ? `<button class="av${extra}" data-user aria-label="${label}">${esc(u.initials)}</button>` : '';
 }
 
-/**
- * The site mark (left) and the account button (right). They sit at the top of the scrolling page, so they scroll away
- * with it instead of floating over the content. No user (not signed in) → no account button, never the text "undefined".
- */
-function cornerHtml(D) {
-  const u = D.site.user, label = esc((u && u.name) || 'Account');
-  const avatar = !u ? ''
-    : u.avatarUrl && safeUrl(u.avatarUrl) ? `<button class="av" data-user aria-label="${label}"><img src="${esc(safeUrl(u.avatarUrl))}" alt=""></button>`
-    : u.initials ? `<button class="av" data-user aria-label="${label}">${esc(u.initials)}</button>` : '';
-  const logo = safeUrl(D.site.logo);                                   // site.logo: the site's own logo image; the letter (site.mark) shows until it has loaded, and stays if it never does
-  return `<button class="mark${logo ? ' has-img' : ''}" data-nav="home" aria-label="${esc(D.site.name)} — home"><span>${esc(D.site.mark)}</span>${logo ? `<img src="${esc(logo)}" alt="" decoding="async" draggable="false">` : ''}</button><div class="bar-r">${avatar}</div>`;
+/** Floating glass pill: sections + search, flanked by two "dock" slots. At the top of the page the slots are empty (the mark and the avatar sit in the page's corners, see cornerHtml); once the page
+    is scrolled, copies of them slide in from those corners and stay beside the pill (mount.js sets .docked on the root; styles/30-nav.css animates it). */
+function barHtml(D, route) {
+  return `<header class="bar"><span class="dk dk-l" inert>${markHtml(D, ' dock')}</span><nav class="gl pill" aria-label="Sections"><i class="ind" aria-hidden="true"></i>
+      ${D.nav.map(n => `<button data-nav-id="${esc(n.id)}"${navActive(n, route) ? ' class="on" aria-current="page"' : ''}>${esc(n.label)}</button>`).join('')}
+      <button class="sb" data-search-toggle aria-label="Search" aria-expanded="false">${ic(ICON.search)}</button>
+    </nav><span class="dk dk-r" inert>${avatarHtml(D, ' dock')}</span></header>`;
 }
+
+/** The corners at the top of the scrolling page: the mark (left) and the account button (right). They scroll away with the page; the docked copies (barHtml) take over. */
+function cornerHtml(D) { return markHtml(D) + `<div class="bar-r">${avatarHtml(D)}</div>`; }
 
 /** Drop-down search field that lives under the pill. */
 function searchHtml() {
   return `<div class="searchbox gl" role="search"><span class="si">${ic(ICON.search, 18)}</span><input type="search" placeholder="Search games, genres, studios…" aria-label="Search games" autocomplete="off" spellcheck="false"><button class="sx" data-search-clear aria-label="Clear search">${ic(ICON.close, 14)}</button></div>`;
 }
+
+/* ── src/js/ui/core/stream.js ── */
+/**
+ * STREAMED TRAILERS. Steam no longer hands out mp4 / webm files: its trailers are DASH streams (.mpd). A media item { type:'video', stream, thumb, page } is drawn as a <video data-dash>
+ * and attached to dash.js when the host page has it (`window.dashjs`, a @require of the userscript). When dash.js is missing or the stream errors, the slide gets .is-failed: the poster stays
+ * and the note ("can't play here" + a "Watch it on Steam" link to `page`) shows instead of a dead player. Used by the full page's gallery and the popup's viewer.
+ */
+function streamHtml(m, muted = true) {
+  const note = `<div class="dp-sl-note"><span>This trailer can’t play here.</span>${m.page ? `<a class="dp-ghost ac" href="${esc(safeUrl(m.page))}" target="_blank" rel="noopener noreferrer">Watch it on Steam</a>` : ''}</div>`;
+  return `<video controls autoplay${muted ? ' muted' : ''} playsinline poster="${esc(safeUrl(m.thumb))}" data-dash="${esc(safeUrl(m.stream))}"></video>${note}`;
+}
+function attachStreams(root) {
+  root.querySelectorAll('video[data-dash]:not([data-on])').forEach(v => {
+    v.dataset.on = '1'; const slide = v.parentNode, fail = () => { v.controls = false; v.pause(); if (slide) slide.classList.add('is-failed'); };
+    const dj = window.dashjs; if (!dj) return fail();
+    try { const p = dj.MediaPlayer().create(); v.__dash = p; p.on('error', fail); p.initialize(v, v.dataset.dash, true); } catch (e) { fail(); }
+  });
+}
+const stopStream = o => { const v = o.querySelector && o.querySelector('video'); try { if (v && v.__dash) { v.__dash.destroy(); v.__dash = null; } } catch (e) { /* already gone */ } };
 
 /* ── src/js/ui/components/media.js ── */
 /** The media strip (trailers + screenshots) under the sheet's header. Skeleton tiles while the details are still loading and a Steam id is known. */
@@ -769,6 +792,7 @@ function lightboxShell(many) {
 
 /** One slide (a screenshot, a video or an embed). Slides live in the stage; changing item fades the old one out and the new one in. */
 function lightboxSlide(m) {
+  if (m.stream) return streamHtml(m, false);
   if (m.type === 'video') return `<video controls autoplay playsinline poster="${esc(safeUrl(m.thumb))}">${m.sources.map(s => `<source src="${esc(safeUrl(s.src))}"${s.type ? ` type="${esc(s.type)}"` : ''}>`).join('')}</video><div class="lb-err" hidden>This video can’t be played here.</div>`;
   if (m.type === 'embed') return `<iframe src="${esc(safeUrl(m.src))}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
   return `<img src="${esc(safeUrl(m.src))}" alt="" decoding="async">`;
@@ -1199,11 +1223,27 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   function renderBar() {
     $bar.innerHTML = barHtml(D, route) + searchHtml();
     $top.innerHTML = cornerHtml(D);
-    $top.querySelectorAll('.mark img').forEach(im => { const ok = () => im.parentNode && im.parentNode.classList.add('ok'); im.complete && im.naturalWidth ? ok() : im.addEventListener('load', ok, { once: true }); });   // the site's own logo fades in over the letter
+    root.querySelectorAll('.top .mark img, .bar .mark img').forEach(im => { const ok = () => im.parentNode && im.parentNode.classList.add('ok'); im.complete && im.naturalWidth ? ok() : im.addEventListener('load', ok, { once: true }); });   // the site's own logo fades in over the letter
     $search = $bar.querySelector('.searchbox'); $input = $search.querySelector('input'); watchInd(); moveInd(true);
     $input.addEventListener('input', debounce(onSearch, 180));
+    $bar.querySelectorAll('.dk').forEach(d => { d.inert = !docked; }); dockMeasure();
   }
   let $search, $input;
+
+  /* The mark and the avatar join the pill once the page is scrolled: they slide in from their corners (offsets measured here, animated in styles/30-nav.css) and stay beside it. */
+  let docked = false;
+  function dockMeasure() {
+    const y = $scroll.scrollTop;
+    for (const [k, from] of [['l', '.top .mark'], ['r', '.top .av']]) {
+      const a = $top.querySelector(from), s = $bar.querySelector('.dk-' + k); if (!a || !s) continue;
+      const ra = a.getBoundingClientRect(), rs = s.getBoundingClientRect();
+      root.style.setProperty('--dx-' + k, Math.round(ra.left + ra.width / 2 - (rs.left + rs.width / 2)) + 'px');
+      root.style.setProperty('--dy-' + k, Math.round(ra.top + ra.height / 2 + y - (rs.top + rs.height / 2)) + 'px');
+    }
+  }
+  function setDock(on) { if (on === docked) return; if (on) dockMeasure(); docked = on; root.classList.toggle('docked', on); $bar.querySelectorAll('.dk').forEach(d => { d.inert = !on; }); }
+  $scroll.addEventListener('scroll', () => { const y = $scroll.scrollTop; setDock(docked ? y > 6 : y > 28); }, { passive: true });
+  if (window.ResizeObserver) new ResizeObserver(() => dockMeasure()).observe(root);
   function syncNav() {
     D.nav.forEach(n => {
       const b = $bar.querySelector(`[data-nav-id="${CSS.escape(n.id)}"]`); if (!b) return;
@@ -1351,7 +1391,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   const LB_MS = () => (reduced() ? 0 : T.base + 60);
   function lbRetire(old, dir) {
     old.classList.remove('in'); old.classList.add('out'); old.style.setProperty('--dx', (-dir * 28) + 'px');
-    old.querySelectorAll('video').forEach(v => v.pause());
+    old.querySelectorAll('video').forEach(v => v.pause()); stopStream(old);
     setTimeout(() => old.remove(), LB_MS());
   }
   function lbShow(i, dir = 0) {
@@ -1362,8 +1402,8 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     $lb.querySelector('.lb-c').textContent = items.length > 1 ? `${i + 1} / ${items.length}` : '';
     stage.querySelectorAll('.lb-s:not(.out)').forEach(o => lbRetire(o, dir));
     const sl = document.createElement('div'); sl.className = 'lb-s'; sl.style.setProperty('--dx', (dir * 28) + 'px'); sl.innerHTML = lightboxSlide(items[i]); stage.appendChild(sl);
-    const v = sl.querySelector('video');
-    if (v) { const s = v.querySelectorAll('source'); s[s.length - 1].addEventListener('error', () => { v.hidden = true; sl.querySelector('.lb-err').hidden = false; }); }   // every source failed (e.g. blocked by the page's CSP)
+    const v = sl.querySelector('video'); attachStreams(sl);
+    if (v && !v.dataset.dash) { const s = v.querySelectorAll('source'); s[s.length - 1].addEventListener('error', () => { v.hidden = true; sl.querySelector('.lb-err').hidden = false; }); }   // every source failed (e.g. blocked by the page's CSP)
     const on = () => { if (sl.isConnected && !sl.classList.contains('out')) sl.classList.add('in'); }, img = sl.querySelector('img');
     if (img && !(img.complete && img.naturalWidth)) { img.addEventListener('load', on, { once: true }); img.addEventListener('error', on, { once: true }); setTimeout(on, 4000); }   // a picture fades in when it has arrived
     else requestAnimationFrame(() => requestAnimationFrame(on));
@@ -1373,7 +1413,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   function lbHide() {
     if (lbI < 0) return; lbI = -1;
     $lb.classList.remove('open'); $lb.setAttribute('aria-hidden', 'true');
-    $lb.querySelectorAll('video').forEach(v => v.pause());
+    $lb.querySelectorAll('video').forEach(v => v.pause()); $lb.querySelectorAll('.lb-s').forEach(stopStream);
     $lb.querySelectorAll('iframe').forEach(f => { f.src = 'about:blank'; });                         // stops a playing embed at once; the frame then fades out with the rest
     clearTimeout(lbT); lbT = setTimeout(() => { if (lbI < 0) $lb.innerHTML = ''; }, LB_MS());           // content stays until the fade is over
     $sheet.focus({ preventScroll: true });
@@ -1584,22 +1624,11 @@ function pageArt(el, { hero = [], logo = [] }, final, onMiss) {
 /* ── gallery ─────────────────────────────────────────────────────────────────────────────── */
 const slideHtml = m => {
   const src = safeUrl(m.src || (m.sources && m.sources[0] && m.sources[0].src) || m.thumb);
-  const note = `<div class="dp-sl-note"><span>This trailer can’t play here.</span>${m.page ? `<a class="dp-ghost ac" href="${esc(safeUrl(m.page))}" target="_blank" rel="noopener noreferrer">Watch it on Steam</a>` : ''}</div>`;
-  return m.stream ? `<video controls autoplay muted playsinline poster="${esc(safeUrl(m.thumb))}" data-dash="${esc(safeUrl(m.stream))}"></video>${note}`
+  return m.stream ? streamHtml(m)
     : m.type === 'video' && m.sources ? `<video controls autoplay muted playsinline poster="${esc(safeUrl(m.thumb))}">${m.sources.map(s => `<source src="${esc(safeUrl(s.src))}" type="${esc(s.type)}">`).join('')}</video>`
     : m.type === 'embed' ? `<iframe src="${esc(safeUrl(m.src))}" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>` : `<img src="${esc(src)}" alt="">`;
 };
 const stageHtml = (items, i) => `<div class="dp-stage"><div class="dp-sl in">${slideHtml(items[i])}</div></div><div class="dp-strip"><div class="dp-thumbs">${items.map((x, k) => `<button class="dp-th${k === i ? ' on' : ''}${x.type !== 'image' ? ' v' : ''}" data-dp-m="${k}" aria-label="Media ${k + 1}"><img src="${esc(safeUrl(x.thumb || x.src))}" alt="" decoding="async"></button>`).join('')}</div></div>`;
-/** Steam trailers are DASH streams now (no mp4 / webm files any more): played with dash.js when the page has it (`window.dashjs`, a @require of the userscript). When it is missing or the stream errors,
-    the slide shows its poster and a "Watch it on Steam" link instead of a dead player. */
-function attachStreams(root) {
-  root.querySelectorAll('video[data-dash]:not([data-on])').forEach(v => {
-    v.dataset.on = '1'; const slide = v.closest('.dp-sl'), fail = () => { v.controls = false; v.pause(); if (slide) slide.classList.add('is-failed'); };
-    const dj = window.dashjs; if (!dj) return fail();
-    try { const p = dj.MediaPlayer().create(); v.__dash = p; p.on('error', fail); p.initialize(v, v.dataset.dash, true); } catch (e) { fail(); }
-  });
-}
-const stopStream = o => { const v = o.querySelector('video'); try { if (v && v.__dash) v.__dash.destroy(); } catch (e) { /* already gone */ } };
 const thumbFade = s => { const m = s.parentNode, max = s.scrollWidth - s.clientWidth; m.style.setProperty('--fl', Math.max(0, Math.min(1, s.scrollLeft / 64)).toFixed(3)); m.style.setProperty('--fr', Math.max(0, Math.min(1, (max - s.scrollLeft) / 64)).toFixed(3)); };
 /** After the gallery is painted: the strip fades at its ends while there is more to scroll, thumbnails fade in as they load. */
 function mediaReady(el) {
