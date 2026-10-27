@@ -143,8 +143,8 @@ a.btn { text-decoration: none; }
 .bar > .dk { pointer-events: none; }
 .dk-l > * { --dx: var(--dx-l, 0px); --dy: var(--dy-l, 0px); }
 .dk-r > * { --dx: var(--dx-r, 0px); --dy: var(--dy-r, 0px); }
-.dk > * { pointer-events: none; opacity: 0; translate: var(--dx) var(--dy); transition: translate 1200ms var(--spring), opacity 120ms linear 960ms, transform var(--tb) var(--ease); }   /* out: the same spring, so it overshoots past its corner before it settles; it is swapped for the corner copy at the end */
-.docked .dk > * { pointer-events: auto; opacity: 1; translate: 0 0; transition: translate 1300ms var(--spring), opacity 80ms linear, transform var(--tb) var(--ease); }
+.dk > * { pointer-events: none; opacity: 0; translate: var(--dx) var(--dy); transition: translate 760ms var(--spring), opacity 120ms linear 960ms, transform var(--tb) var(--ease); }   /* out: the same spring, so it overshoots past its corner before it settles; it is swapped for the corner copy at the end */
+.docked .dk > * { pointer-events: auto; opacity: 1; translate: 0 0; transition: translate 830ms var(--spring), opacity 80ms linear, transform var(--tb) var(--ease); }
 .top .mark { transition: transform var(--tb) var(--ease), opacity 120ms linear 960ms; }
 .top .bar-r .av { transition: transform var(--tb) var(--ease), opacity 120ms linear 960ms; }
 .docked .top .mark, .docked .top .bar-r .av { opacity: 0; pointer-events: none; transition: transform var(--tb) var(--ease), opacity 60ms linear; }
