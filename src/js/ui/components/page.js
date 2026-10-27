@@ -85,18 +85,19 @@ export function showSlide(el, items, i) {
 }
 
 /* ── content blocks ──────────────────────────────────────────────────────────────────────── */
-/** About: a string (lines starting with "##" are sub-headings) or Steam-style blocks [{ h } | { t } | { img, alt }]. Long content starts clamped (expand() opens it). */
+/** About: a string (lines starting with "##" are sub-headings) or Steam-style blocks [{ h } | { t } | { img, alt } | { vid, poster }] (a vid is a muted looping clip, Steam's "gif"). Long content starts clamped (expand() opens it). */
 export function aboutHtml(src) {
   const blocks = typeof src === 'string' ? src.split('\n').filter(Boolean).map(l => (l.startsWith('##') ? { h: l.slice(2) } : { t: l })) : src;
-  const weight = blocks.reduce((n, b) => n + (b.img ? 220 : (b.t || b.h || '').length), 0), long = weight >= 700 || blocks.filter(b => b.img).length > 1;
-  const one = b => (b.img ? `<figure class="dp-fig is-skel is-busy"><img src="${esc(safeUrl(b.img))}" alt="${esc(b.alt || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer"></figure>` : b.h ? `<h5>${esc(b.h)}</h5>` : `<p>${esc(b.t)}</p>`);
+  const weight = blocks.reduce((n, b) => n + (b.img || b.vid ? 220 : (b.t || b.h || '').length), 0), long = weight >= 700 || blocks.filter(b => b.img || b.vid).length > 1;
+  const one = b => (b.vid ? `<figure class="dp-fig is-skel is-busy"><video src="${esc(safeUrl(b.vid))}" ${b.poster ? `poster="${esc(safeUrl(b.poster))}" ` : ''}muted loop autoplay playsinline preload="metadata"></video></figure>` : b.img ? `<figure class="dp-fig is-skel is-busy"><img src="${esc(safeUrl(b.img))}" alt="${esc(b.alt || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer"></figure>` : b.h ? `<h5>${esc(b.h)}</h5>` : `<p>${esc(b.t)}</p>`);
   return `<h4>About this game</h4><div class="dp-clampbox${long ? ' cl' : ''}"><div class="dp-text">${blocks.map(one).join('')}</div></div>${long ? '<button class="dp-more" data-dp-act="about">Read more</button>' : ''}`;
 }
 /** Section images fade in as they load (the figure shows the kit's skeleton until then; a failed one disappears). */
 export function imgReady(el) {
-  el.querySelectorAll('.dp-fig img:not([data-f])').forEach(im => {
-    im.dataset.f = '1'; const fig = im.parentNode, ok = () => fig.classList.remove('is-skel', 'is-busy'), bad = () => fig.remove();
-    im.complete ? (im.naturalWidth ? ok() : bad()) : (im.addEventListener('load', ok, { once: true }), im.addEventListener('error', bad, { once: true }));
+  el.querySelectorAll('.dp-fig img:not([data-f]), .dp-fig video:not([data-f])').forEach(m => {
+    m.dataset.f = '1'; const fig = m.parentNode, ok = () => fig.classList.remove('is-skel', 'is-busy'), bad = () => fig.remove(), vid = m.tagName === 'VIDEO';
+    if (vid) { m.muted = true; if (m.readyState >= 2) ok(); else { m.addEventListener('loadeddata', ok, { once: true }); m.addEventListener('error', bad, { once: true }); } return; }
+    m.complete ? (m.naturalWidth ? ok() : bad()) : (m.addEventListener('load', ok, { once: true }), m.addEventListener('error', bad, { once: true }));
   });
 }
 /** Open a clamped box (.cl) with a height transition. */
