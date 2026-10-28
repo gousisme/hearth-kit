@@ -16,7 +16,7 @@ export function shelfHtml(s) {
 /** Wire scroll buttons; they hide at either end, and the row's edges fade out while there is more to scroll (--fl / --fr on .rw, same idea as the media strip). Returns a cleanup fn.
  *  Every row is measured first and only then written: reading scrollWidth right after another row's style write forced a full relayout per row (7+ on the home page). */
 export function initShelves(root) {
-  const cleanups = [], FADE = 72, rows = [...root.querySelectorAll('.rw')].map(rw => { const row = rw.querySelector('.row'), [pv, nx] = rw.querySelectorAll('.nx'); return { rw, row, pv, nx }; });
+  const cleanups = [], ac = new AbortController(), FADE = 72, rows = [...root.querySelectorAll('.rw')].map(rw => { const row = rw.querySelector('.row'), [pv, nx] = rw.querySelectorAll('.nx'); return { rw, row, pv, nx }; });
   const measure = ({ row }) => ({ l: row.scrollLeft, w: row.clientWidth, sw: row.scrollWidth });
   const apply = ({ rw, pv, nx }, { l, w, sw }) => {
     const max = sw - w;
@@ -49,20 +49,20 @@ export function initShelves(root) {
     const { row, pv, nx } = r;
     const by = dir => { const from = r.to != null ? r.to : row.scrollLeft; halt(r); glide(r, startOf(r, from + dir * row.clientWidth * .8)); };
     pv.onclick = () => by(-1); nx.onclick = () => by(1);
-    row.addEventListener('scroll', () => apply(r, measure(r)), { passive: true });
+    row.addEventListener('scroll', () => apply(r, measure(r)), { passive: true, signal: ac.signal });
     row.addEventListener('wheel', e => {
       if (!e.shiftKey || e.ctrlKey || row.scrollWidth <= row.clientWidth + 1) return;                  // only Shift+wheel is taken over; trackpads and plain wheel keep native behaviour
       const d = (e.deltaY || e.deltaX) * (e.deltaMode === 1 ? 34 : e.deltaMode === 2 ? row.clientWidth : 1); if (!d) return;
       e.preventDefault();
       const from = r.to != null ? r.to : row.scrollLeft; clearTimeout(r.idle); glide(r, from + d);
       r.idle = setTimeout(() => { r.idle = 0; glide(r, startOf(r, r.to != null ? r.to : row.scrollLeft)); }, 140);   // input stopped: settle on a card edge
-    }, { passive: false });
-    ['pointerdown', 'touchstart'].forEach(t => row.addEventListener(t, () => halt(r), { passive: true }));   // grabbing the row stops the glide
+    }, { passive: false, signal: ac.signal });
+    ['pointerdown', 'touchstart'].forEach(t => row.addEventListener(t, () => halt(r), { passive: true, signal: ac.signal }));   // grabbing the row stops the glide
     cleanups.push(() => halt(r));
   });
   if ('ResizeObserver' in window) {                                       // one observer for every row: its first callback is the initial sync, and a resize re-syncs them all in one pass
     const ro = new ResizeObserver(es => syncAll(rows.filter(r => es.some(e => e.target === r.row))));
     rows.forEach(r => ro.observe(r.row)); cleanups.push(() => ro.disconnect());
   } else syncAll(rows);
-  return () => cleanups.forEach(f => f());
+  return () => { ac.abort(); cleanups.forEach(f => f()); };
 }

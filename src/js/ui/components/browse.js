@@ -18,7 +18,7 @@ export function emptyHtml(f, savedIds) {
  * `canMore` = the app has a loadMore hook. A category nobody has loaded yet (no local game matches) then still gets a grid, which asks the hook for the category's own
  * pages right away, instead of a "Nothing matches" page that never asks (the site files a game under one url folder but lists it in several categories).
  */
-export function browseHtml(D, route, savedIds, canMore = false) {
+export function browseHtml(D, route, savedIds, canMore = false, { slot = false } = {}) {   // slot: leave an empty <div class="pick-slot"> for a picker the caller keeps alive (mount.js), instead of building it
   const f = route.filter || {};
   const list = filterGames(D, f, savedIds);
   const cat = D.categories.find(c => c.id === f.category);
@@ -26,7 +26,7 @@ export function browseHtml(D, route, savedIds, canMore = false) {
   const lazy = !list.length && canMore && !f.saved && !f.query;
   return `<div class="browse">
     <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span></div>
-    ${f.saved || !D.categories.length ? '' : genresHtml(D, { title: '', max: Infinity, active: f.category || '', all: true })}
+    ${f.saved || !D.categories.length ? '' : slot ? '<div class="pick-slot"></div>' : genresHtml(D, { title: '', max: Infinity, active: f.category || '', all: true })}
     ${list.length
       ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
       : lazy ? '<div class="grid"></div><div class="more" aria-hidden="true"></div>' : emptyHtml(f, savedIds)}

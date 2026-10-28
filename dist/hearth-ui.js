@@ -707,7 +707,7 @@ function shelfHtml(s) {
 /** Wire scroll buttons; they hide at either end, and the row's edges fade out while there is more to scroll (--fl / --fr on .rw, same idea as the media strip). Returns a cleanup fn.
  *  Every row is measured first and only then written: reading scrollWidth right after another row's style write forced a full relayout per row (7+ on the home page). */
 function initShelves(root) {
-  const cleanups = [], FADE = 72, rows = [...root.querySelectorAll('.rw')].map(rw => { const row = rw.querySelector('.row'), [pv, nx] = rw.querySelectorAll('.nx'); return { rw, row, pv, nx }; });
+  const cleanups = [], ac = new AbortController(), FADE = 72, rows = [...root.querySelectorAll('.rw')].map(rw => { const row = rw.querySelector('.row'), [pv, nx] = rw.querySelectorAll('.nx'); return { rw, row, pv, nx }; });
   const measure = ({ row }) => ({ l: row.scrollLeft, w: row.clientWidth, sw: row.scrollWidth });
   const apply = ({ rw, pv, nx }, { l, w, sw }) => {
     const max = sw - w;
@@ -740,22 +740,22 @@ function initShelves(root) {
     const { row, pv, nx } = r;
     const by = dir => { const from = r.to != null ? r.to : row.scrollLeft; halt(r); glide(r, startOf(r, from + dir * row.clientWidth * .8)); };
     pv.onclick = () => by(-1); nx.onclick = () => by(1);
-    row.addEventListener('scroll', () => apply(r, measure(r)), { passive: true });
+    row.addEventListener('scroll', () => apply(r, measure(r)), { passive: true, signal: ac.signal });
     row.addEventListener('wheel', e => {
       if (!e.shiftKey || e.ctrlKey || row.scrollWidth <= row.clientWidth + 1) return;                  // only Shift+wheel is taken over; trackpads and plain wheel keep native behaviour
       const d = (e.deltaY || e.deltaX) * (e.deltaMode === 1 ? 34 : e.deltaMode === 2 ? row.clientWidth : 1); if (!d) return;
       e.preventDefault();
       const from = r.to != null ? r.to : row.scrollLeft; clearTimeout(r.idle); glide(r, from + d);
       r.idle = setTimeout(() => { r.idle = 0; glide(r, startOf(r, r.to != null ? r.to : row.scrollLeft)); }, 140);   // input stopped: settle on a card edge
-    }, { passive: false });
-    ['pointerdown', 'touchstart'].forEach(t => row.addEventListener(t, () => halt(r), { passive: true }));   // grabbing the row stops the glide
+    }, { passive: false, signal: ac.signal });
+    ['pointerdown', 'touchstart'].forEach(t => row.addEventListener(t, () => halt(r), { passive: true, signal: ac.signal }));   // grabbing the row stops the glide
     cleanups.push(() => halt(r));
   });
   if ('ResizeObserver' in window) {                                       // one observer for every row: its first callback is the initial sync, and a resize re-syncs them all in one pass
     const ro = new ResizeObserver(es => syncAll(rows.filter(r => es.some(e => e.target === r.row))));
     rows.forEach(r => ro.observe(r.row)); cleanups.push(() => ro.disconnect());
   } else syncAll(rows);
-  return () => cleanups.forEach(f => f());
+  return () => { ac.abort(); cleanups.forEach(f => f()); };
 }
 
 /* ── src/js/ui/components/nav.js ── */
@@ -1106,7 +1106,7 @@ function emptyHtml(f, savedIds) {
  * `canMore` = the app has a loadMore hook. A category nobody has loaded yet (no local game matches) then still gets a grid, which asks the hook for the category's own
  * pages right away, instead of a "Nothing matches" page that never asks (the site files a game under one url folder but lists it in several categories).
  */
-function browseHtml(D, route, savedIds, canMore = false) {
+function browseHtml(D, route, savedIds, canMore = false, { slot = false } = {}) {   // slot: leave an empty <div class="pick-slot"> for a picker the caller keeps alive (mount.js), instead of building it
   const f = route.filter || {};
   const list = filterGames(D, f, savedIds);
   const cat = D.categories.find(c => c.id === f.category);
@@ -1114,7 +1114,7 @@ function browseHtml(D, route, savedIds, canMore = false) {
   const lazy = !list.length && canMore && !f.saved && !f.query;
   return `<div class="browse">
     <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span></div>
-    ${f.saved || !D.categories.length ? '' : genresHtml(D, { title: '', max: Infinity, active: f.category || '', all: true })}
+    ${f.saved || !D.categories.length ? '' : slot ? '<div class="pick-slot"></div>' : genresHtml(D, { title: '', max: Infinity, active: f.category || '', all: true })}
     ${list.length
       ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
       : lazy ? '<div class="grid"></div><div class="more" aria-hidden="true"></div>' : emptyHtml(f, savedIds)}
@@ -1252,6 +1252,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   /** The Discover page is expensive to build (a few thousand nodes, ~100 images to decode), so when another tab is opened it is PARKED (detached, its hero carousel and observers left alone)
    *  and put straight back when the person returns: no markup, no layout of new nodes, no image loaded or decoded twice. It is rebuilt instead when the data changed meanwhile
    *  (`stale`: update() / add()) or when it had not finished building yet. */
+  let pickKeep = null, pickSig = '';                                       // the Browse category picker (built once, reused on every category switch: no rebuild, no re-fade of its artwork)
   let live = '', homeDone = false, stale = false, homeKeep = null;       // live: what $page holds ('home' | 'browse' | ''); homeDone: every section of the live home page is in
   const dropHome = k => { k.hero && k.hero.destroy(); k.stops.forEach(f => f && f()); };
   function paint() {
@@ -1284,11 +1285,18 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
       if (parts.later.length) fillLater(parts.later, deferTok);
     } else {
       live = 'browse';
-      $page.innerHTML = browseHtml(D, route, saved, typeof opt.loadMore === 'function');
+      const sig = D.categories.map(c => c.id).join('|'), keep = pickKeep && pickSig === sig;      // the same categories: the picker is still right, only the chosen tile changes
+      $page.innerHTML = browseHtml(D, route, saved, typeof opt.loadMore === 'function', { slot: keep });
+      const slot = $page.querySelector('.pick-slot');
+      if (slot) {
+        const want = (route.filter && route.filter.category) || '';
+        pickKeep.querySelectorAll('.gt').forEach(t => { const on = t.dataset.cat === want; t.classList.toggle('on', on); t.setAttribute('aria-pressed', String(on)); });
+        slot.replaceWith(pickKeep);
+      } else { pickKeep = $page.querySelector('.genres.is-pick'); pickSig = pickKeep ? sig : ''; }
       art.hydrate($page);
       stopReveal = reveal($page, { lead: 140 });
       const pick = $page.querySelector('.genres .gt.on'), prow = pick && pick.parentNode;                    // the category picker opens with the chosen tile in view
-      if (prow) prow.scrollLeft = Math.max(0, pick.offsetLeft - (prow.clientWidth - pick.offsetWidth) / 2);
+      if (prow && (pick.offsetLeft < prow.scrollLeft || pick.offsetLeft + pick.offsetWidth > prow.scrollLeft + prow.clientWidth)) prow.scrollLeft = Math.max(0, pick.offsetLeft - (prow.clientWidth - pick.offsetWidth) / 2);   // only when the chosen tile is out of view (a kept picker stays where it is)
       stopShelves = initShelves($page);
       stopGrid = initGrid($page, D, route, saved, art, opt.loadMore);
     }
@@ -1639,7 +1647,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); stopDefer(); homeKeep && dropHome(homeKeep); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; pickKeep = null; indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); stopDefer(); homeKeep && dropHome(homeKeep); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 

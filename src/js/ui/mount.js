@@ -97,6 +97,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
   /** The Discover page is expensive to build (a few thousand nodes, ~100 images to decode), so when another tab is opened it is PARKED (detached, its hero carousel and observers left alone)
    *  and put straight back when the person returns: no markup, no layout of new nodes, no image loaded or decoded twice. It is rebuilt instead when the data changed meanwhile
    *  (`stale`: update() / add()) or when it had not finished building yet. */
+  let pickKeep = null, pickSig = '';                                       // the Browse category picker (built once, reused on every category switch: no rebuild, no re-fade of its artwork)
   let live = '', homeDone = false, stale = false, homeKeep = null;       // live: what $page holds ('home' | 'browse' | ''); homeDone: every section of the live home page is in
   const dropHome = k => { k.hero && k.hero.destroy(); k.stops.forEach(f => f && f()); };
   function paint() {
@@ -129,11 +130,18 @@ export function mount({ target = document.body, data, css = null, shadow, option
       if (parts.later.length) fillLater(parts.later, deferTok);
     } else {
       live = 'browse';
-      $page.innerHTML = browseHtml(D, route, saved, typeof opt.loadMore === 'function');
+      const sig = D.categories.map(c => c.id).join('|'), keep = pickKeep && pickSig === sig;      // the same categories: the picker is still right, only the chosen tile changes
+      $page.innerHTML = browseHtml(D, route, saved, typeof opt.loadMore === 'function', { slot: keep });
+      const slot = $page.querySelector('.pick-slot');
+      if (slot) {
+        const want = (route.filter && route.filter.category) || '';
+        pickKeep.querySelectorAll('.gt').forEach(t => { const on = t.dataset.cat === want; t.classList.toggle('on', on); t.setAttribute('aria-pressed', String(on)); });
+        slot.replaceWith(pickKeep);
+      } else { pickKeep = $page.querySelector('.genres.is-pick'); pickSig = pickKeep ? sig : ''; }
       art.hydrate($page);
       stopReveal = reveal($page, { lead: 140 });
       const pick = $page.querySelector('.genres .gt.on'), prow = pick && pick.parentNode;                    // the category picker opens with the chosen tile in view
-      if (prow) prow.scrollLeft = Math.max(0, pick.offsetLeft - (prow.clientWidth - pick.offsetWidth) / 2);
+      if (prow && (pick.offsetLeft < prow.scrollLeft || pick.offsetLeft + pick.offsetWidth > prow.scrollLeft + prow.clientWidth)) prow.scrollLeft = Math.max(0, pick.offsetLeft - (prow.clientWidth - pick.offsetWidth) / 2);   // only when the chosen tile is out of view (a kept picker stays where it is)
       stopShelves = initShelves($page);
       stopGrid = initGrid($page, D, route, saved, art, opt.loadMore);
     }
@@ -484,7 +492,7 @@ export function mount({ target = document.body, data, css = null, shadow, option
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); stopDefer(); homeKeep && dropHome(homeKeep); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; pickKeep = null; indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); stopDefer(); homeKeep && dropHome(homeKeep); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 
