@@ -20,20 +20,26 @@ export function genresHtml(D, { title = 'Browse by category', max = 14, active, 
   if (!list.length) return '';
   const hasArt = g => (g.steamAppId || (g.art && (g.art.header || g.art.hero || g.art.poster))) ? 1 : 0;
   const used = new Map();                                            // a game is shown on as few tiles as possible, so neighbouring tiles do not look alike
+  const wall = pool => {
+    // a wall of 3 rows x 4 bricks, filled from the CENTRE outwards with the category's games, looping through them when there are fewer games than bricks
+    // (the best-looking games therefore sit where the eye lands, and the wall never has bare patches). Only the nearest bricks to the centre are the ones you really see.
+    const bricks = ORDER.map(i => pool.length ? `<span class="gt-b has">${layer(pool[ORDER.indexOf(i) % pool.length], 'header')}</span>` : '<span class="gt-b"></span>');
+    const cells = []; ORDER.forEach((slot, rank) => { cells[slot] = bricks[rank]; });
+    return [0, 1, 2].map(r => `<span class="gt-r">${cells.slice(r * 4, r * 4 + 4).join('')}</span>`).join('');
+  };
+  // the Browse picker's tiles are not scroll-revealed: the whole picker is re-rendered on every pick, and a staggered rise made the tapped tile sit lower than the rest while the page loaded
+  const rv = active !== undefined ? '' : ' rv';
   const tile = c => {
     const pool = D.games.filter(g => g.categories.includes(c.id)).sort((a, b) => hasArt(b) - hasArt(a) || (used.get(a.id) || 0) - (used.get(b.id) || 0));
     const pick = pool.slice(0, 6); pick.forEach(g => used.set(g.id, (used.get(g.id) || 0) + 1));
-    // a wall of 3 rows x 4 bricks, filled from the CENTRE outwards with the category's games, looping through them when there are fewer games than bricks
-    // (the best-looking games therefore sit where the eye lands, and the wall never has bare patches). Only the nearest bricks to the centre are the ones you really see.
-    const bricks = ORDER.map(i => pick.length ? `<span class="gt-b has">${layer(pick[ORDER.indexOf(i) % pick.length], 'header')}</span>` : '<span class="gt-b"></span>');
-    const cells = []; ORDER.forEach((slot, rank) => { cells[slot] = bricks[rank]; });
-    const rows = [0, 1, 2].map(r => `<span class="gt-r">${cells.slice(r * 4, r * 4 + 4).join('')}</span>`).join('');
     const on = active !== undefined && c.id === active;
-    return `<button type="button" class="gt rv${on ? ' on' : ''}" data-cat="${esc(c.id)}" style="--h:${hueOf(c.id)}" aria-label="${esc(c.label)}"${active !== undefined ? ` aria-pressed="${on}"` : ''}>
-      <span class="gt-art" aria-hidden="true">${rows}</span>
+    return `<button type="button" class="gt${rv}${on ? ' on' : ''}" data-cat="${esc(c.id)}" style="--h:${hueOf(c.id)}" aria-label="${esc(c.label)}"${active !== undefined ? ` aria-pressed="${on}"` : ''}>
+      <span class="gt-art" aria-hidden="true">${wall(pick)}</span>
       <span class="gt-name">${esc(c.label)}</span></button>`;
   };
-  const allTile = all ? `<button type="button" class="gt gt-all rv${active === '' ? ' on' : ''}" data-cat="" aria-label="All" aria-pressed="${active === ''}"><span class="gt-name">All</span></button>` : '';
+  // "All": the same wall, built from games spread over the whole library (every few games, art first), tinted with the accent
+  const allPool = () => { const a = D.games.filter(hasArt); const src = a.length >= 6 ? a : D.games; const step = Math.max(1, Math.floor(src.length / 6)); return Array.from({ length: Math.min(6, src.length) }, (_, i) => src[i * step]); };
+  const allTile = all ? `<button type="button" class="gt gt-all${rv}${active === '' ? ' on' : ''}" data-cat="" style="--h:205" aria-label="All" aria-pressed="${active === ''}"><span class="gt-art" aria-hidden="true">${wall(allPool())}</span><span class="gt-name">All</span></button>` : '';
   return `<section class="shelf genres${active !== undefined ? ' is-pick' : ''}" data-shelf="genres">
     ${title ? `<div class="sh-h rv"><h2>${esc(title)}</h2></div>` : ''}
     <div class="rw"><button class="nx pv is-end" aria-label="Scroll back" tabindex="-1">${ic(ICON.prev, 20, 2.6)}</button>
