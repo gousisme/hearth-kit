@@ -71,21 +71,70 @@ export function mount({ target = document.body, data, css = null, shadow, option
   let heroCtl, stopReveal, stopShelves, stopGrid, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
 
   /* ── render ─────────────────────────────────────────────────────────────────────────────── */
-  function homeHtml() {
-    if (!D.games.length) return `<div class="empty has-bar"><h3>No games to show</h3><p>The page was read, but no games were found. Check the scraper selectors.</p></div>`;
-    return heroHtml(D.hero, { page: typeof opt.onPage === 'function' }) + featuredHtml(D.featured) + genresHtml(D) + D.shelves.map(shelfHtml).join('');
+  /** The home page in two parts: what is on screen at first paint (hero + featured tiles) and the sections below the fold (category wall, shelves).
+   *  The second part is inserted one section per idle slice after the page has faded in, so switching to Discover is one small task instead of a ~3000-node one. */
+  function homeParts() {
+    if (!D.games.length) return { now: `<div class="empty has-bar"><h3>No games to show</h3><p>The page was read, but no games were found. Check the scraper selectors.</p></div>`, later: [] };
+    return { now: heroHtml(D.hero, { page: typeof opt.onPage === 'function' }) + featuredHtml(D.featured), later: [genresHtml(D), ...D.shelves.map(shelfHtml)].filter(Boolean) };
+  }
+  /** Run `fn` when the main thread has a gap (a timeout caps the wait so the page is complete within a fraction of a second even while images are decoding). */
+  const whenIdle = fn => (typeof requestIdleCallback === 'function' ? requestIdleCallback(fn, { timeout: 220 }) : setTimeout(fn, 50));
+  const cancelIdle = id => (typeof cancelIdleCallback === 'function' ? cancelIdleCallback(id) : clearTimeout(id));
+  let deferTok = 0, deferId = 0, deferStops = [];
+  function stopDefer() { deferTok++; cancelIdle(deferId); deferStops.splice(0).forEach(f => f()); }
+  function fillLater(list, tok) {
+    let i = 0;
+    const step = () => {
+      if (tok !== deferTok || destroyed || !list.length) return;
+      const t = document.createElement('template'); t.innerHTML = list[i++];       // parsed off-document: the live page is touched once per section
+      const els = [...t.content.children]; $page.append(...els);
+      els.forEach(el => { art.hydrate(el, { lazy: true }); deferStops.push(reveal(el), initShelves(el)); });
+      if (i < list.length) deferId = whenIdle(step); else homeDone = true;
+    };
+    deferId = requestAnimationFrame(() => requestAnimationFrame(step));            // after the first frame of the new page
   }
 
+  /** The Discover page is expensive to build (a few thousand nodes, ~100 images to decode), so when another tab is opened it is PARKED (detached, its hero carousel and observers left alone)
+   *  and put straight back when the person returns: no markup, no layout of new nodes, no image loaded or decoded twice. It is rebuilt instead when the data changed meanwhile
+   *  (`stale`: update() / add()) or when it had not finished building yet. */
+  let live = '', homeDone = false, stale = false, homeKeep = null;       // live: what $page holds ('home' | 'browse' | ''); homeDone: every section of the live home page is in
+  const dropHome = k => { k.hero && k.hero.destroy(); k.stops.forEach(f => f && f()); };
   function paint() {
-    heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid();
-    $page.classList.toggle('has-bar', route.view !== 'home');
-    $page.innerHTML = route.view === 'home' ? homeHtml() : browseHtml(D, route, saved, typeof opt.loadMore === 'function');
+    const home = route.view === 'home';
+    // 1 · what is on screen goes: a finished, current Discover page is parked, anything else is torn down
+    if (live === 'home' && !home && homeDone && !stale) {
+      homeKeep = { nodes: [...$page.childNodes], hero: heroCtl, stops: [stopReveal, stopShelves, ...deferStops.splice(0)] };
+      $page.replaceChildren(); deferTok++; cancelIdle(deferId);
+    } else {
+      heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopDefer();
+    }
+    heroCtl = stopReveal = stopShelves = null; stopGrid && stopGrid(); stopGrid = null;
+    if (homeKeep && stale) { dropHome(homeKeep); homeKeep = null; }
+    $page.classList.toggle('has-bar', !home);
     $scroll.scrollTop = 0;
-    art.hydrate($page);
-    stopReveal = reveal($page, { lead: 140 });
-    stopShelves = initShelves($page);
-    stopGrid = route.view === 'home' ? null : initGrid($page, D, route, saved, art, opt.loadMore);
-    heroCtl = initHero($page.querySelector('#hero'), { autoplay: opt.autoplay, ms: opt.autoplayMs, warm: el => art.warm(el) });
+    // 2 · the new page
+    if (home && homeKeep) {                                                 // back on Discover: the parked page, exactly as it was
+      const k = homeKeep; homeKeep = null;
+      $page.replaceChildren(...k.nodes);
+      heroCtl = k.hero; [stopReveal, stopShelves, ...deferStops] = k.stops; live = 'home'; homeDone = true;
+      $page.querySelectorAll('img.art-img[data-h]:not(.is-loaded)').forEach(im => { delete im.dataset.h; });   // slots that were still waiting when it was parked are looked at again
+      art.hydrate($page);
+    } else if (home) {
+      const parts = homeParts(); stale = false; live = 'home'; homeDone = !parts.later.length;
+      $page.innerHTML = parts.now;
+      art.hydrate($page);
+      stopReveal = reveal($page, { lead: 140 });
+      stopShelves = initShelves($page);
+      heroCtl = initHero($page.querySelector('#hero'), { autoplay: opt.autoplay, ms: opt.autoplayMs, warm: el => art.warm(el) });
+      if (parts.later.length) fillLater(parts.later, deferTok);
+    } else {
+      live = 'browse';
+      $page.innerHTML = browseHtml(D, route, saved, typeof opt.loadMore === 'function');
+      art.hydrate($page);
+      stopReveal = reveal($page, { lead: 140 });
+      stopShelves = initShelves($page);
+      stopGrid = initGrid($page, D, route, saved, art, opt.loadMore);
+    }
     $foot.textContent = D.site.footer || '';
     syncNav();
   }
@@ -422,18 +471,18 @@ export function mount({ target = document.body, data, css = null, shadow, option
     el: host, root,
     /** Replace the data. `to` ({view, filter}) sets the route in the same transition (one swap, not two). */
     update(next, to) {
-      D = normalize(next);
+      D = normalize(next); stale = true;
       if (to && to.view) { route = { view: to.view, filter: { ...(to.filter || {}) } }; opt.onRoute && opt.onRoute({ ...route }); }
       if (openId && !D.byId.get(openId)) closeGame();
       renderBar();
       return refresh();
     },
     /** Add games to the running app without a full re-render (e.g. search results). Existing games only gain new search tags. */
-    add(list) { const { added, merged } = addGames(D, list); return (added.length || merged) && route.view === 'browse' ? refresh() : Promise.resolve(); },
+    add(list) { const { added, merged } = addGames(D, list); if (added.length || merged) stale = true; return (added.length || merged) && route.view === 'browse' ? refresh() : Promise.resolve(); },
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); stopDefer(); homeKeep && dropHome(homeKeep); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 

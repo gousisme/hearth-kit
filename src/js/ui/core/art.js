@@ -180,13 +180,13 @@ export function createArt({ root: scope, loader = null, resolve = null, game, on
 
   return {
     settle, sweep,
-    /** Register every un-hydrated slot under `root`. Slots of hero slides that are not showing wait for warm(). */
-    hydrate(root, { force = false } = {}) {
+    /** Register every un-hydrated slot under `root` (`lazy`: without sweeping right now, for content added in several steps). Slots of hero slides that are not showing wait for warm(). */
+    hydrate(root, { force = false, lazy = false } = {}) {
       root.querySelectorAll('img.art-img[data-g]:not([data-h])').forEach(img => {
         if (!force && img.closest('.slide:not(.on)')) return;
         img.dataset.h = '1'; park(img);
       });
-      sweep();
+      lazy ? later() : sweep();      // lazy: no synchronous sweep (it reads every slot's rect = a forced layout of the whole page). The next frame lays the page out anyway, and the observer / this timer queue what is near.
     },
     warm(root) { if (root) this.hydrate(root, { force: true }); },
     destroy() { dead = true; io && io.disconnect(); clearTimeout(timer); cancelAnimationFrame(showRaf); shows.length = 0; pending.clear(); queue.length = 0; removeEventListener('resize', onScroll); scope.removeEventListener('scroll', onScroll, { capture: true }); },

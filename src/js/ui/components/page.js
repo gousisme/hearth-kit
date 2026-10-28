@@ -17,8 +17,9 @@ const when = ts => new Date(ts * 1000).toLocaleDateString('en', { year: 'numeric
 const tone = d => (/positive/i.test(d || '') ? 'pos' : /negative/i.test(d || '') ? 'neg' : 'mix');
 
 export function pageHtml(g) {
-  return `<div class="dp-scroll"><div class="dp-hero"><div class="layer is-skel is-busy"><img class="art-img" alt=""></div>
-    <div class="dp-hin"><div class="dp-nav"><button class="dp-back" data-dp-act="close">${ic(ICON.prev, 18)}Back</button><small>Esc to close</small></div>
+  return `<div class="dp-nav"><button class="dp-back" data-dp-act="close">${ic(ICON.prev, 18)}Back</button><small>Esc to close</small></div>
+    <div class="dp-scroll"><div class="dp-hero"><div class="layer is-skel is-busy"><img class="art-img" alt=""></div>
+    <div class="dp-hin">
     <div class="lg"><div class="fbt">${esc(g.title)}</div><img class="art-img logo" alt="${esc(g.title)}"></div></div></div>
     <div class="dp-wrap"><div class="dp-grid"><div><div class="dp-sec" id="dp-media"></div><div class="dp-sec" id="dp-about"></div><div class="dp-sec u" id="dp-upd"></div><div class="dp-sec" id="dp-guide"></div><div class="dp-sec" id="dp-req"></div><div class="dp-sec" id="dp-comm"></div></div>
     <aside class="side dp-side" id="dp-side"></aside></div></div></div>`;
@@ -27,6 +28,8 @@ export function pageOpen(root, g) {
   const el = document.createElement('div');
   el.className = 'dp'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', g.title); el.tabIndex = -1; el.innerHTML = pageHtml(g);
   root.appendChild(el);
+  const sc = el.querySelector('.dp-scroll'); let on = false;                       // the Back pill floats above the scroller; once the page is scrolled it gets a firmer backing (.sc) and drops the Esc hint
+  sc.addEventListener('scroll', () => { const v = sc.scrollTop > 48; if (v !== on) el.classList.toggle('sc', on = v); }, { passive: true });
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
   el.focus({ preventScroll: true });
   return el;

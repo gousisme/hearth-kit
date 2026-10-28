@@ -396,13 +396,13 @@ function createArt({ root: scope, loader = null, resolve = null, game, onMiss = 
 
   return {
     settle, sweep,
-    /** Register every un-hydrated slot under `root`. Slots of hero slides that are not showing wait for warm(). */
-    hydrate(root, { force = false } = {}) {
+    /** Register every un-hydrated slot under `root` (`lazy`: without sweeping right now, for content added in several steps). Slots of hero slides that are not showing wait for warm(). */
+    hydrate(root, { force = false, lazy = false } = {}) {
       root.querySelectorAll('img.art-img[data-g]:not([data-h])').forEach(img => {
         if (!force && img.closest('.slide:not(.on)')) return;
         img.dataset.h = '1'; park(img);
       });
-      sweep();
+      lazy ? later() : sweep();      // lazy: no synchronous sweep (it reads every slot's rect = a forced layout of the whole page). The next frame lays the page out anyway, and the observer / this timer queue what is near.
     },
     warm(root) { if (root) this.hydrate(root, { force: true }); },
     destroy() { dead = true; io && io.disconnect(); clearTimeout(timer); cancelAnimationFrame(showRaf); shows.length = 0; pending.clear(); queue.length = 0; removeEventListener('resize', onScroll); scope.removeEventListener('scroll', onScroll, { capture: true }); },
@@ -695,24 +695,28 @@ function shelfHtml(s) {
       <button class="nx" aria-label="Scroll forward" tabindex="-1">${ic(ICON.next, 20, 2.6)}</button></div></section>`;
 }
 
-/** Wire scroll buttons; they hide at either end, and the row's edges fade out while there is more to scroll (--fl / --fr on .rw, same idea as the media strip). Returns a cleanup fn. */
+/** Wire scroll buttons; they hide at either end, and the row's edges fade out while there is more to scroll (--fl / --fr on .rw, same idea as the media strip). Returns a cleanup fn.
+ *  Every row is measured first and only then written: reading scrollWidth right after another row's style write forced a full relayout per row (7+ on the home page). */
 function initShelves(root) {
-  const cleanups = [], FADE = 72;
-  root.querySelectorAll('.rw').forEach(rw => {
-    const row = rw.querySelector('.row'), [pv, nx] = rw.querySelectorAll('.nx');
-    const sync = () => {
-      const max = row.scrollWidth - row.clientWidth;
-      pv.classList.toggle('is-end', row.scrollLeft < 8); nx.classList.toggle('is-end', row.scrollLeft + row.clientWidth > row.scrollWidth - 8);
-      rw.style.setProperty('--fl', Math.max(0, Math.min(1, row.scrollLeft / FADE)).toFixed(3));
-      rw.style.setProperty('--fr', Math.max(0, Math.min(1, (max - row.scrollLeft) / FADE)).toFixed(3));
-    };
+  const cleanups = [], FADE = 72, rows = [...root.querySelectorAll('.rw')].map(rw => { const row = rw.querySelector('.row'), [pv, nx] = rw.querySelectorAll('.nx'); return { rw, row, pv, nx }; });
+  const measure = ({ row }) => ({ l: row.scrollLeft, w: row.clientWidth, sw: row.scrollWidth });
+  const apply = ({ rw, pv, nx }, { l, w, sw }) => {
+    const max = sw - w;
+    pv.classList.toggle('is-end', l < 8); nx.classList.toggle('is-end', l + w > sw - 8);
+    rw.style.setProperty('--fl', Math.max(0, Math.min(1, l / FADE)).toFixed(3));
+    rw.style.setProperty('--fr', Math.max(0, Math.min(1, (max - l) / FADE)).toFixed(3));
+  };
+  const syncAll = list => { const m = list.map(measure); list.forEach((r, i) => apply(r, m[i])); };       // all reads, then all writes
+  rows.forEach(r => {
+    const { row, pv, nx } = r;
     const by = dir => row.scrollBy({ left: dir * row.clientWidth * .8, behavior: 'smooth' });
     pv.onclick = () => by(-1); nx.onclick = () => by(1);
-    row.addEventListener('scroll', sync, { passive: true });
-    const ro = 'ResizeObserver' in window ? new ResizeObserver(sync) : null; ro && ro.observe(row);
-    sync();
-    cleanups.push(() => ro && ro.disconnect());
+    row.addEventListener('scroll', () => apply(r, measure(r)), { passive: true });
   });
+  if ('ResizeObserver' in window) {                                       // one observer for every row: its first callback is the initial sync, and a resize re-syncs them all in one pass
+    const ro = new ResizeObserver(es => syncAll(rows.filter(r => es.some(e => e.target === r.row))));
+    rows.forEach(r => ro.observe(r.row)); cleanups.push(() => ro.disconnect());
+  } else syncAll(rows);
   return () => cleanups.forEach(f => f());
 }
 
@@ -1192,21 +1196,70 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   let heroCtl, stopReveal, stopShelves, stopGrid, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
 
   /* ── render ─────────────────────────────────────────────────────────────────────────────── */
-  function homeHtml() {
-    if (!D.games.length) return `<div class="empty has-bar"><h3>No games to show</h3><p>The page was read, but no games were found. Check the scraper selectors.</p></div>`;
-    return heroHtml(D.hero, { page: typeof opt.onPage === 'function' }) + featuredHtml(D.featured) + genresHtml(D) + D.shelves.map(shelfHtml).join('');
+  /** The home page in two parts: what is on screen at first paint (hero + featured tiles) and the sections below the fold (category wall, shelves).
+   *  The second part is inserted one section per idle slice after the page has faded in, so switching to Discover is one small task instead of a ~3000-node one. */
+  function homeParts() {
+    if (!D.games.length) return { now: `<div class="empty has-bar"><h3>No games to show</h3><p>The page was read, but no games were found. Check the scraper selectors.</p></div>`, later: [] };
+    return { now: heroHtml(D.hero, { page: typeof opt.onPage === 'function' }) + featuredHtml(D.featured), later: [genresHtml(D), ...D.shelves.map(shelfHtml)].filter(Boolean) };
+  }
+  /** Run `fn` when the main thread has a gap (a timeout caps the wait so the page is complete within a fraction of a second even while images are decoding). */
+  const whenIdle = fn => (typeof requestIdleCallback === 'function' ? requestIdleCallback(fn, { timeout: 220 }) : setTimeout(fn, 50));
+  const cancelIdle = id => (typeof cancelIdleCallback === 'function' ? cancelIdleCallback(id) : clearTimeout(id));
+  let deferTok = 0, deferId = 0, deferStops = [];
+  function stopDefer() { deferTok++; cancelIdle(deferId); deferStops.splice(0).forEach(f => f()); }
+  function fillLater(list, tok) {
+    let i = 0;
+    const step = () => {
+      if (tok !== deferTok || destroyed || !list.length) return;
+      const t = document.createElement('template'); t.innerHTML = list[i++];       // parsed off-document: the live page is touched once per section
+      const els = [...t.content.children]; $page.append(...els);
+      els.forEach(el => { art.hydrate(el, { lazy: true }); deferStops.push(reveal(el), initShelves(el)); });
+      if (i < list.length) deferId = whenIdle(step); else homeDone = true;
+    };
+    deferId = requestAnimationFrame(() => requestAnimationFrame(step));            // after the first frame of the new page
   }
 
+  /** The Discover page is expensive to build (a few thousand nodes, ~100 images to decode), so when another tab is opened it is PARKED (detached, its hero carousel and observers left alone)
+   *  and put straight back when the person returns: no markup, no layout of new nodes, no image loaded or decoded twice. It is rebuilt instead when the data changed meanwhile
+   *  (`stale`: update() / add()) or when it had not finished building yet. */
+  let live = '', homeDone = false, stale = false, homeKeep = null;       // live: what $page holds ('home' | 'browse' | ''); homeDone: every section of the live home page is in
+  const dropHome = k => { k.hero && k.hero.destroy(); k.stops.forEach(f => f && f()); };
   function paint() {
-    heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid();
-    $page.classList.toggle('has-bar', route.view !== 'home');
-    $page.innerHTML = route.view === 'home' ? homeHtml() : browseHtml(D, route, saved, typeof opt.loadMore === 'function');
+    const home = route.view === 'home';
+    // 1 · what is on screen goes: a finished, current Discover page is parked, anything else is torn down
+    if (live === 'home' && !home && homeDone && !stale) {
+      homeKeep = { nodes: [...$page.childNodes], hero: heroCtl, stops: [stopReveal, stopShelves, ...deferStops.splice(0)] };
+      $page.replaceChildren(); deferTok++; cancelIdle(deferId);
+    } else {
+      heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopDefer();
+    }
+    heroCtl = stopReveal = stopShelves = null; stopGrid && stopGrid(); stopGrid = null;
+    if (homeKeep && stale) { dropHome(homeKeep); homeKeep = null; }
+    $page.classList.toggle('has-bar', !home);
     $scroll.scrollTop = 0;
-    art.hydrate($page);
-    stopReveal = reveal($page, { lead: 140 });
-    stopShelves = initShelves($page);
-    stopGrid = route.view === 'home' ? null : initGrid($page, D, route, saved, art, opt.loadMore);
-    heroCtl = initHero($page.querySelector('#hero'), { autoplay: opt.autoplay, ms: opt.autoplayMs, warm: el => art.warm(el) });
+    // 2 · the new page
+    if (home && homeKeep) {                                                 // back on Discover: the parked page, exactly as it was
+      const k = homeKeep; homeKeep = null;
+      $page.replaceChildren(...k.nodes);
+      heroCtl = k.hero; [stopReveal, stopShelves, ...deferStops] = k.stops; live = 'home'; homeDone = true;
+      $page.querySelectorAll('img.art-img[data-h]:not(.is-loaded)').forEach(im => { delete im.dataset.h; });   // slots that were still waiting when it was parked are looked at again
+      art.hydrate($page);
+    } else if (home) {
+      const parts = homeParts(); stale = false; live = 'home'; homeDone = !parts.later.length;
+      $page.innerHTML = parts.now;
+      art.hydrate($page);
+      stopReveal = reveal($page, { lead: 140 });
+      stopShelves = initShelves($page);
+      heroCtl = initHero($page.querySelector('#hero'), { autoplay: opt.autoplay, ms: opt.autoplayMs, warm: el => art.warm(el) });
+      if (parts.later.length) fillLater(parts.later, deferTok);
+    } else {
+      live = 'browse';
+      $page.innerHTML = browseHtml(D, route, saved, typeof opt.loadMore === 'function');
+      art.hydrate($page);
+      stopReveal = reveal($page, { lead: 140 });
+      stopShelves = initShelves($page);
+      stopGrid = initGrid($page, D, route, saved, art, opt.loadMore);
+    }
     $foot.textContent = D.site.footer || '';
     syncNav();
   }
@@ -1543,18 +1596,18 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     el: host, root,
     /** Replace the data. `to` ({view, filter}) sets the route in the same transition (one swap, not two). */
     update(next, to) {
-      D = normalize(next);
+      D = normalize(next); stale = true;
       if (to && to.view) { route = { view: to.view, filter: { ...(to.filter || {}) } }; opt.onRoute && opt.onRoute({ ...route }); }
       if (openId && !D.byId.get(openId)) closeGame();
       renderBar();
       return refresh();
     },
     /** Add games to the running app without a full re-render (e.g. search results). Existing games only gain new search tags. */
-    add(list) { const { added, merged } = addGames(D, list); return (added.length || merged) && route.view === 'browse' ? refresh() : Promise.resolve(); },
+    add(list) { const { added, merged } = addGames(D, list); if (added.length || merged) stale = true; return (added.length || merged) && route.view === 'browse' ? refresh() : Promise.resolve(); },
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); stopDefer(); homeKeep && dropHome(homeKeep); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 
@@ -1578,8 +1631,9 @@ const when = ts => new Date(ts * 1000).toLocaleDateString('en', { year: 'numeric
 const tone = d => (/positive/i.test(d || '') ? 'pos' : /negative/i.test(d || '') ? 'neg' : 'mix');
 
 function pageHtml(g) {
-  return `<div class="dp-scroll"><div class="dp-hero"><div class="layer is-skel is-busy"><img class="art-img" alt=""></div>
-    <div class="dp-hin"><div class="dp-nav"><button class="dp-back" data-dp-act="close">${ic(ICON.prev, 18)}Back</button><small>Esc to close</small></div>
+  return `<div class="dp-nav"><button class="dp-back" data-dp-act="close">${ic(ICON.prev, 18)}Back</button><small>Esc to close</small></div>
+    <div class="dp-scroll"><div class="dp-hero"><div class="layer is-skel is-busy"><img class="art-img" alt=""></div>
+    <div class="dp-hin">
     <div class="lg"><div class="fbt">${esc(g.title)}</div><img class="art-img logo" alt="${esc(g.title)}"></div></div></div>
     <div class="dp-wrap"><div class="dp-grid"><div><div class="dp-sec" id="dp-media"></div><div class="dp-sec" id="dp-about"></div><div class="dp-sec u" id="dp-upd"></div><div class="dp-sec" id="dp-guide"></div><div class="dp-sec" id="dp-req"></div><div class="dp-sec" id="dp-comm"></div></div>
     <aside class="side dp-side" id="dp-side"></aside></div></div></div>`;
@@ -1588,6 +1642,8 @@ function pageOpen(root, g) {
   const el = document.createElement('div');
   el.className = 'dp'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', g.title); el.tabIndex = -1; el.innerHTML = pageHtml(g);
   root.appendChild(el);
+  const sc = el.querySelector('.dp-scroll'); let on = false;                       // the Back pill floats above the scroller; once the page is scrolled it gets a firmer backing (.sc) and drops the Esc hint
+  sc.addEventListener('scroll', () => { const v = sc.scrollTop > 48; if (v !== on) el.classList.toggle('sc', on = v); }, { passive: true });
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
   el.focus({ preventScroll: true });
   return el;

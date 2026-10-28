@@ -13,15 +13,18 @@
 
 .dp-hero { position: relative; height: clamp(300px, 46vh, 440px); overflow: hidden; background: var(--s2); }
 .dp-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, var(--bg) 2%, transparent 65%); pointer-events: none; }
-.dp-hin { position: absolute; inset: 0; z-index: 2; max-width: 1240px; margin: 0 auto; padding: 22px var(--gut) 30px; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+.dp-hin { position: absolute; inset: 0; z-index: 2; max-width: 1240px; margin: 0 auto; padding: 22px var(--gut) 30px; display: flex; flex-direction: column; justify-content: flex-end; pointer-events: none; }
 .dp-hin > * { pointer-events: auto; }
 .dp-hero .lg { margin: 0; min-height: 0; max-width: 100%; align-self: flex-start; }
 .dp-hero .fbt { font-size: clamp(34px, 4.6vw, 64px); margin: 0; }
 .dp-hero .logo { max-width: min(520px, 100%); max-height: 150px; }
-.dp-nav { display: flex; align-items: center; gap: 14px; }
-.dp-nav small { color: var(--mu); font: 500 12px var(--fb); }
+.dp-nav { position: absolute; top: 0; left: 0; right: 0; z-index: 5; max-width: 1240px; margin: 0 auto; padding: 22px var(--gut) 0; display: flex; align-items: center; gap: 14px; pointer-events: none; }   /* floats above .dp-scroll: it stays put while the page scrolls under it */
+.dp-nav > * { pointer-events: auto; }
+.dp-nav small { color: var(--mu); font: 500 12px var(--fb); transition: opacity var(--tb) var(--ease); }
+.dp.sc .dp-nav small { opacity: 0; }
 .dp-back { display: inline-flex; align-items: center; gap: 10px; padding: 10px 18px 10px 12px; border-radius: 99px; background: rgba(24, 26, 30, .6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); font: 600 14px var(--fb); }
-.dp-back:hover { background: rgba(24, 26, 30, .9); }
+.dp-back:hover, .dp.sc .dp-back:hover { background: rgba(24, 26, 30, .9); }
+.dp.sc .dp-back { background: rgba(24, 26, 30, .82); box-shadow: 0 6px 20px rgba(0, 0, 0, .35); }
 .dp-back svg { transition: transform var(--tb) var(--ease); }
 .dp-back:hover svg { transform: translateX(-4px); }
 
