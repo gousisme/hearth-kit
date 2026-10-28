@@ -633,8 +633,9 @@ function hueOf(id) { let h = 0; for (const c of String(id)) h = (h * 31 + c.char
  * Reuses the shelf markup (.rw / .row / .nx), so initShelves() gives it the arrows and the edge fades; a tile is a [data-cat] button,
  * so the existing category click handler opens Browse filtered to it. The pseudo category "updated" has its own nav entry and is skipped.
  */
-function genresHtml(D, { title = 'Browse by category', max = 14 } = {}) {
-  const list = D.categories.filter(c => c.id && c.id !== 'updated');
+function genresHtml(D, { title = 'Browse by category', max = 14, active, all = false } = {}) {
+  // active / all: the Browse page's category picker. `active` is the chosen category id ('' = All; undefined = a plain home shelf with no selection), `all` adds an "All" tile and lists every category.
+  const list = D.categories.filter(c => c.id && (all || c.id !== 'updated'));
   if (!list.length) return '';
   const hasArt = g => (g.steamAppId || (g.art && (g.art.header || g.art.hero || g.art.poster))) ? 1 : 0;
   const used = new Map();                                            // a game is shown on as few tiles as possible, so neighbouring tiles do not look alike
@@ -646,14 +647,16 @@ function genresHtml(D, { title = 'Browse by category', max = 14 } = {}) {
     const bricks = ORDER.map(i => pick.length ? `<span class="gt-b has">${layer(pick[ORDER.indexOf(i) % pick.length], 'header')}</span>` : '<span class="gt-b"></span>');
     const cells = []; ORDER.forEach((slot, rank) => { cells[slot] = bricks[rank]; });
     const rows = [0, 1, 2].map(r => `<span class="gt-r">${cells.slice(r * 4, r * 4 + 4).join('')}</span>`).join('');
-    return `<button type="button" class="gt rv" data-cat="${esc(c.id)}" style="--h:${hueOf(c.id)}" aria-label="${esc(c.label)}">
+    const on = active !== undefined && c.id === active;
+    return `<button type="button" class="gt rv${on ? ' on' : ''}" data-cat="${esc(c.id)}" style="--h:${hueOf(c.id)}" aria-label="${esc(c.label)}"${active !== undefined ? ` aria-pressed="${on}"` : ''}>
       <span class="gt-art" aria-hidden="true">${rows}</span>
       <span class="gt-name">${esc(c.label)}</span></button>`;
   };
-  return `<section class="shelf genres" data-shelf="genres">
-    <div class="sh-h rv"><h2>${esc(title)}</h2></div>
+  const allTile = all ? `<button type="button" class="gt gt-all rv${active === '' ? ' on' : ''}" data-cat="" aria-label="All" aria-pressed="${active === ''}"><span class="gt-name">All</span></button>` : '';
+  return `<section class="shelf genres${active !== undefined ? ' is-pick' : ''}" data-shelf="genres">
+    ${title ? `<div class="sh-h rv"><h2>${esc(title)}</h2></div>` : ''}
     <div class="rw"><button class="nx pv is-end" aria-label="Scroll back" tabindex="-1">${ic(ICON.prev, 20, 2.6)}</button>
-      <div class="row">${list.slice(0, max).map(tile).join('')}</div>
+      <div class="row">${allTile}${list.slice(0, max).map(tile).join('')}</div>
       <button class="nx" aria-label="Scroll forward" tabindex="-1">${ic(ICON.next, 20, 2.6)}</button></div></section>`;
 }
 
@@ -707,11 +710,40 @@ function initShelves(root) {
     rw.style.setProperty('--fr', Math.max(0, Math.min(1, (max - l) / FADE)).toFixed(3));
   };
   const syncAll = list => { const m = list.map(measure); list.forEach((r, i) => apply(r, m[i])); };       // all reads, then all writes
+  /* Shift+wheel and the arrows share ONE continuous glide towards a moving target. The row is scroll-snap mandatory, which made every wheel notch snap and stop (and a smooth scrollBy
+     per click restart from scratch), so while gliding the snap is off (.is-glide) and, once the input goes quiet, the glide ends on the nearest card edge. */
+  const startOf = ({ row }, x) => {                                          // the card edge nearest to scroll position x
+    const max = row.scrollWidth - row.clientWidth, base = row.getBoundingClientRect().left - row.scrollLeft; let best = Math.max(0, Math.min(max, x)), gap = Infinity;
+    for (const c of row.children) { const p = Math.max(0, Math.min(max, c.getBoundingClientRect().left - base)); if (Math.abs(p - x) < gap) { gap = Math.abs(p - x); best = p; } }
+    return best;
+  };
+  const halt = r => { cancelAnimationFrame(r.raf); clearTimeout(r.idle); r.raf = 0; r.to = null; r.row.classList.remove('is-glide'); };
+  const glide = (r, to) => {
+    const { row } = r; r.to = Math.max(0, Math.min(row.scrollWidth - row.clientWidth, to));
+    if (reduced()) { row.scrollLeft = r.to; r.to = null; return; }
+    row.classList.add('is-glide'); if (r.raf) return;
+    r.last = performance.now();
+    const tick = now => {
+      const dt = Math.min(48, now - r.last); r.last = now; const diff = r.to - row.scrollLeft;
+      if (Math.abs(diff) < .5) { row.scrollLeft = r.to; r.raf = 0; if (!r.idle) halt(r); return; }   // arrived: done, unless wheel input is still settling (its snap-to-card glide follows)
+      row.scrollLeft += diff * (1 - Math.exp(-dt / 90)); r.raf = requestAnimationFrame(tick);
+    };
+    r.raf = requestAnimationFrame(tick);
+  };
   rows.forEach(r => {
     const { row, pv, nx } = r;
-    const by = dir => row.scrollBy({ left: dir * row.clientWidth * .8, behavior: 'smooth' });
+    const by = dir => { const from = r.to != null ? r.to : row.scrollLeft; halt(r); glide(r, startOf(r, from + dir * row.clientWidth * .8)); };
     pv.onclick = () => by(-1); nx.onclick = () => by(1);
     row.addEventListener('scroll', () => apply(r, measure(r)), { passive: true });
+    row.addEventListener('wheel', e => {
+      if (!e.shiftKey || e.ctrlKey || row.scrollWidth <= row.clientWidth + 1) return;                  // only Shift+wheel is taken over; trackpads and plain wheel keep native behaviour
+      const d = (e.deltaY || e.deltaX) * (e.deltaMode === 1 ? 34 : e.deltaMode === 2 ? row.clientWidth : 1); if (!d) return;
+      e.preventDefault();
+      const from = r.to != null ? r.to : row.scrollLeft; clearTimeout(r.idle); glide(r, from + d);
+      r.idle = setTimeout(() => { r.idle = 0; glide(r, startOf(r, r.to != null ? r.to : row.scrollLeft)); }, 140);   // input stopped: settle on a card edge
+    }, { passive: false });
+    ['pointerdown', 'touchstart'].forEach(t => row.addEventListener(t, () => halt(r), { passive: true }));   // grabbing the row stops the glide
+    cleanups.push(() => halt(r));
   });
   if ('ResizeObserver' in window) {                                       // one observer for every row: its first callback is the initial sync, and a resize re-syncs them all in one pass
     const ro = new ResizeObserver(es => syncAll(rows.filter(r => es.some(e => e.target === r.row))));
@@ -1053,14 +1085,6 @@ function profileHtml(u, p, { pending = false } = {}) {
   </div>`;
 }
 
-/* ── src/js/ui/components/chips.js ── */
-/** Category pills. `active` is a category id, or '' for "All". */
-function chipsHtml(categories, active = '') {
-  if (!categories.length) return '';
-  const chip = (id, label) => `<button class="chip${id === active ? ' on' : ''}" data-cat="${esc(id)}" aria-pressed="${id === active}">${esc(label)}</button>`;
-  return `<div class="chips" role="group" aria-label="Categories">${chip('', 'All')}${categories.map(c => chip(c.id, c.label)).join('')}</div>`;
-}
-
 /* ── src/js/ui/components/browse.js ── */
 /** The grid renders in chunks: a few hundred cards at once is ~12k DOM nodes and a visible stall on every tab change. */
 const GRID_CHUNK = 24;
@@ -1084,7 +1108,7 @@ function browseHtml(D, route, savedIds, canMore = false) {
   const lazy = !list.length && canMore && !f.saved && !f.query;
   return `<div class="browse">
     <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span></div>
-    ${f.saved ? '' : chipsHtml(D.categories, f.category || '')}
+    ${f.saved || !D.categories.length ? '' : genresHtml(D, { title: '', max: Infinity, active: f.category || '', all: true })}
     ${list.length
       ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
       : lazy ? '<div class="grid"></div><div class="more" aria-hidden="true"></div>' : emptyHtml(f, savedIds)}
@@ -1257,6 +1281,8 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
       $page.innerHTML = browseHtml(D, route, saved, typeof opt.loadMore === 'function');
       art.hydrate($page);
       stopReveal = reveal($page, { lead: 140 });
+      const pick = $page.querySelector('.genres .gt.on'), prow = pick && pick.parentNode;                    // the category picker opens with the chosen tile in view
+      if (prow) prow.scrollLeft = Math.max(0, pick.offsetLeft - (prow.clientWidth - pick.offsetWidth) / 2);
       stopShelves = initShelves($page);
       stopGrid = initGrid($page, D, route, saved, art, opt.loadMore);
     }
@@ -1624,7 +1650,7 @@ function adopt(scope, css) {
  *   pageArt(el, { hero, logo }, final, onMiss)   hero / logo URL lists, tried in order; the slots stop being skeletons when one loads; onMiss('logo') when every logo URL failed
  *   stageHtml / showSlide / mediaReady     gallery (stage + thumbnails) and its cross-fade
  *   ratingHtml, histHtml, reviewHtml, commentHtml, pagerHtml, tabsHtml, noteHtml, skelHtml, aboutHtml   content blocks
- *   expand(el)                             animated "Read more" for .dp-clampbox / .dp-rt
+ *   expand(el) / collapse(el)              animated "Read more" / "Read less" for .dp-clampbox / .dp-rt
  */
 const num = n => (n == null || isNaN(n) ? '' : Number(n).toLocaleString('en-US'));
 const when = ts => new Date(ts * 1000).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -1709,7 +1735,7 @@ function aboutHtml(src) {
   const blocks = typeof src === 'string' ? src.split('\n').filter(Boolean).map(l => (l.startsWith('##') ? { h: l.slice(2) } : { t: l })) : src;
   const weight = blocks.reduce((n, b) => n + (b.img || b.vid ? 220 : (b.t || b.h || '').length), 0), long = weight >= 700 || blocks.filter(b => b.img || b.vid).length > 1;
   const one = b => (b.vid ? `<figure class="dp-fig is-skel is-busy"><video src="${esc(safeUrl(b.vid))}" ${b.poster ? `poster="${esc(safeUrl(b.poster))}" ` : ''}muted loop autoplay playsinline preload="metadata"></video></figure>` : b.img ? `<figure class="dp-fig is-skel is-busy"><img src="${esc(safeUrl(b.img))}" alt="${esc(b.alt || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer"></figure>` : b.h ? `<h5>${esc(b.h)}</h5>` : `<p>${esc(b.t)}</p>`);
-  return `<h4>About this game</h4><div class="dp-clampbox${long ? ' cl' : ''}"><div class="dp-text">${blocks.map(one).join('')}</div></div>${long ? '<button class="dp-more" data-dp-act="about">Read more</button>' : ''}`;
+  return `<h4>About this game</h4><div class="dp-clampbox${long ? ' cl' : ''}"><div class="dp-text">${blocks.map(one).join('')}</div></div>${long ? '<button class="dp-more" data-dp-act="about" aria-expanded="false">Read more</button>' : ''}`;
 }
 /** Section images fade in as they load (the figure shows the kit's skeleton until then; a failed one disappears). */
 function imgReady(el) {
@@ -1719,14 +1745,29 @@ function imgReady(el) {
     m.complete ? (m.naturalWidth ? ok() : bad()) : (m.addEventListener('load', ok, { once: true }), m.addEventListener('error', bad, { once: true }));
   });
 }
-/** Open a clamped box (.cl) with a height transition. */
-function expand(box, animate = true) {
-  if (!box || !box.classList.contains('cl')) return;
-  const more = box.parentNode && box.parentNode.querySelector(':scope > .dp-more'); if (more) more.remove();
+/** The Read more / Read less button that belongs to a clamped box: `btn` when given, else the .dp-more right after the box (About). */
+const moreBtn = (box, btn) => btn || (box.parentNode && box.parentNode.querySelector(':scope > .dp-more'));
+const setMore = (b, open) => { if (!b) return; b.textContent = open ? 'Read less' : 'Read more'; b.setAttribute('aria-expanded', String(open)); };
+/** Open a clamped box (.cl) with a height transition. The button stays and turns into "Read less" (collapse() undoes it). */
+function expand(box, animate = true, btn) {
+  if (!box) return; const b = moreBtn(box, btn); setMore(b, true);
+  if (!box.classList.contains('cl')) return;
   if (!animate || reduced()) { box.classList.remove('cl'); return; }
   box.style.maxHeight = box.offsetHeight + 'px'; void box.offsetWidth;
   box.classList.remove('cl'); box.style.maxHeight = box.scrollHeight + 'px';
   setTimeout(() => { box.style.maxHeight = ''; }, T.slow + 60);
+}
+/** Close an opened box again (back to the clamp) with a height transition; the button turns back into "Read more". If the top of the box is scrolled out of view it is brought back. */
+function collapse(box, animate = true, btn) {
+  if (!box) return; setMore(moreBtn(box, btn), false);
+  if (box.classList.contains('cl')) return;
+  const off = box.getBoundingClientRect().top < 0;
+  if (!animate || reduced()) { box.classList.add('cl'); box.style.maxHeight = ''; }
+  else {
+    box.style.maxHeight = box.offsetHeight + 'px'; void box.offsetWidth;
+    box.classList.add('cl'); box.style.maxHeight = '';                    // the .cl rule takes over: the height eases from where it is to the clamp
+  }
+  if (off) box.scrollIntoView({ block: 'start', behavior: animate && !reduced() ? 'smooth' : 'auto' });
 }
 /** How a Steam verdict looks: op overwhelmingly positive (sparkles + shine), vp very positive (glow), po positive, mx mixed, ng negative, vn very negative (glow), on overwhelmingly negative (embers). */
 const tier = d => { d = String(d || '').toLowerCase(); return /overwhelmingly positive/.test(d) ? 'op' : /very positive/.test(d) ? 'vp' : /positive/.test(d) ? 'po' : /overwhelmingly negative/.test(d) ? 'on' : /very negative/.test(d) ? 'vn' : /negative/.test(d) ? 'ng' : 'mx'; };
@@ -1748,7 +1789,7 @@ function histHtml(h) {
 /** r = { id, up, text, t (unix seconds) or when (text), hrs, votes, funny }. */
 function reviewHtml(r) {
   const long = r.text.length > 420, c = r.up ? 'pos' : 'neg';
-  return `<div class="dp-rev" data-k="r${esc(r.id)}" data-id="${esc(r.id)}"><div class="dp-th2 ${c}" aria-hidden="true">${r.up ? '✓' : '✕'}</div><div class="dp-rh"><b class="${c}">${r.up ? 'Recommended' : 'Not recommended'}</b>${r.hrs ? `<span>${r.hrs.toFixed(r.hrs < 10 ? 1 : 0)} hrs on record</span>` : ''}${r.t || r.when ? `<span>${esc(r.t ? when(r.t) : r.when)}</span>` : ''}</div><div class="dp-rt${long ? ' cl' : ''}">${esc(r.text)}</div><div class="dp-ra">${long ? `<button data-dp-act="rmore" data-v="${esc(r.id)}">Read more</button>` : ''}${r.votes ? `<span>${num(r.votes)} found this helpful</span>` : ''}${r.funny ? `<span>${num(r.funny)} funny</span>` : ''}</div></div>`;
+  return `<div class="dp-rev" data-k="r${esc(r.id)}" data-id="${esc(r.id)}"><div class="dp-th2 ${c}" aria-hidden="true">${r.up ? '✓' : '✕'}</div><div class="dp-rh"><b class="${c}">${r.up ? 'Recommended' : 'Not recommended'}</b>${r.hrs ? `<span>${r.hrs.toFixed(r.hrs < 10 ? 1 : 0)} hrs on record</span>` : ''}${r.t || r.when ? `<span>${esc(r.t ? when(r.t) : r.when)}</span>` : ''}</div><div class="dp-rt${long ? ' cl' : ''}">${esc(r.text)}</div><div class="dp-ra">${long ? `<button data-dp-act="rmore" data-v="${esc(r.id)}" aria-expanded="false">Read more</button>` : ''}${r.votes ? `<span>${num(r.votes)} found this helpful</span>` : ''}${r.funny ? `<span>${num(r.funny)} funny</span>` : ''}</div></div>`;
 }
 /** c = { id, name, href, av, text, when }; `shown` = the text to display (a translation, say); `offer` = '' | 'Translate' | 'Show original'. */
 function commentHtml(c, shown, offer) {
@@ -1785,7 +1826,7 @@ const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore
 
 /** The sheet's own building blocks, for pages a userscript draws next to the sheet (so they look exactly like it and never re-implement it). */
 const parts = { getBox, guideHtml, actsHtml, factsHtml, reqHtml, updHtml, logoSlot, layer, morphInto, swapRegion, ic, icf, ICON, LOGO,
-  page: { open: pageOpen, close: pageClose, art: pageArt, stage: stageHtml, show: showSlide, mediaReady, about: aboutHtml, imgReady, expand, rating: ratingHtml, hist: histHtml, review: reviewHtml, comment: commentHtml, pager: pagerHtml, tabs: tabsHtml, note: noteHtml, skel: skelHtml, link: linkHtml, more: moreHtml } };
+  page: { open: pageOpen, close: pageClose, art: pageArt, stage: stageHtml, show: showSlide, mediaReady, about: aboutHtml, imgReady, expand, collapse, rating: ratingHtml, hist: histHtml, review: reviewHtml, comment: commentHtml, pager: pagerHtml, tabs: tabsHtml, note: noteHtml, skel: skelHtml, link: linkHtml, more: moreHtml } };
 
 return {mount, validate, steam, normalize, version, features, parts};
 })();

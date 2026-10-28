@@ -1,6 +1,6 @@
 import { esc } from '../../shared/util.js';
 import { card } from './card.js';
-import { chipsHtml } from './chips.js';
+import { genresHtml } from './genres.js';
 import { filterGames, addGames } from '../core/data.js';
 import { reveal } from '../core/motion.js';
 
@@ -26,7 +26,7 @@ export function browseHtml(D, route, savedIds, canMore = false) {
   const lazy = !list.length && canMore && !f.saved && !f.query;
   return `<div class="browse">
     <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span></div>
-    ${f.saved ? '' : chipsHtml(D.categories, f.category || '')}
+    ${f.saved || !D.categories.length ? '' : genresHtml(D, { title: '', max: Infinity, active: f.category || '', all: true })}
     ${list.length
       ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
       : lazy ? '<div class="grid"></div><div class="more" aria-hidden="true"></div>' : emptyHtml(f, savedIds)}

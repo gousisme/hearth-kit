@@ -66,6 +66,7 @@
 .dp-text h5 { font: 700 17px var(--fd); color: var(--tx); margin-top: 8px; }
 .dp-clampbox, .dp-rt { position: relative; overflow: hidden; transition: max-height var(--ts) var(--ease); }
 .dp-clampbox.cl { max-height: 260px; }
+.dp-clampbox { scroll-margin-top: 96px; }
 .dp-clampbox::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 96px; background: linear-gradient(0deg, var(--bg), transparent); pointer-events: none; opacity: 0; transition: opacity var(--tb) var(--ease); }
 .dp-clampbox.cl::after { opacity: 1; }
 .dp-more { margin-top: 12px; font: 600 13px var(--fb); color: var(--ac); background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat; padding-bottom: 2px; transition: background-size var(--tb) var(--ease), opacity var(--tf); }

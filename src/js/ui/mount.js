@@ -132,6 +132,8 @@ export function mount({ target = document.body, data, css = null, shadow, option
       $page.innerHTML = browseHtml(D, route, saved, typeof opt.loadMore === 'function');
       art.hydrate($page);
       stopReveal = reveal($page, { lead: 140 });
+      const pick = $page.querySelector('.genres .gt.on'), prow = pick && pick.parentNode;                    // the category picker opens with the chosen tile in view
+      if (prow) prow.scrollLeft = Math.max(0, pick.offsetLeft - (prow.clientWidth - pick.offsetWidth) / 2);
       stopShelves = initShelves($page);
       stopGrid = initGrid($page, D, route, saved, art, opt.loadMore);
     }

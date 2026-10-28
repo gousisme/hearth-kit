@@ -15,5 +15,14 @@
 .gt-name { max-width: 100%; padding: 8px 16px; border-radius: 8px; background: var(--tx); color: var(--ink); font: 700 14px/1.25 var(--fd); letter-spacing: .08em; text-transform: uppercase; text-align: center; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); transition: background var(--tf), transform var(--tb) var(--ease); }
 .gt:hover .gt-name { background: var(--ac); transform: scale(1.04); }
 .gt:active { transform: scale(.98); }
+/* the same tiles as the Browse page's category picker: a little smaller, the chosen one ringed with the accent and its pill filled */
+.genres.is-pick { margin: 22px 0 0; }
+.genres.is-pick .gt { width: 190px; height: 92px; border-radius: 12px; }
+.genres.is-pick .gt-name { padding: 6px 14px; font-size: 12px; }
+.gt.on { box-shadow: 0 0 0 2px var(--ac), 0 10px 24px rgba(0, 0, 0, .35); }
+.gt.on .gt-name { background: var(--ac); }
+.gt-all { background: linear-gradient(135deg, var(--s2), color-mix(in srgb, var(--ac) 28%, var(--s2))); }
+.gt-all::before { display: none; }
+@media (max-width: 820px) { .genres.is-pick .gt { width: 150px; height: 80px; } }
 @media (max-width: 820px) { .gt { width: 210px; height: 120px; } .gt-b { width: 96px; } .gt-r:nth-child(2) { transform: translateX(44px); } }
 @media (prefers-reduced-motion: reduce) { .gt, .gt-art, .gt-name { transition: none; } }

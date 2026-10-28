@@ -143,8 +143,8 @@ a.btn { text-decoration: none; }
 .bar > .dk { pointer-events: none; }
 .dk-l > * { --dx: var(--dx-l, 0px); --dy: var(--dy-l, 0px); }
 .dk-r > * { --dx: var(--dx-r, 0px); --dy: var(--dy-r, 0px); }
-.dk > * { pointer-events: none; opacity: 0; translate: var(--dx) var(--dy); transition: translate 560ms var(--spring), opacity 120ms linear 960ms, transform var(--tb) var(--ease); }   /* out: the same spring, so it overshoots past its corner before it settles; it is swapped for the corner copy at the end */
-.docked .dk > * { pointer-events: auto; opacity: 1; translate: 0 0; transition: translate 630ms var(--spring), opacity 80ms linear, transform var(--tb) var(--ease); }
+.dk > * { pointer-events: none; opacity: 0; translate: var(--dx) var(--dy); transition: translate 760ms var(--spring), opacity 120ms linear 960ms, transform var(--tb) var(--ease); }   /* out: the same spring, so it overshoots past its corner before it settles; it is swapped for the corner copy at the end */
+.docked .dk > * { pointer-events: auto; opacity: 1; translate: 0 0; transition: translate 830ms var(--spring), opacity 80ms linear, transform var(--tb) var(--ease); }
 .top .mark { transition: transform var(--tb) var(--ease), opacity 120ms linear 960ms; }
 .top .bar-r .av { transition: transform var(--tb) var(--ease), opacity 120ms linear 960ms; }
 .docked .top .mark, .docked .top .bar-r .av { opacity: 0; pointer-events: none; transition: transform var(--tb) var(--ease), opacity 60ms linear; }
@@ -259,6 +259,7 @@ a.btn { text-decoration: none; }
 .rw::after { right: 0; opacity: var(--fr); background: linear-gradient(270deg, var(--bg) 6%, transparent); }
 .row { display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 10px 0 18px; margin: -10px 0 -18px; }
 .row::-webkit-scrollbar { display: none; }
+.row.is-glide { scroll-snap-type: none; }                               /* Shift+wheel / arrows glide (initShelves) without the snap stopping every notch */
 .nx { position: absolute; top: calc(50% - 26px); right: -22px; z-index: 5; width: 46px; height: 46px; border-radius: 50%; background: var(--tx); color: var(--ink); display: grid; place-items: center; opacity: 0; transform: scale(.8); pointer-events: none; transition: opacity var(--tb) var(--ease), transform var(--tb) var(--ease); }
 .nx.pv { right: auto; left: -22px; }
 .rw:hover .nx:not(.is-end) { opacity: 1; transform: none; pointer-events: auto; }
@@ -306,6 +307,15 @@ a.btn { text-decoration: none; }
 .gt-name { max-width: 100%; padding: 8px 16px; border-radius: 8px; background: var(--tx); color: var(--ink); font: 700 14px/1.25 var(--fd); letter-spacing: .08em; text-transform: uppercase; text-align: center; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); transition: background var(--tf), transform var(--tb) var(--ease); }
 .gt:hover .gt-name { background: var(--ac); transform: scale(1.04); }
 .gt:active { transform: scale(.98); }
+/* the same tiles as the Browse page's category picker: a little smaller, the chosen one ringed with the accent and its pill filled */
+.genres.is-pick { margin: 22px 0 0; }
+.genres.is-pick .gt { width: 190px; height: 92px; border-radius: 12px; }
+.genres.is-pick .gt-name { padding: 6px 14px; font-size: 12px; }
+.gt.on { box-shadow: 0 0 0 2px var(--ac), 0 10px 24px rgba(0, 0, 0, .35); }
+.gt.on .gt-name { background: var(--ac); }
+.gt-all { background: linear-gradient(135deg, var(--s2), color-mix(in srgb, var(--ac) 28%, var(--s2))); }
+.gt-all::before { display: none; }
+@media (max-width: 820px) { .genres.is-pick .gt { width: 150px; height: 80px; } }
 @media (max-width: 820px) { .gt { width: 210px; height: 120px; } .gt-b { width: 96px; } .gt-r:nth-child(2) { transform: translateX(44px); } }
 @media (prefers-reduced-motion: reduce) { .gt, .gt-art, .gt-name { transition: none; } }
 
@@ -571,6 +581,7 @@ a.dl.out:hover .da { color: #ff8a80; }
 .dp-text h5 { font: 700 17px var(--fd); color: var(--tx); margin-top: 8px; }
 .dp-clampbox, .dp-rt { position: relative; overflow: hidden; transition: max-height var(--ts) var(--ease); }
 .dp-clampbox.cl { max-height: 260px; }
+.dp-clampbox { scroll-margin-top: 96px; }
 .dp-clampbox::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 96px; background: linear-gradient(0deg, var(--bg), transparent); pointer-events: none; opacity: 0; transition: opacity var(--tb) var(--ease); }
 .dp-clampbox.cl::after { opacity: 1; }
 .dp-more { margin-top: 12px; font: 600 13px var(--fb); color: var(--ac); background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat; padding-bottom: 2px; transition: background-size var(--tb) var(--ease), opacity var(--tf); }

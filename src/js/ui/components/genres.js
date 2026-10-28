@@ -14,8 +14,9 @@ function hueOf(id) { let h = 0; for (const c of String(id)) h = (h * 31 + c.char
  * Reuses the shelf markup (.rw / .row / .nx), so initShelves() gives it the arrows and the edge fades; a tile is a [data-cat] button,
  * so the existing category click handler opens Browse filtered to it. The pseudo category "updated" has its own nav entry and is skipped.
  */
-export function genresHtml(D, { title = 'Browse by category', max = 14 } = {}) {
-  const list = D.categories.filter(c => c.id && c.id !== 'updated');
+export function genresHtml(D, { title = 'Browse by category', max = 14, active, all = false } = {}) {
+  // active / all: the Browse page's category picker. `active` is the chosen category id ('' = All; undefined = a plain home shelf with no selection), `all` adds an "All" tile and lists every category.
+  const list = D.categories.filter(c => c.id && (all || c.id !== 'updated'));
   if (!list.length) return '';
   const hasArt = g => (g.steamAppId || (g.art && (g.art.header || g.art.hero || g.art.poster))) ? 1 : 0;
   const used = new Map();                                            // a game is shown on as few tiles as possible, so neighbouring tiles do not look alike
@@ -27,13 +28,15 @@ export function genresHtml(D, { title = 'Browse by category', max = 14 } = {}) {
     const bricks = ORDER.map(i => pick.length ? `<span class="gt-b has">${layer(pick[ORDER.indexOf(i) % pick.length], 'header')}</span>` : '<span class="gt-b"></span>');
     const cells = []; ORDER.forEach((slot, rank) => { cells[slot] = bricks[rank]; });
     const rows = [0, 1, 2].map(r => `<span class="gt-r">${cells.slice(r * 4, r * 4 + 4).join('')}</span>`).join('');
-    return `<button type="button" class="gt rv" data-cat="${esc(c.id)}" style="--h:${hueOf(c.id)}" aria-label="${esc(c.label)}">
+    const on = active !== undefined && c.id === active;
+    return `<button type="button" class="gt rv${on ? ' on' : ''}" data-cat="${esc(c.id)}" style="--h:${hueOf(c.id)}" aria-label="${esc(c.label)}"${active !== undefined ? ` aria-pressed="${on}"` : ''}>
       <span class="gt-art" aria-hidden="true">${rows}</span>
       <span class="gt-name">${esc(c.label)}</span></button>`;
   };
-  return `<section class="shelf genres" data-shelf="genres">
-    <div class="sh-h rv"><h2>${esc(title)}</h2></div>
+  const allTile = all ? `<button type="button" class="gt gt-all rv${active === '' ? ' on' : ''}" data-cat="" aria-label="All" aria-pressed="${active === ''}"><span class="gt-name">All</span></button>` : '';
+  return `<section class="shelf genres${active !== undefined ? ' is-pick' : ''}" data-shelf="genres">
+    ${title ? `<div class="sh-h rv"><h2>${esc(title)}</h2></div>` : ''}
     <div class="rw"><button class="nx pv is-end" aria-label="Scroll back" tabindex="-1">${ic(ICON.prev, 20, 2.6)}</button>
-      <div class="row">${list.slice(0, max).map(tile).join('')}</div>
+      <div class="row">${allTile}${list.slice(0, max).map(tile).join('')}</div>
       <button class="nx" aria-label="Scroll forward" tabindex="-1">${ic(ICON.next, 20, 2.6)}</button></div></section>`;
 }

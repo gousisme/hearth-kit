@@ -10,7 +10,7 @@ import { streamHtml, attachStreams, stopStream } from '../core/stream.js';
  *   pageArt(el, { hero, logo }, final, onMiss)   hero / logo URL lists, tried in order; the slots stop being skeletons when one loads; onMiss('logo') when every logo URL failed
  *   stageHtml / showSlide / mediaReady     gallery (stage + thumbnails) and its cross-fade
  *   ratingHtml, histHtml, reviewHtml, commentHtml, pagerHtml, tabsHtml, noteHtml, skelHtml, aboutHtml   content blocks
- *   expand(el)                             animated "Read more" for .dp-clampbox / .dp-rt
+ *   expand(el) / collapse(el)              animated "Read more" / "Read less" for .dp-clampbox / .dp-rt
  */
 const num = n => (n == null || isNaN(n) ? '' : Number(n).toLocaleString('en-US'));
 const when = ts => new Date(ts * 1000).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -95,7 +95,7 @@ export function aboutHtml(src) {
   const blocks = typeof src === 'string' ? src.split('\n').filter(Boolean).map(l => (l.startsWith('##') ? { h: l.slice(2) } : { t: l })) : src;
   const weight = blocks.reduce((n, b) => n + (b.img || b.vid ? 220 : (b.t || b.h || '').length), 0), long = weight >= 700 || blocks.filter(b => b.img || b.vid).length > 1;
   const one = b => (b.vid ? `<figure class="dp-fig is-skel is-busy"><video src="${esc(safeUrl(b.vid))}" ${b.poster ? `poster="${esc(safeUrl(b.poster))}" ` : ''}muted loop autoplay playsinline preload="metadata"></video></figure>` : b.img ? `<figure class="dp-fig is-skel is-busy"><img src="${esc(safeUrl(b.img))}" alt="${esc(b.alt || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer"></figure>` : b.h ? `<h5>${esc(b.h)}</h5>` : `<p>${esc(b.t)}</p>`);
-  return `<h4>About this game</h4><div class="dp-clampbox${long ? ' cl' : ''}"><div class="dp-text">${blocks.map(one).join('')}</div></div>${long ? '<button class="dp-more" data-dp-act="about">Read more</button>' : ''}`;
+  return `<h4>About this game</h4><div class="dp-clampbox${long ? ' cl' : ''}"><div class="dp-text">${blocks.map(one).join('')}</div></div>${long ? '<button class="dp-more" data-dp-act="about" aria-expanded="false">Read more</button>' : ''}`;
 }
 /** Section images fade in as they load (the figure shows the kit's skeleton until then; a failed one disappears). */
 export function imgReady(el) {
@@ -105,14 +105,29 @@ export function imgReady(el) {
     m.complete ? (m.naturalWidth ? ok() : bad()) : (m.addEventListener('load', ok, { once: true }), m.addEventListener('error', bad, { once: true }));
   });
 }
-/** Open a clamped box (.cl) with a height transition. */
-export function expand(box, animate = true) {
-  if (!box || !box.classList.contains('cl')) return;
-  const more = box.parentNode && box.parentNode.querySelector(':scope > .dp-more'); if (more) more.remove();
+/** The Read more / Read less button that belongs to a clamped box: `btn` when given, else the .dp-more right after the box (About). */
+const moreBtn = (box, btn) => btn || (box.parentNode && box.parentNode.querySelector(':scope > .dp-more'));
+const setMore = (b, open) => { if (!b) return; b.textContent = open ? 'Read less' : 'Read more'; b.setAttribute('aria-expanded', String(open)); };
+/** Open a clamped box (.cl) with a height transition. The button stays and turns into "Read less" (collapse() undoes it). */
+export function expand(box, animate = true, btn) {
+  if (!box) return; const b = moreBtn(box, btn); setMore(b, true);
+  if (!box.classList.contains('cl')) return;
   if (!animate || reduced()) { box.classList.remove('cl'); return; }
   box.style.maxHeight = box.offsetHeight + 'px'; void box.offsetWidth;
   box.classList.remove('cl'); box.style.maxHeight = box.scrollHeight + 'px';
   setTimeout(() => { box.style.maxHeight = ''; }, T.slow + 60);
+}
+/** Close an opened box again (back to the clamp) with a height transition; the button turns back into "Read more". If the top of the box is scrolled out of view it is brought back. */
+export function collapse(box, animate = true, btn) {
+  if (!box) return; setMore(moreBtn(box, btn), false);
+  if (box.classList.contains('cl')) return;
+  const off = box.getBoundingClientRect().top < 0;
+  if (!animate || reduced()) { box.classList.add('cl'); box.style.maxHeight = ''; }
+  else {
+    box.style.maxHeight = box.offsetHeight + 'px'; void box.offsetWidth;
+    box.classList.add('cl'); box.style.maxHeight = '';                    // the .cl rule takes over: the height eases from where it is to the clamp
+  }
+  if (off) box.scrollIntoView({ block: 'start', behavior: animate && !reduced() ? 'smooth' : 'auto' });
 }
 /** How a Steam verdict looks: op overwhelmingly positive (sparkles + shine), vp very positive (glow), po positive, mx mixed, ng negative, vn very negative (glow), on overwhelmingly negative (embers). */
 const tier = d => { d = String(d || '').toLowerCase(); return /overwhelmingly positive/.test(d) ? 'op' : /very positive/.test(d) ? 'vp' : /positive/.test(d) ? 'po' : /overwhelmingly negative/.test(d) ? 'on' : /very negative/.test(d) ? 'vn' : /negative/.test(d) ? 'ng' : 'mx'; };
@@ -134,7 +149,7 @@ export function histHtml(h) {
 /** r = { id, up, text, t (unix seconds) or when (text), hrs, votes, funny }. */
 export function reviewHtml(r) {
   const long = r.text.length > 420, c = r.up ? 'pos' : 'neg';
-  return `<div class="dp-rev" data-k="r${esc(r.id)}" data-id="${esc(r.id)}"><div class="dp-th2 ${c}" aria-hidden="true">${r.up ? '✓' : '✕'}</div><div class="dp-rh"><b class="${c}">${r.up ? 'Recommended' : 'Not recommended'}</b>${r.hrs ? `<span>${r.hrs.toFixed(r.hrs < 10 ? 1 : 0)} hrs on record</span>` : ''}${r.t || r.when ? `<span>${esc(r.t ? when(r.t) : r.when)}</span>` : ''}</div><div class="dp-rt${long ? ' cl' : ''}">${esc(r.text)}</div><div class="dp-ra">${long ? `<button data-dp-act="rmore" data-v="${esc(r.id)}">Read more</button>` : ''}${r.votes ? `<span>${num(r.votes)} found this helpful</span>` : ''}${r.funny ? `<span>${num(r.funny)} funny</span>` : ''}</div></div>`;
+  return `<div class="dp-rev" data-k="r${esc(r.id)}" data-id="${esc(r.id)}"><div class="dp-th2 ${c}" aria-hidden="true">${r.up ? '✓' : '✕'}</div><div class="dp-rh"><b class="${c}">${r.up ? 'Recommended' : 'Not recommended'}</b>${r.hrs ? `<span>${r.hrs.toFixed(r.hrs < 10 ? 1 : 0)} hrs on record</span>` : ''}${r.t || r.when ? `<span>${esc(r.t ? when(r.t) : r.when)}</span>` : ''}</div><div class="dp-rt${long ? ' cl' : ''}">${esc(r.text)}</div><div class="dp-ra">${long ? `<button data-dp-act="rmore" data-v="${esc(r.id)}" aria-expanded="false">Read more</button>` : ''}${r.votes ? `<span>${num(r.votes)} found this helpful</span>` : ''}${r.funny ? `<span>${num(r.funny)} funny</span>` : ''}</div></div>`;
 }
 /** c = { id, name, href, av, text, when }; `shown` = the text to display (a translation, say); `offer` = '' | 'Translate' | 'Show original'. */
 export function commentHtml(c, shown, offer) {
