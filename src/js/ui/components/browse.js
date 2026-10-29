@@ -3,6 +3,15 @@ import { card } from './card.js';
 import { genresHtml } from './genres.js';
 import { filterGames, addGames } from '../core/data.js';
 import { reveal } from '../core/motion.js';
+import { ic, ICON } from '../core/icons.js';
+
+/** The ways a grid can be ordered (filter.sort). '' = the order the data comes in. */
+export const SORTS = [{ id: '', label: 'Default' }, { id: 'new', label: 'New' }, { id: 'updated', label: 'Recently updated' }];
+export function sortHtml(f) {
+  const cur = SORTS.find(o => o.id === (f.sort || '')) || SORTS[0];
+  return `<div class="sortbox"><button type="button" class="sortbtn" data-sort-toggle aria-haspopup="menu" aria-expanded="false"><span>Sort</span><b>${esc(cur.label)}</b>${ic(ICON.chev, 14, 2.4)}</button>
+    <div class="sortmenu" role="menu">${SORTS.map(o => `<button type="button" role="menuitemradio" data-sort="${o.id}" aria-checked="${o.id === cur.id}"${o.id === cur.id ? ' class="on"' : ''}>${esc(o.label)}</button>`).join('')}</div></div>`;
+}
 
 /** The grid renders in chunks: a few hundred cards at once is ~12k DOM nodes and a visible stall on every tab change. */
 export const GRID_CHUNK = 24;
@@ -22,10 +31,10 @@ export function browseHtml(D, route, savedIds, canMore = false, { slot = false }
   const f = route.filter || {};
   const list = filterGames(D, f, savedIds);
   const cat = D.categories.find(c => c.id === f.category);
-  const title = f.query ? `Results for “${f.query}”` : f.saved ? 'Your library' : cat ? cat.label : f.sort === 'new' ? 'New & recent' : 'All games';
+  const title = f.query ? `Results for “${f.query}”` : f.saved ? 'Your library' : cat ? cat.label : 'All games';
   const lazy = !list.length && canMore && !f.saved && !f.query;
   return `<div class="browse">
-    <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span></div>
+    <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span>${sortHtml(f)}</div>
     ${f.saved || !D.categories.length ? '' : slot ? '<div class="pick-slot"></div>' : genresHtml(D, { title: '', max: Infinity, active: f.category || '', all: true })}
     ${list.length
       ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`

@@ -706,6 +706,18 @@ a.dl.out:hover .da { color: #ff8a80; }
 .bh { display: flex; align-items: baseline; gap: 16px; }
 .bh h1 { font: 800 clamp(32px, 4vw, 52px)/1 var(--fd); letter-spacing: -.03em; }
 .bh .count { color: var(--mu); font-size: 14px; }
+/* sort: a small pill at the right end of the header, its menu drops below it */
+.sortbox { position: relative; margin-left: auto; align-self: center; }
+.sortbtn { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px 0 16px; border-radius: 99px; background: var(--s1); color: var(--tx); font: 600 13px var(--fb); transition: background var(--tf); }
+.sortbtn span { color: var(--mu); font-weight: 500; }
+.sortbtn:hover, .sortbox.open .sortbtn { background: var(--s2); }
+.sortbtn svg { transition: transform var(--tb) var(--ease); }
+.sortbox.open .sortbtn svg { transform: rotate(180deg); }
+.sortmenu { position: absolute; z-index: 30; right: 0; top: calc(100% + 8px); min-width: 190px; padding: 6px; border-radius: 14px; background: var(--s2); box-shadow: 0 16px 36px rgba(0, 0, 0, .4); opacity: 0; visibility: hidden; transform: translateY(-6px); transition: opacity var(--tf), transform var(--tb) var(--ease), visibility 0s var(--tf); }
+.sortbox.open .sortmenu { opacity: 1; visibility: visible; transform: none; transition: opacity var(--tf), transform var(--tb) var(--ease), visibility 0s; }
+.sortmenu button { display: block; width: 100%; padding: 9px 12px; border-radius: 9px; text-align: left; color: var(--tx); font: 600 13px var(--fb); transition: background var(--tf), color var(--tf); }
+.sortmenu button:hover { background: rgba(255, 255, 255, .08); }
+.sortmenu button.on { color: var(--ac); }
 .browse .chips { padding-top: 22px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 28px 18px; margin-top: 30px; }
 .grid .card { width: auto; }

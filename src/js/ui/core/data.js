@@ -52,7 +52,7 @@ export function normalize(raw) {
   return { site, nav, categories, hero, featured, shelves, games, byId };
 }
 
-/** Games matching a browse filter: { category, query, sort: 'new'|'title', saved } */
+/** Games matching a browse filter: { category, query, sort: 'new'|'updated'|'title', saved } */
 export function filterGames(D, filter = {}, savedIds = new Set()) {
   let list = D.games.slice();
   if (filter.category) list = list.filter(g => g.categories.includes(filter.category));
@@ -60,7 +60,10 @@ export function filterGames(D, filter = {}, savedIds = new Set()) {
   const q = (filter.query || '').trim().toLowerCase();
   if (q) list = list.filter(g => [g.title, g.developer, g.publisher, g.tagline, ...g.genres].join(' ').toLowerCase().includes(q));
   if (filter.sort === 'new') list.sort((a, b) => (b.releaseYear || 0) - (a.releaseYear || 0));
-  else if (filter.sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
+  else if (filter.sort === 'updated') {                          // games the site lists as recently updated first (in the order the data gives them), the rest after
+    const at = new Map(D.games.map((g, i) => [g.id, i])), up = g => (g.categories.includes('updated') ? 0 : 1);
+    list.sort((a, b) => up(a) - up(b) || at.get(a.id) - at.get(b.id));
+  } else if (filter.sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
   return list;
 }
 

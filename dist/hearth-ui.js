@@ -178,7 +178,7 @@ function normalize(raw) {
   return { site, nav, categories, hero, featured, shelves, games, byId };
 }
 
-/** Games matching a browse filter: { category, query, sort: 'new'|'title', saved } */
+/** Games matching a browse filter: { category, query, sort: 'new'|'updated'|'title', saved } */
 function filterGames(D, filter = {}, savedIds = new Set()) {
   let list = D.games.slice();
   if (filter.category) list = list.filter(g => g.categories.includes(filter.category));
@@ -186,7 +186,10 @@ function filterGames(D, filter = {}, savedIds = new Set()) {
   const q = (filter.query || '').trim().toLowerCase();
   if (q) list = list.filter(g => [g.title, g.developer, g.publisher, g.tagline, ...g.genres].join(' ').toLowerCase().includes(q));
   if (filter.sort === 'new') list.sort((a, b) => (b.releaseYear || 0) - (a.releaseYear || 0));
-  else if (filter.sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
+  else if (filter.sort === 'updated') {                          // games the site lists as recently updated first (in the order the data gives them), the rest after
+    const at = new Map(D.games.map((g, i) => [g.id, i])), up = g => (g.categories.includes('updated') ? 0 : 1);
+    list.sort((a, b) => up(a) - up(b) || at.get(a.id) - at.get(b.id));
+  } else if (filter.sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
   return list;
 }
 
@@ -792,12 +795,13 @@ function initShelves(root) {
 }
 
 /* ── src/js/ui/components/nav.js ── */
-/** Is nav item `n` the current one? Home matches the home view; browse items match on saved/sort/category. */
+/** Is nav item `n` the current one? Home matches the home view; browse items match on saved/category. */
 function navActive(n, route) {
   if (n.view === 'home') return route.view === 'home';
   if (n.view !== 'browse' || route.view !== 'browse') return false;
   const a = n.filter || {}, b = route.filter || {};
-  return !!a.saved === !!b.saved && (a.sort || '') === (b.sort || '') && (a.category || '') === (b.category || '');
+  if (!a.saved && !a.category) return !b.saved;                       // "Games": every grid that is not the library (all games, a category, a search, any sort)
+  return !!a.saved === !!b.saved && (a.category || '') === (b.category || '');   // the sort is a setting of the page, not a section: "Games" stays on whichever way it is sorted
 }
 
 /** The site mark (left) and the account button (right), as buttons; `extra` adds classes (the docked copies get "dock"). No user (not signed in) → no account button, never the text "undefined". */
@@ -1125,6 +1129,14 @@ function profileHtml(u, p, { pending = false } = {}) {
 }
 
 /* ── src/js/ui/components/browse.js ── */
+/** The ways a grid can be ordered (filter.sort). '' = the order the data comes in. */
+const SORTS = [{ id: '', label: 'Default' }, { id: 'new', label: 'New' }, { id: 'updated', label: 'Recently updated' }];
+function sortHtml(f) {
+  const cur = SORTS.find(o => o.id === (f.sort || '')) || SORTS[0];
+  return `<div class="sortbox"><button type="button" class="sortbtn" data-sort-toggle aria-haspopup="menu" aria-expanded="false"><span>Sort</span><b>${esc(cur.label)}</b>${ic(ICON.chev, 14, 2.4)}</button>
+    <div class="sortmenu" role="menu">${SORTS.map(o => `<button type="button" role="menuitemradio" data-sort="${o.id}" aria-checked="${o.id === cur.id}"${o.id === cur.id ? ' class="on"' : ''}>${esc(o.label)}</button>`).join('')}</div></div>`;
+}
+
 /** The grid renders in chunks: a few hundred cards at once is ~12k DOM nodes and a visible stall on every tab change. */
 const GRID_CHUNK = 24;
 
@@ -1143,10 +1155,10 @@ function browseHtml(D, route, savedIds, canMore = false, { slot = false } = {}) 
   const f = route.filter || {};
   const list = filterGames(D, f, savedIds);
   const cat = D.categories.find(c => c.id === f.category);
-  const title = f.query ? `Results for “${f.query}”` : f.saved ? 'Your library' : cat ? cat.label : f.sort === 'new' ? 'New & recent' : 'All games';
+  const title = f.query ? `Results for “${f.query}”` : f.saved ? 'Your library' : cat ? cat.label : 'All games';
   const lazy = !list.length && canMore && !f.saved && !f.query;
   return `<div class="browse">
-    <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span></div>
+    <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span>${sortHtml(f)}</div>
     ${f.saved || !D.categories.length ? '' : slot ? '<div class="pick-slot"></div>' : genresHtml(D, { title: '', max: Infinity, active: f.category || '', all: true })}
     ${list.length
       ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
@@ -1256,7 +1268,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, onMiss: opt.onArtMiss, resolveLogo: opt.resolveLogo, resolveMs: opt.artDeadlineMs, loadMs: opt.imageTimeoutMs, game: id => D.byId.get(String(id)) });
   const saved = new Set((opt.saved || []).map(String));
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
-  let heroCtl, stopReveal, stopShelves, stopGrid, stopGenres, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
+  let heroCtl, stopReveal, stopShelves, stopGrid, stopGenres, openId = null, lastFocus = null, swapping = false, searchFrom = { view: 'home', filter: {} }, destroyed = false;
 
   /* ── render ─────────────────────────────────────────────────────────────────────────────── */
   /** The home page in two parts: what is on screen at first paint (hero + featured tiles) and the sections below the fold (category wall, shelves).
@@ -1301,7 +1313,27 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     stopShelves && stopShelves(); stopShelves = initShelves($page);
     art.hydrate($page, { lazy: true });
   }
-  let pickKeep = null, pickSig = '';                                       // the Browse category picker (built once, reused on every category switch: no rebuild, no re-fade of its artwork)
+  let pickKeep = null, pickSig = '', pickX = 0;                           // pickX: where the picker strip was scrolled (a detached strip forgets it)
+  const markPick = () => { const want = (route.filter && route.filter.category) || ''; pickKeep.querySelectorAll('.gt').forEach(t => { const on = t.dataset.cat === want; t.classList.toggle('on', on); t.setAttribute('aria-pressed', String(on)); }); };
+  /** Browse → Browse (another category, a sort, a search word): only what depends on the route changes. The heading, the picker and the page itself stay as they are (no fade, no blink,
+   *  the picker keeps its scroll position and its artwork); the title, the count, the sort control and the grid are replaced. */
+  const canSoft = () => live === 'browse' && route.view === 'browse' && !(route.filter && route.filter.saved) && pickKeep && pickKeep.isConnected && $page.querySelector('.browse > .bh');
+  function softBrowse() {
+    stopGrid && stopGrid(); stopGrid = null; stopReveal && stopReveal(); stopReveal = null;
+    const t = document.createElement('template'); t.innerHTML = browseHtml(D, route, saved, typeof opt.loadMore === 'function', { slot: true });
+    const nb = t.content.firstElementChild, ob = $page.querySelector('.browse'), oh = ob.querySelector('.bh'), nh = nb.querySelector('.bh');
+    oh.querySelector('h1').textContent = nh.querySelector('h1').textContent;
+    oh.querySelector('.count').textContent = nh.querySelector('.count').textContent;
+    const os = oh.querySelector('.sortbox'), ns = nh.querySelector('.sortbox'); os && ns ? os.replaceWith(ns) : ns && oh.append(ns);
+    ob.querySelectorAll('.hf-status').forEach(e => e.remove());
+    markPick();
+    while (pickKeep.nextSibling) pickKeep.nextSibling.remove();
+    let after = false; [...nb.children].forEach(c => { if (after) ob.append(c); if (c.classList.contains('pick-slot')) after = true; });
+    art.hydrate($page, { lazy: true });
+    stopReveal = reveal($page, { lead: 80 });
+    stopGrid = initGrid($page, D, route, saved, art, opt.loadMore);
+    syncNav();
+  }                                       // the Browse category picker (built once, reused on every category switch: no rebuild, no re-fade of its artwork)
   let live = '', homeDone = false, stale = false, homeKeep = null;       // live: what $page holds ('home' | 'browse' | ''); homeDone: every section of the live home page is in
   const dropHome = k => { k.hero && k.hero.destroy(); k.stops.forEach(f => f && f()); };
   function paint() {
@@ -1313,6 +1345,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     } else {
       heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopDefer();
     }
+    if (pickKeep && pickKeep.isConnected) { const r = pickKeep.querySelector('.row'); if (r) pickX = r.scrollLeft; }
     heroCtl = stopReveal = stopShelves = null; stopGrid && stopGrid(); stopGrid = null; stopGenres && stopGenres(); stopGenres = null;
     if (homeKeep && stale) { dropHome(homeKeep); homeKeep = null; }
     $page.classList.toggle('has-bar', !home);
@@ -1338,9 +1371,9 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
       $page.innerHTML = browseHtml(D, route, saved, typeof opt.loadMore === 'function', { slot: keep });
       const slot = $page.querySelector('.pick-slot');
       if (slot) {
-        const want = (route.filter && route.filter.category) || '';
-        pickKeep.querySelectorAll('.gt').forEach(t => { const on = t.dataset.cat === want; t.classList.toggle('on', on); t.setAttribute('aria-pressed', String(on)); });
+        markPick();
         slot.replaceWith(pickKeep);
+        const kr = pickKeep.querySelector('.row'); if (kr) kr.scrollLeft = pickX;
       } else { pickKeep = $page.querySelector('.genres.is-pick'); pickSig = pickKeep ? sig : ''; }
       art.hydrate($page);
       stopReveal = reveal($page, { lead: 140 });
@@ -1355,9 +1388,10 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   }
 
   let again = false, waiters = [];
-  async function refresh() {
+  async function refresh(soft) {
     if (destroyed) return;
-    if (swapping) { again = true; return new Promise(r => waiters.push(r)); }      // a swap is running: repaint once more when it ends (the latest data/route wins)
+    if (swapping) { again = true; return new Promise(r => waiters.push(r)); }
+    if (soft === true && canSoft()) { softBrowse(); return; }      // a swap is running: repaint once more when it ends (the latest data/route wins)
     swapping = true;
     do { again = false; await swap($page, paint); } while (again && !destroyed);
     swapping = false; waiters.splice(0).forEach(r => r());                         // every caller resolves after the FINAL repaint
@@ -1422,13 +1456,13 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     route = { view, filter: { ...filter } };
     opt.onRoute && opt.onRoute({ ...route });
     syncNav();
-    return refresh();
+    return refresh(true);
   }
 
   /* ── search ─────────────────────────────────────────────────────────────────────────────── */
   const searchOpen = () => $search.classList.contains('open');
   function openSearch() {
-    searchFrom = route.view === 'home' ? 'home' : 'browse';
+    searchFrom = { view: route.view, filter: { ...route.filter } };       // where to go back to when the search is closed or emptied
     $search.classList.add('open'); $bar.querySelector('[data-search-toggle]').setAttribute('aria-expanded', 'true');
     $input.focus();
   }
@@ -1437,11 +1471,11 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     const had = $input.value.trim();
     $search.classList.remove('open'); $input.value = ''; $input.blur();
     $bar.querySelector('[data-search-toggle]').setAttribute('aria-expanded', 'false');
-    if (had) go(searchFrom === 'home' ? 'home' : 'browse', searchFrom === 'home' ? {} : { ...route.filter, query: '' });
+    if (had) go(searchFrom.view, searchFrom.filter);
   }
   function onSearch() {
     const q = $input.value.trim();
-    if (!q) return go(searchFrom === 'home' ? 'home' : 'browse', searchFrom === 'home' ? {} : { ...route.filter, query: '' });
+    if (!q) return route.filter && route.filter.query ? go(searchFrom.view, searchFrom.filter) : undefined;
     go('browse', { query: q });
   }
 
@@ -1649,11 +1683,14 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     if ((el = q('[data-get]'))) { e.stopPropagation(); return doGet(el.dataset.get, el); }
     if ((el = q('[data-page]'))) { e.stopPropagation(); const pg = D.byId.get(el.dataset.page); if (pg) { try { opt.onPage(pg); } catch (err) { console.error('[hearth] onPage failed', err); } } return; }
     if ((el = q('[data-wish]'))) return toggleSaved(el.dataset.wish, el);
+    const sbx = $page.querySelector('.sortbox.open'); if (sbx && !q('.sortbox')) { sbx.classList.remove('open'); sbx.querySelector('[data-sort-toggle]').setAttribute('aria-expanded', 'false'); }
+    if ((el = q('[data-sort-toggle]'))) { const b = el.parentNode, on = !b.classList.contains('open'); b.classList.toggle('open', on); el.setAttribute('aria-expanded', String(on)); return; }
+    if ((el = q('[data-sort]'))) { const f = { ...route.filter }; if (el.dataset.sort) f.sort = el.dataset.sort; else delete f.sort; return go('browse', f); }
     if (q('[data-close]')) return closeGame();
     if ((el = q('[data-nav-id]'))) { const n = D.nav.find(x => x.id === el.dataset.navId); return n && navTo(n); }
     if (q('[data-nav]')) { closeGame(); closeSearchSilently(); return go('home'); }
     if (q('[data-search-toggle]')) return searchOpen() ? closeSearch() : openSearch();
-    if (q('[data-search-clear]')) { $input.value = ''; $input.focus(); return onSearch(); }
+    if (q('[data-search-clear]')) return closeSearch();                 // the X closes the search (it used to empty the box and repaint the whole page)
     if (q('[data-user]')) return openProfile();
     if ((el = q('[data-cat]'))) { const id = el.dataset.cat; if (!id && route.view === 'home') return; return go('browse', id ? { category: id } : {}); }
     if ((el = q('[data-more]'))) { const s = D.shelves.find(x => x.id === el.dataset.more); return s && go('browse', s.filter || {}); }
@@ -1666,7 +1703,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
       if (e.key === 'ArrowLeft') { e.preventDefault(); return lbStep(-1); }
       if (e.key === 'Tab') { e.preventDefault(); const x = $lb.querySelector('.lb-x'); return x && x.focus(); }
     }
-    if (e.key === 'Escape') { if ($modal.classList.contains('open')) return closeGame(); if ($search && searchOpen()) return closeSearch(); }
+    if (e.key === 'Escape') { if ($modal.classList.contains('open')) return closeGame(); if ($search && searchOpen()) return closeSearch(); const o = $page.querySelector('.sortbox.open'); if (o) { o.classList.remove('open'); o.querySelector('[data-sort-toggle]').setAttribute('aria-expanded', 'false'); return; } }
     if (e.key === 'Tab' && $modal.classList.contains('open')) return trapTab(e);
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-open][role="button"]')) { e.preventDefault(); openGame(e.target.dataset.open); }
   };
@@ -1696,7 +1733,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     add(list, o) {
       const { added, merged } = addGames(D, list), changed = added.length || merged; if (changed) stale = true;
       if (o && o.quiet) { if (changed) swapping ? setTimeout(refreshPicker, 450) : refreshPicker(); return Promise.resolve(); }     // quiet: never repaints the page (so never resets the grid); only the Browse picker updates itself
-      return changed && route.view === 'browse' ? refresh() : Promise.resolve();
+      return changed && route.view === 'browse' ? refresh(true) : Promise.resolve();
     },
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
@@ -1890,7 +1927,7 @@ const moreHtml = (label, busy) => `<button class="dp-ghost" data-k="more" data-l
 /* ── src/js/ui/index.js ── */
 const version = '0.6.0';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true, parts: true, page: true, lazyWalls: true, quietAdd: true };
+const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true, parts: true, page: true, lazyWalls: true, quietAdd: true, sorts: true, softBrowse: true };
 
 /** The sheet's own building blocks, for pages a userscript draws next to the sheet (so they look exactly like it and never re-implement it). */
 const parts = { getBox, guideHtml, actsHtml, factsHtml, reqHtml, updHtml, logoSlot, layer, morphInto, swapRegion, ic, icf, ICON, LOGO,

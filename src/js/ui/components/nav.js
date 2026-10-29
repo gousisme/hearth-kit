@@ -1,12 +1,13 @@
 import { esc, safeUrl } from '../../shared/util.js';
 import { ic, ICON } from '../core/icons.js';
 
-/** Is nav item `n` the current one? Home matches the home view; browse items match on saved/sort/category. */
+/** Is nav item `n` the current one? Home matches the home view; browse items match on saved/category. */
 export function navActive(n, route) {
   if (n.view === 'home') return route.view === 'home';
   if (n.view !== 'browse' || route.view !== 'browse') return false;
   const a = n.filter || {}, b = route.filter || {};
-  return !!a.saved === !!b.saved && (a.sort || '') === (b.sort || '') && (a.category || '') === (b.category || '');
+  if (!a.saved && !a.category) return !b.saved;                       // "Games": every grid that is not the library (all games, a category, a search, any sort)
+  return !!a.saved === !!b.saved && (a.category || '') === (b.category || '');   // the sort is a setting of the page, not a section: "Games" stays on whichever way it is sorted
 }
 
 /** The site mark (left) and the account button (right), as buttons; `extra` adds classes (the docked copies get "dock"). No user (not signed in) → no account button, never the text "undefined". */
