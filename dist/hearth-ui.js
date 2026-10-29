@@ -319,7 +319,7 @@ function createArt({ root: scope, loader = null, resolve = null, game, onMiss = 
 
   function succeed(img) {
     const show = () => {
-      if (!img.isConnected) return;
+      if (!img.isConnected) { delete img.dataset.h; return; }          // detached while it loaded (a kept page / picker): let hydrate() pick the slot up again when it is back, instead of leaving a skeleton for good
       img.classList.add('is-loaded');
       const l = slotOf(img); l.classList.remove('is-skel');
       if (img.dataset.kind === 'logo') l.classList.add('has-logo');      // the title text fades out, the logo takes its place
@@ -345,10 +345,11 @@ function createArt({ root: scope, loader = null, resolve = null, game, onMiss = 
     const g = game(img.dataset.g); if (!g) return fail(img);
     if (img.dataset.kind !== 'logo') slotOf(img).classList.add('is-busy');   // (logos have no skeleton) only skeletons that are about to load shimmer; the rest stay still (animating 100 offscreen skeletons is not free)
     // the resolver may be slow or stuck (network): after `resolveMs` the slot loads with what the game already has (e.g. the site's own image)
-    Promise.race([settle(g), new Promise(r => setTimeout(r, resolveMs))]).then(() => { if (dead || !img.isConnected) return; queue.push(img); pump(); });
+    Promise.race([settle(g), new Promise(r => setTimeout(r, resolveMs))]).then(() => { if (dead) return; if (!img.isConnected) { delete img.dataset.h; return; } queue.push(img); pump(); });
   }
   async function run(img) {
-    if (dead || !img.isConnected) return;
+    if (dead) return;
+    if (!img.isConnected) { delete img.dataset.h; return; }          // (see succeed: a slot that was dropped while detached is registered again by the next hydrate())
     if (!near(slotOf(img))) { slotOf(img).classList.remove('is-busy'); park(img); return; }   // scrolled far away while queued: wait for it to come back
     const g = game(img.dataset.g); if (!g) return fail(img);
     const urls = candidates(g, img.dataset.kind);
@@ -379,7 +380,7 @@ function createArt({ root: scope, loader = null, resolve = null, game, onMiss = 
     if (dead) return; last = Date.now();
     const hit = [];
     pending.forEach(img => {
-      if (!img.isConnected) return unpark(img);
+      if (!img.isConnected) { delete img.dataset.h; return unpark(img); }
       const r = slotOf(img).getBoundingClientRect();
       if (r.bottom > -700 && r.top < innerHeight + 700 && r.right > -400 && r.left < innerWidth + 400) hit.push([r.top, r.left, img]);
     });
@@ -628,6 +629,14 @@ function dist(i) { const r = Math.floor(i / 4), c = i % 4, x = c - 1.5 + (r === 
 /** The slots of the wall that can ever show inside a tile (worked out from the tilt, the hover pose and the tile sizes, with a few px to spare): the other bricks are off the tile, so they get no image to load, decode and paint. */
 const SEEN_HOME = new Set([1, 2, 3, 4, 5, 6, 8, 9, 10]), SEEN_PICK = new Set([1, 2, 4, 5, 6, 9, 10]);
 
+/** The wall of one tile: 3 rows x 4 bricks, filled from the CENTRE outwards with the category's games, looping through them when there are fewer games than bricks
+ *  (the best-looking games therefore sit where the eye lands, and the wall never has bare patches). Only the bricks of `seen` get an image. */
+function wallHtml(pool, seen) {
+  const bricks = ORDER.map(i => pool.length && seen.has(i) ? `<span class="gt-b has">${layer(pool[ORDER.indexOf(i) % pool.length], 'header')}</span>` : '<span class="gt-b"></span>');
+  const cells = []; ORDER.forEach((slot, rank) => { cells[slot] = bricks[rank]; });
+  return [0, 1, 2].map(r => `<span class="gt-r">${cells.slice(r * 4, r * 4 + 4).join('')}</span>`).join('');
+}
+
 /** A stable hue (0-359) from a category id, so every category keeps its own colour between visits. */
 function hueOf(id) { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
 
@@ -642,14 +651,9 @@ function genresHtml(D, { title = 'Browse by category', max = 14, active, all = f
   if (!list.length) return '';
   const hasArt = g => (g.steamAppId || (g.art && (g.art.header || g.art.hero || g.art.poster))) ? 1 : 0;
   const used = new Map();                                            // a game is shown on as few tiles as possible, so neighbouring tiles do not look alike
-  const wall = pool => {
-    // a wall of 3 rows x 4 bricks, filled from the CENTRE outwards with the category's games, looping through them when there are fewer games than bricks
-    // (the best-looking games therefore sit where the eye lands, and the wall never has bare patches). Only the nearest bricks to the centre are the ones you really see.
-    const seen = active !== undefined ? SEEN_PICK : SEEN_HOME;
-    const bricks = ORDER.map(i => pool.length && seen.has(i) ? `<span class="gt-b has">${layer(pool[ORDER.indexOf(i) % pool.length], 'header')}</span>` : '<span class="gt-b"></span>');
-    const cells = []; ORDER.forEach((slot, rank) => { cells[slot] = bricks[rank]; });
-    return [0, 1, 2].map(r => `<span class="gt-r">${cells.slice(r * 4, r * 4 + 4).join('')}</span>`).join('');
-  };
+  // the walls are NOT built here: a tile only carries the ids of its games (data-pool) and gets its wall from initGenres() when it nears the strip's visible part
+  const wall = pool => ({ pool: JSON.stringify(pool.map(g => g.id)), seen: active !== undefined ? 'pick' : 'home' });
+  const slot = pool => { const w = wall(pool); return `<span class="gt-art" aria-hidden="true" data-pool="${esc(w.pool)}" data-seen="${w.seen}"></span>`; };
   // the Browse picker's tiles are not scroll-revealed: the whole picker is re-rendered on every pick, and a staggered rise made the tapped tile sit lower than the rest while the page loaded
   const rv = active !== undefined ? '' : ' rv';
   const tile = c => {
@@ -657,17 +661,42 @@ function genresHtml(D, { title = 'Browse by category', max = 14, active, all = f
     const pick = pool.slice(0, 6); pick.forEach(g => used.set(g.id, (used.get(g.id) || 0) + 1));
     const on = active !== undefined && c.id === active;
     return `<button type="button" class="gt${rv}${on ? ' on' : ''}" data-cat="${esc(c.id)}" style="--h:${hueOf(c.id)}" aria-label="${esc(c.label)}"${active !== undefined ? ` aria-pressed="${on}"` : ''}>
-      <span class="gt-art" aria-hidden="true">${wall(pick)}</span>
+      ${slot(pick)}
       <span class="gt-name">${esc(c.label)}</span></button>`;
   };
   // "All": the same wall, built from games spread over the whole library (every few games, art first), tinted with the accent
   const allPool = () => { const a = D.games.filter(hasArt); const src = a.length >= 6 ? a : D.games; const step = Math.max(1, Math.floor(src.length / 6)); return Array.from({ length: Math.min(6, src.length) }, (_, i) => src[i * step]); };
-  const allTile = all ? `<button type="button" class="gt gt-all${rv}${active === '' ? ' on' : ''}" data-cat="" style="--h:205" aria-label="All" aria-pressed="${active === ''}"><span class="gt-art" aria-hidden="true">${wall(allPool())}</span><span class="gt-name">All</span></button>` : '';
+  const allTile = all ? `<button type="button" class="gt gt-all${rv}${active === '' ? ' on' : ''}" data-cat="" style="--h:205" aria-label="All" aria-pressed="${active === ''}">${slot(allPool())}<span class="gt-name">All</span></button>` : '';
   return `<section class="shelf genres${active !== undefined ? ' is-pick' : ''}" data-shelf="genres">
     ${title ? `<div class="sh-h rv"><h2>${esc(title)}</h2></div>` : ''}
     <div class="rw"><button class="nx pv is-end" aria-label="Scroll back" tabindex="-1">${ic(ICON.prev, 20, 2.6)}</button>
-      <div class="row">${allTile}${list.slice(0, max).map(tile).join('')}</div>
+      <div class="row">${allTile}${list.slice(0, max).map(tile).join('')}</div><i class="fd l" aria-hidden="true"></i><i class="fd r" aria-hidden="true"></i>
       <button class="nx" aria-label="Scroll forward" tabindex="-1">${ic(ICON.next, 20, 2.6)}</button></div></section>`;
+}
+
+/**
+ * Builds the walls of the tiles under `root` (a .genres section or a page holding one) the moment they come within ~400px of the visible part of their strip, not all at once:
+ * a Browse picker lists every category (40+ tiles x 7 images, each in a 3D-tilted layer), and building / registering / sweeping all of that was most of the page's cost.
+ * Tiles that are already built (a kept picker) are left alone. Returns a cleanup fn.
+ */
+function initGenres(root, D, art) {
+  const secs = root.classList && root.classList.contains('genres') ? [root] : [...root.querySelectorAll('.genres')];
+  const fill = tile => {
+    const s = tile.querySelector('.gt-art'); if (!s || s.dataset.b) return;
+    let ids = []; try { ids = JSON.parse(s.dataset.pool || '[]'); } catch (e) { /* an empty wall */ }
+    s.innerHTML = wallHtml(ids.map(id => D.byId.get(String(id))).filter(Boolean), s.dataset.seen === 'pick' ? SEEN_PICK : SEEN_HOME);
+    s.dataset.b = '1';
+    art.hydrate(s, { lazy: true });
+  };
+  const stops = [];
+  secs.forEach(sec => {
+    const row = sec.querySelector('.row'), tiles = [...sec.querySelectorAll('.gt')].filter(t => { const s = t.querySelector('.gt-art'); return s && !s.dataset.b; });
+    if (!row || !tiles.length) return;
+    if (!('IntersectionObserver' in window)) { tiles.forEach(fill); return; }
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { io.unobserve(e.target); fill(e.target); } }), { root: row, rootMargin: '0px 400px' });
+    tiles.forEach(t => io.observe(t)); stops.push(() => io.disconnect());
+  });
+  return () => stops.forEach(f => f());
 }
 
 /* ── src/js/ui/components/featured.js ── */
@@ -704,20 +733,20 @@ function shelfHtml(s) {
   return `<section class="shelf" data-shelf="${esc(s.id)}">
     <div class="sh-h rv"><h2>${esc(s.title)}</h2>${s.filter ? `<button class="more" data-more="${esc(s.id)}">See all</button>` : ''}</div>
     <div class="rw"><button class="nx pv is-end" aria-label="Scroll back" tabindex="-1">${ic(ICON.prev, 20, 2.6)}</button>
-      <div class="row">${s.games.slice(0, ranked ? 10 : 30).map((g, i) => card(g, { rank: ranked ? i + 1 : 0 })).join('')}</div>
+      <div class="row">${s.games.slice(0, ranked ? 10 : 30).map((g, i) => card(g, { rank: ranked ? i + 1 : 0 })).join('')}</div><i class="fd l" aria-hidden="true"></i><i class="fd r" aria-hidden="true"></i>
       <button class="nx" aria-label="Scroll forward" tabindex="-1">${ic(ICON.next, 20, 2.6)}</button></div></section>`;
 }
 
-/** Wire scroll buttons; they hide at either end, and the row's edges fade out while there is more to scroll (--fl / --fr on .rw, same idea as the media strip). Returns a cleanup fn.
+/** Wire scroll buttons; they hide at either end, and the row's edges fade out while there is more to scroll (the two .fd overlays' opacity). Returns a cleanup fn.
  *  Every row is measured first and only then written: reading scrollWidth right after another row's style write forced a full relayout per row (7+ on the home page). */
 function initShelves(root) {
-  const cleanups = [], ac = new AbortController(), FADE = 72, rows = [...root.querySelectorAll('.rw')].map(rw => { const row = rw.querySelector('.row'), [pv, nx] = rw.querySelectorAll('.nx'); return { rw, row, pv, nx }; });
+  const cleanups = [], ac = new AbortController(), FADE = 72, rows = [...root.querySelectorAll('.rw')].map(rw => { const row = rw.querySelector('.row'), [pv, nx] = rw.querySelectorAll('.nx'); return { rw, row, pv, nx, fl: rw.querySelector('.fd.l'), fr: rw.querySelector('.fd.r') }; });
   const measure = ({ row }) => ({ l: row.scrollLeft, w: row.clientWidth, sw: row.scrollWidth });
-  const apply = ({ rw, pv, nx }, { l, w, sw }) => {
+  const apply = ({ pv, nx, fl, fr }, { l, w, sw }) => {
     const max = sw - w;
     pv.classList.toggle('is-end', l < 8); nx.classList.toggle('is-end', l + w > sw - 8);
-    rw.style.setProperty('--fl', Math.max(0, Math.min(1, l / FADE)).toFixed(3));
-    rw.style.setProperty('--fr', Math.max(0, Math.min(1, (max - l) / FADE)).toFixed(3));
+    fl && (fl.style.opacity = Math.max(0, Math.min(1, l / FADE)).toFixed(3));          // opacity of the two overlays themselves: nothing inherited, nothing else restyled
+    fr && (fr.style.opacity = Math.max(0, Math.min(1, (max - l) / FADE)).toFixed(3));
   };
   const syncAll = list => { const m = list.map(measure); list.forEach((r, i) => apply(r, m[i])); };       // all reads, then all writes
   /* Shift+wheel and the arrows share ONE continuous glide towards a moving target. The row is scroll-snap mandatory, which made every wheel notch snap and stop (and a smooth scrollBy
@@ -1227,7 +1256,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   const art = createArt({ root, loader: opt.imageLoader, resolve: opt.resolveArt, onMiss: opt.onArtMiss, resolveLogo: opt.resolveLogo, resolveMs: opt.artDeadlineMs, loadMs: opt.imageTimeoutMs, game: id => D.byId.get(String(id)) });
   const saved = new Set((opt.saved || []).map(String));
   let route = { view: 'home', filter: {}, ...(opt.route || {}) };
-  let heroCtl, stopReveal, stopShelves, stopGrid, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
+  let heroCtl, stopReveal, stopShelves, stopGrid, stopGenres, openId = null, lastFocus = null, swapping = false, searchFrom = null, destroyed = false;
 
   /* ── render ─────────────────────────────────────────────────────────────────────────────── */
   /** The home page in two parts: what is on screen at first paint (hero + featured tiles) and the sections below the fold (category wall, shelves).
@@ -1247,7 +1276,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
       if (tok !== deferTok || destroyed || !list.length) return;
       const t = document.createElement('template'); t.innerHTML = list[i++];       // parsed off-document: the live page is touched once per section
       const els = [...t.content.children]; $page.append(...els);
-      els.forEach(el => { art.hydrate(el, { lazy: true }); deferStops.push(reveal(el), initShelves(el)); });
+      els.forEach(el => { art.hydrate(el, { lazy: true }); deferStops.push(reveal(el), initShelves(el), initGenres(el, D, art)); });
       if (i < list.length) deferId = whenIdle(step); else homeDone = true;
     };
     deferId = requestAnimationFrame(() => requestAnimationFrame(step));            // after the first frame of the new page
@@ -1256,6 +1285,22 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
   /** The Discover page is expensive to build (a few thousand nodes, ~100 images to decode), so when another tab is opened it is PARKED (detached, its hero carousel and observers left alone)
    *  and put straight back when the person returns: no markup, no layout of new nodes, no image loaded or decoded twice. It is rebuilt instead when the data changed meanwhile
    *  (`stale`: update() / add()) or when it had not finished building yet. */
+  /** What the kept picker was built from: every category and how many games it had (up to the 6 a wall uses). Games that arrive later (warm-up, loadMore) change it, so a picker built while its
+   *  categories were still empty is not kept for good (its walls stayed blank). */
+  const pickSigOf = () => { const n = {}; D.games.forEach(g => (g.categories || []).forEach(c => { n[c] = (n[c] || 0) + 1; })); return D.categories.map(c => c.id + ':' + Math.min(n[c.id] || 0, 6)).join('|') + '|' + Math.min(D.games.length, 6); };
+  /** The picker only (no page repaint, no scroll reset, the grid untouched): rebuilt in place when the games it is made from changed. */
+  function refreshPicker() {
+    if (destroyed || live !== 'browse' || route.view !== 'browse' || !pickKeep || !pickKeep.isConnected) return;
+    const sig = pickSigOf(); if (sig === pickSig) return;
+    const t = document.createElement('template'); t.innerHTML = genresHtml(D, { title: '', max: Infinity, active: (route.filter && route.filter.category) || '', all: true });
+    const next = t.content.firstElementChild; if (!next) return;
+    const row = pickKeep.querySelector('.row'), left = row ? row.scrollLeft : 0;
+    pickKeep.replaceWith(next); pickKeep = next; pickSig = sig;
+    const nrow = next.querySelector('.row'); if (nrow) nrow.scrollLeft = left;
+    stopGenres && stopGenres(); stopGenres = initGenres($page, D, art);
+    stopShelves && stopShelves(); stopShelves = initShelves($page);
+    art.hydrate($page, { lazy: true });
+  }
   let pickKeep = null, pickSig = '';                                       // the Browse category picker (built once, reused on every category switch: no rebuild, no re-fade of its artwork)
   let live = '', homeDone = false, stale = false, homeKeep = null;       // live: what $page holds ('home' | 'browse' | ''); homeDone: every section of the live home page is in
   const dropHome = k => { k.hero && k.hero.destroy(); k.stops.forEach(f => f && f()); };
@@ -1268,7 +1313,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     } else {
       heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopDefer();
     }
-    heroCtl = stopReveal = stopShelves = null; stopGrid && stopGrid(); stopGrid = null;
+    heroCtl = stopReveal = stopShelves = null; stopGrid && stopGrid(); stopGrid = null; stopGenres && stopGenres(); stopGenres = null;
     if (homeKeep && stale) { dropHome(homeKeep); homeKeep = null; }
     $page.classList.toggle('has-bar', !home);
     $scroll.scrollTop = 0;
@@ -1289,7 +1334,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
       if (parts.later.length) fillLater(parts.later, deferTok);
     } else {
       live = 'browse';
-      const sig = D.categories.map(c => c.id).join('|'), keep = pickKeep && pickSig === sig;      // the same categories: the picker is still right, only the chosen tile changes
+      const sig = pickSigOf(), keep = pickKeep && pickSig === sig;      // the same categories: the picker is still right, only the chosen tile changes
       $page.innerHTML = browseHtml(D, route, saved, typeof opt.loadMore === 'function', { slot: keep });
       const slot = $page.querySelector('.pick-slot');
       if (slot) {
@@ -1302,6 +1347,7 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
       const pick = $page.querySelector('.genres .gt.on'), prow = pick && pick.parentNode;                    // the category picker opens with the chosen tile in view
       if (prow && (pick.offsetLeft < prow.scrollLeft || pick.offsetLeft + pick.offsetWidth > prow.scrollLeft + prow.clientWidth)) prow.scrollLeft = Math.max(0, pick.offsetLeft - (prow.clientWidth - pick.offsetWidth) / 2);   // only when the chosen tile is out of view (a kept picker stays where it is)
       stopShelves = initShelves($page);
+      stopGenres = initGenres($page, D, art);
       stopGrid = initGrid($page, D, route, saved, art, opt.loadMore);
     }
     $foot.textContent = D.site.footer || '';
@@ -1647,11 +1693,15 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
       return refresh();
     },
     /** Add games to the running app without a full re-render (e.g. search results). Existing games only gain new search tags. */
-    add(list) { const { added, merged } = addGames(D, list); if (added.length || merged) stale = true; return (added.length || merged) && route.view === 'browse' ? refresh() : Promise.resolve(); },
+    add(list, o) {
+      const { added, merged } = addGames(D, list), changed = added.length || merged; if (changed) stale = true;
+      if (o && o.quiet) { if (changed) swapping ? setTimeout(refreshPicker, 450) : refreshPicker(); return Promise.resolve(); }     // quiet: never repaints the page (so never resets the grid); only the Browse picker updates itself
+      return changed && route.view === 'browse' ? refresh() : Promise.resolve();
+    },
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; pickKeep = null; indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); stopDefer(); homeKeep && dropHome(homeKeep); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; pickKeep = null; stopGenres && stopGenres(); indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); stopDefer(); homeKeep && dropHome(homeKeep); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 
@@ -1840,7 +1890,7 @@ const moreHtml = (label, busy) => `<button class="dp-ghost" data-k="more" data-l
 /* ── src/js/ui/index.js ── */
 const version = '0.6.0';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true, parts: true, page: true };
+const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true, parts: true, page: true, lazyWalls: true, quietAdd: true };
 
 /** The sheet's own building blocks, for pages a userscript draws next to the sheet (so they look exactly like it and never re-implement it). */
 const parts = { getBox, guideHtml, actsHtml, factsHtml, reqHtml, updHtml, logoSlot, layer, morphInto, swapRegion, ic, icf, ICON, LOGO,

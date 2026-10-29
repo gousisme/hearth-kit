@@ -251,19 +251,17 @@ a.btn { text-decoration: none; }
 .sh-h h2 { font: 700 22px var(--fd); letter-spacing: -.01em; }
 .more { color: var(--mu); font-size: 14px; transition: color var(--tf); }
 .more:hover { color: var(--ac); }
-/* the edge-fade amounts change on every scroll frame: registered with inherits:false they only restyle the row's two overlays instead of every element inside it (a picker holds hundreds) */
-@property --fl { syntax: "<number>"; inherits: false; initial-value: 0; }
-@property --fr { syntax: "<number>"; inherits: false; initial-value: 0; }
-.rw { position: relative; --fl: 0; --fr: 0; }
-/* The ends of a row fade into the page while there is more to scroll (opacity follows the scroll position, set from JS in initShelves). Two overlays, so the cards
-   themselves are never masked or re-rasterised (same approach as the media strip). The arrows (.nx) sit above them. */
-.rw::before, .rw::after { content: ""; position: absolute; top: 0; bottom: 0; width: 72px; z-index: 2; pointer-events: none; }
-.rw::before { left: 0; opacity: var(--fl); background: linear-gradient(90deg, var(--bg) 6%, transparent); }
-.rw::after { right: 0; opacity: var(--fr); background: linear-gradient(270deg, var(--bg) 6%, transparent); }
+/* The ends of a row fade into the page while there is more to scroll. Two real overlay elements (.fd), their opacity set from JS in initShelves: a custom property on the row
+   made every card inside it restyle on each scroll frame, and one registered with inherits:false never reaches ::before / ::after (pseudo-elements do not inherit it), so the fades were gone.
+   The cards themselves are never masked or re-rasterised. The arrows (.nx) sit above them. */
+.rw { position: relative; }
+.rw > .fd { position: absolute; top: 0; bottom: 0; width: 72px; z-index: 2; pointer-events: none; opacity: 0; }
+.rw > .fd.l { left: 0; background: linear-gradient(90deg, var(--bg) 6%, transparent); }
+.rw > .fd.r { right: 0; background: linear-gradient(270deg, var(--bg) 6%, transparent); }
 .row { display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 10px 0 18px; margin: -10px 0 -18px; }
 .row::-webkit-scrollbar { display: none; }
-.row.is-glide { scroll-snap-type: none; }
-.row.is-glide > * { pointer-events: none; }                              /* no hover restyling of the tiles passing under the pointer while it glides */                               /* Shift+wheel / arrows glide (initShelves) without the snap stopping every notch */
+.row.is-glide { scroll-snap-type: none; }                               /* Shift+wheel / arrows glide (initShelves) without the snap stopping every notch */
+.row.is-glide > * { pointer-events: none; }                              /* no hover restyling of the tiles passing under the pointer while it glides */
 .nx { position: absolute; top: calc(50% - 26px); right: -22px; z-index: 5; width: 46px; height: 46px; border-radius: 50%; background: var(--tx); color: var(--ink); display: grid; place-items: center; opacity: 0; transform: scale(.8); pointer-events: none; transition: opacity var(--tb) var(--ease), transform var(--tb) var(--ease); }
 .nx.pv { right: auto; left: -22px; }
 .rw:hover .nx:not(.is-end) { opacity: 1; transform: none; pointer-events: auto; }

@@ -9,20 +9,20 @@ export function shelfHtml(s) {
   return `<section class="shelf" data-shelf="${esc(s.id)}">
     <div class="sh-h rv"><h2>${esc(s.title)}</h2>${s.filter ? `<button class="more" data-more="${esc(s.id)}">See all</button>` : ''}</div>
     <div class="rw"><button class="nx pv is-end" aria-label="Scroll back" tabindex="-1">${ic(ICON.prev, 20, 2.6)}</button>
-      <div class="row">${s.games.slice(0, ranked ? 10 : 30).map((g, i) => card(g, { rank: ranked ? i + 1 : 0 })).join('')}</div>
+      <div class="row">${s.games.slice(0, ranked ? 10 : 30).map((g, i) => card(g, { rank: ranked ? i + 1 : 0 })).join('')}</div><i class="fd l" aria-hidden="true"></i><i class="fd r" aria-hidden="true"></i>
       <button class="nx" aria-label="Scroll forward" tabindex="-1">${ic(ICON.next, 20, 2.6)}</button></div></section>`;
 }
 
-/** Wire scroll buttons; they hide at either end, and the row's edges fade out while there is more to scroll (--fl / --fr on .rw, same idea as the media strip). Returns a cleanup fn.
+/** Wire scroll buttons; they hide at either end, and the row's edges fade out while there is more to scroll (the two .fd overlays' opacity). Returns a cleanup fn.
  *  Every row is measured first and only then written: reading scrollWidth right after another row's style write forced a full relayout per row (7+ on the home page). */
 export function initShelves(root) {
-  const cleanups = [], ac = new AbortController(), FADE = 72, rows = [...root.querySelectorAll('.rw')].map(rw => { const row = rw.querySelector('.row'), [pv, nx] = rw.querySelectorAll('.nx'); return { rw, row, pv, nx }; });
+  const cleanups = [], ac = new AbortController(), FADE = 72, rows = [...root.querySelectorAll('.rw')].map(rw => { const row = rw.querySelector('.row'), [pv, nx] = rw.querySelectorAll('.nx'); return { rw, row, pv, nx, fl: rw.querySelector('.fd.l'), fr: rw.querySelector('.fd.r') }; });
   const measure = ({ row }) => ({ l: row.scrollLeft, w: row.clientWidth, sw: row.scrollWidth });
-  const apply = ({ rw, pv, nx }, { l, w, sw }) => {
+  const apply = ({ pv, nx, fl, fr }, { l, w, sw }) => {
     const max = sw - w;
     pv.classList.toggle('is-end', l < 8); nx.classList.toggle('is-end', l + w > sw - 8);
-    rw.style.setProperty('--fl', Math.max(0, Math.min(1, l / FADE)).toFixed(3));
-    rw.style.setProperty('--fr', Math.max(0, Math.min(1, (max - l) / FADE)).toFixed(3));
+    fl && (fl.style.opacity = Math.max(0, Math.min(1, l / FADE)).toFixed(3));          // opacity of the two overlays themselves: nothing inherited, nothing else restyled
+    fr && (fr.style.opacity = Math.max(0, Math.min(1, (max - l) / FADE)).toFixed(3));
   };
   const syncAll = list => { const m = list.map(measure); list.forEach((r, i) => apply(r, m[i])); };       // all reads, then all writes
   /* Shift+wheel and the arrows share ONE continuous glide towards a moving target. The row is scroll-snap mandatory, which made every wheel notch snap and stop (and a smooth scrollBy

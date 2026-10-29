@@ -103,7 +103,7 @@ export function createArt({ root: scope, loader = null, resolve = null, game, on
 
   function succeed(img) {
     const show = () => {
-      if (!img.isConnected) return;
+      if (!img.isConnected) { delete img.dataset.h; return; }          // detached while it loaded (a kept page / picker): let hydrate() pick the slot up again when it is back, instead of leaving a skeleton for good
       img.classList.add('is-loaded');
       const l = slotOf(img); l.classList.remove('is-skel');
       if (img.dataset.kind === 'logo') l.classList.add('has-logo');      // the title text fades out, the logo takes its place
@@ -129,10 +129,11 @@ export function createArt({ root: scope, loader = null, resolve = null, game, on
     const g = game(img.dataset.g); if (!g) return fail(img);
     if (img.dataset.kind !== 'logo') slotOf(img).classList.add('is-busy');   // (logos have no skeleton) only skeletons that are about to load shimmer; the rest stay still (animating 100 offscreen skeletons is not free)
     // the resolver may be slow or stuck (network): after `resolveMs` the slot loads with what the game already has (e.g. the site's own image)
-    Promise.race([settle(g), new Promise(r => setTimeout(r, resolveMs))]).then(() => { if (dead || !img.isConnected) return; queue.push(img); pump(); });
+    Promise.race([settle(g), new Promise(r => setTimeout(r, resolveMs))]).then(() => { if (dead) return; if (!img.isConnected) { delete img.dataset.h; return; } queue.push(img); pump(); });
   }
   async function run(img) {
-    if (dead || !img.isConnected) return;
+    if (dead) return;
+    if (!img.isConnected) { delete img.dataset.h; return; }          // (see succeed: a slot that was dropped while detached is registered again by the next hydrate())
     if (!near(slotOf(img))) { slotOf(img).classList.remove('is-busy'); park(img); return; }   // scrolled far away while queued: wait for it to come back
     const g = game(img.dataset.g); if (!g) return fail(img);
     const urls = candidates(g, img.dataset.kind);
@@ -163,7 +164,7 @@ export function createArt({ root: scope, loader = null, resolve = null, game, on
     if (dead) return; last = Date.now();
     const hit = [];
     pending.forEach(img => {
-      if (!img.isConnected) return unpark(img);
+      if (!img.isConnected) { delete img.dataset.h; return unpark(img); }
       const r = slotOf(img).getBoundingClientRect();
       if (r.bottom > -700 && r.top < innerHeight + 700 && r.right > -400 && r.left < innerWidth + 400) hit.push([r.top, r.left, img]);
     });
