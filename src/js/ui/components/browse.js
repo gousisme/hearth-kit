@@ -34,8 +34,8 @@ export function browseHtml(D, route, savedIds, canMore = false, { slot = false }
   const title = f.query ? `Results for “${f.query}”` : f.saved ? 'Your library' : cat ? cat.label : 'All games';
   const lazy = !list.length && canMore && !f.saved && !f.query;
   return `<div class="browse">
-    <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span>${sortHtml(f)}</div>
     ${f.saved || !D.categories.length ? '' : slot ? '<div class="pick-slot"></div>' : genresHtml(D, { title: '', max: Infinity, active: f.category || '', all: true })}
+    <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span>${sortHtml(f)}</div>
     ${list.length
       ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
       : lazy ? '<div class="grid"></div><div class="more" aria-hidden="true"></div>' : emptyHtml(f, savedIds)}

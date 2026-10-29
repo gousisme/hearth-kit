@@ -54,6 +54,8 @@ function coerceMedia(v) {
   }).filter(Boolean).slice(0, 16);
 }
 
+const stamp = v => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.round(n) : 0; };
+
 function coerceGame(g) {
   const art = g.art && typeof g.art === 'object' ? g.art : {};
   const appId = parseInt(g.steamAppId, 10);
@@ -72,6 +74,8 @@ function coerceGame(g) {
     developer: str(g.developer),
     publisher: str(g.publisher),
     releaseYear: Number.isFinite(year) ? year : null,
+    addedAt: stamp(g.addedAt),                        // when the site published it (ms since epoch, 0 = unknown): the "New" sort
+    updatedAt: stamp(g.updatedAt),                    // when the site last updated it (ms, 0 = never / unknown): the "Recently updated" sort
     size: str(g.size),
     rating: str(g.rating),
     requirements: { minimum: kv(req.minimum), recommended: kv(req.recommended) },
@@ -185,11 +189,11 @@ function filterGames(D, filter = {}, savedIds = new Set()) {
   if (filter.saved) list = list.filter(g => savedIds.has(g.id));
   const q = (filter.query || '').trim().toLowerCase();
   if (q) list = list.filter(g => [g.title, g.developer, g.publisher, g.tagline, ...g.genres].join(' ').toLowerCase().includes(q));
-  if (filter.sort === 'new') list.sort((a, b) => (b.releaseYear || 0) - (a.releaseYear || 0));
-  else if (filter.sort === 'updated') {                          // games the site lists as recently updated first (in the order the data gives them), the rest after
-    const at = new Map(D.games.map((g, i) => [g.id, i])), up = g => (g.categories.includes('updated') ? 0 : 1);
-    list.sort((a, b) => up(a) - up(b) || at.get(a.id) - at.get(b.id));
-  } else if (filter.sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
+  // New = newest publish date first. Recently updated = latest update (for a game never updated: its publish date) first. Games with no date keep the data's order, after the dated ones.
+  const by = key => { const at = new Map(D.games.map((g, i) => [g.id, i])); list.sort((a, b) => (key(b) > 0) - (key(a) > 0) || key(b) - key(a) || at.get(a.id) - at.get(b.id)); };
+  if (filter.sort === 'new') by(g => g.addedAt || 0);
+  else if (filter.sort === 'updated') by(g => g.updatedAt || g.addedAt || 0);
+  else if (filter.sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
   return list;
 }
 
@@ -212,6 +216,8 @@ function addGames(D, list) {
     if (!ex) { D.games.push(g); D.byId.set(g.id, g); added.push(g); return; }
     const more = g.genres.filter(t => !ex.genres.includes(t));
     if (more.length) { ex.genres.push(...more); merged++; }
+    if (g.addedAt && !ex.addedAt) { ex.addedAt = g.addedAt; merged++; }
+    if (g.updatedAt > (ex.updatedAt || 0)) { ex.updatedAt = g.updatedAt; merged++; }
     const cats = g.categories.filter(c => !ex.categories.includes(c));
     if (cats.length) { ex.categories.push(...cats); merged++; }
   });
@@ -1158,8 +1164,8 @@ function browseHtml(D, route, savedIds, canMore = false, { slot = false } = {}) 
   const title = f.query ? `Results for “${f.query}”` : f.saved ? 'Your library' : cat ? cat.label : 'All games';
   const lazy = !list.length && canMore && !f.saved && !f.query;
   return `<div class="browse">
-    <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span>${sortHtml(f)}</div>
     ${f.saved || !D.categories.length ? '' : slot ? '<div class="pick-slot"></div>' : genresHtml(D, { title: '', max: Infinity, active: f.category || '', all: true })}
+    <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span>${sortHtml(f)}</div>
     ${list.length
       ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
       : lazy ? '<div class="grid"></div><div class="more" aria-hidden="true"></div>' : emptyHtml(f, savedIds)}
@@ -1327,8 +1333,8 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     const os = oh.querySelector('.sortbox'), ns = nh.querySelector('.sortbox'); os && ns ? os.replaceWith(ns) : ns && oh.append(ns);
     ob.querySelectorAll('.hf-status').forEach(e => e.remove());
     markPick();
-    while (pickKeep.nextSibling) pickKeep.nextSibling.remove();
-    let after = false; [...nb.children].forEach(c => { if (after) ob.append(c); if (c.classList.contains('pick-slot')) after = true; });
+    while (oh.nextSibling) oh.nextSibling.remove();                    // everything under the heading row: the grid (or the empty page) and its sentinel
+    let after = false; [...nb.children].forEach(c => { if (after) ob.append(c); if (c === nh) after = true; });
     art.hydrate($page, { lazy: true });
     stopReveal = reveal($page, { lead: 80 });
     stopGrid = initGrid($page, D, route, saved, art, opt.loadMore);

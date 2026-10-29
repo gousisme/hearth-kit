@@ -59,11 +59,11 @@ export function filterGames(D, filter = {}, savedIds = new Set()) {
   if (filter.saved) list = list.filter(g => savedIds.has(g.id));
   const q = (filter.query || '').trim().toLowerCase();
   if (q) list = list.filter(g => [g.title, g.developer, g.publisher, g.tagline, ...g.genres].join(' ').toLowerCase().includes(q));
-  if (filter.sort === 'new') list.sort((a, b) => (b.releaseYear || 0) - (a.releaseYear || 0));
-  else if (filter.sort === 'updated') {                          // games the site lists as recently updated first (in the order the data gives them), the rest after
-    const at = new Map(D.games.map((g, i) => [g.id, i])), up = g => (g.categories.includes('updated') ? 0 : 1);
-    list.sort((a, b) => up(a) - up(b) || at.get(a.id) - at.get(b.id));
-  } else if (filter.sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
+  // New = newest publish date first. Recently updated = latest update (for a game never updated: its publish date) first. Games with no date keep the data's order, after the dated ones.
+  const by = key => { const at = new Map(D.games.map((g, i) => [g.id, i])); list.sort((a, b) => (key(b) > 0) - (key(a) > 0) || key(b) - key(a) || at.get(a.id) - at.get(b.id)); };
+  if (filter.sort === 'new') by(g => g.addedAt || 0);
+  else if (filter.sort === 'updated') by(g => g.updatedAt || g.addedAt || 0);
+  else if (filter.sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
   return list;
 }
 
@@ -86,6 +86,8 @@ export function addGames(D, list) {
     if (!ex) { D.games.push(g); D.byId.set(g.id, g); added.push(g); return; }
     const more = g.genres.filter(t => !ex.genres.includes(t));
     if (more.length) { ex.genres.push(...more); merged++; }
+    if (g.addedAt && !ex.addedAt) { ex.addedAt = g.addedAt; merged++; }
+    if (g.updatedAt > (ex.updatedAt || 0)) { ex.updatedAt = g.updatedAt; merged++; }
     const cats = g.categories.filter(c => !ex.categories.includes(c));
     if (cats.length) { ex.categories.push(...cats); merged++; }
   });

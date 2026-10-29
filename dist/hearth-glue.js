@@ -76,6 +76,8 @@ function coerceMedia(v) {
   }).filter(Boolean).slice(0, 16);
 }
 
+const stamp = v => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.round(n) : 0; };
+
 function coerceGame(g) {
   const art = g.art && typeof g.art === 'object' ? g.art : {};
   const appId = parseInt(g.steamAppId, 10);
@@ -94,6 +96,8 @@ function coerceGame(g) {
     developer: str(g.developer),
     publisher: str(g.publisher),
     releaseYear: Number.isFinite(year) ? year : null,
+    addedAt: stamp(g.addedAt),                        // when the site published it (ms since epoch, 0 = unknown): the "New" sort
+    updatedAt: stamp(g.updatedAt),                    // when the site last updated it (ms, 0 = never / unknown): the "Recently updated" sort
     size: str(g.size),
     rating: str(g.rating),
     requirements: { minimum: kv(req.minimum), recommended: kv(req.recommended) },

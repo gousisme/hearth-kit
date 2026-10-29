@@ -127,8 +127,8 @@ export function mount({ target = document.body, data, css = null, shadow, option
     const os = oh.querySelector('.sortbox'), ns = nh.querySelector('.sortbox'); os && ns ? os.replaceWith(ns) : ns && oh.append(ns);
     ob.querySelectorAll('.hf-status').forEach(e => e.remove());
     markPick();
-    while (pickKeep.nextSibling) pickKeep.nextSibling.remove();
-    let after = false; [...nb.children].forEach(c => { if (after) ob.append(c); if (c.classList.contains('pick-slot')) after = true; });
+    while (oh.nextSibling) oh.nextSibling.remove();                    // everything under the heading row: the grid (or the empty page) and its sentinel
+    let after = false; [...nb.children].forEach(c => { if (after) ob.append(c); if (c === nh) after = true; });
     art.hydrate($page, { lazy: true });
     stopReveal = reveal($page, { lead: 80 });
     stopGrid = initGrid($page, D, route, saved, art, opt.loadMore);

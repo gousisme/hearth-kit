@@ -705,6 +705,9 @@ a.dl.out:hover .da { color: #ff8a80; }
 /* ── src/styles/70-browse.css ── */
 .bh { display: flex; align-items: baseline; gap: 16px; }
 .bh h1 { font: 800 clamp(32px, 4vw, 52px)/1 var(--fd); letter-spacing: -.03em; }
+.browse > .genres.is-pick { margin: 0; }                          /* the categories come first, the heading row (title, count, sort) sits right above the games */
+.genres.is-pick + .bh { margin-top: 34px; }
+.bh ~ .grid { margin-top: 22px; }
 .bh .count { color: var(--mu); font-size: 14px; }
 /* sort: a small pill at the right end of the header, its menu drops below it */
 .sortbox { position: relative; margin-left: auto; align-self: center; }
