@@ -77,10 +77,10 @@ GET https://api.steampowered.com/IStoreBrowseService/GetItems/v1?input_json=
 
 - **One request per game** even when the popup and the full page ask at once (`storeBusy`). Cached in `hf9:store` for **24 h**, **max 40 entries**, versioned by `STORE_SHAPE` (currently 3): bump it whenever the stored shape changes, otherwise old cache entries are served without the new fields (this is what hid trailers/about images for 24 h in 0.10.7).
 - It **ignores the throttle pause** (`force = true`) and **retries once** after 1.2 s; the reason for a failure is kept (`storeWhy`, shown by `pageDiag()`). A cached entry of the right shape is returned if the refresh fails; otherwise `null`.
-- Stored per game: about blocks, media items, short text, header/capsule, release string + `coming_soon`, `is_free`, `price_overview`, developers, publishers, genres, categories, Metacritic `{score,url}`, recommendations, achievements, age, website, supported languages (HTML stripped), minimum/recommended requirement rows, content-descriptor notes.
+- Stored per game: about blocks, media items, short text, header/capsule, release string + `coming_soon`, `is_free`, developers, publishers, genres, categories, Metacritic `{score,url}`, recommendations, achievements, age, website, supported languages (HTML stripped), minimum/recommended requirement rows, content-descriptor notes.
 - **No Steam HTML is ever put on the page.** HTML snippets are parsed into plain data: `aboutBlocks()` → `[{h}|{t}|{img,alt}|{vid,poster}]` (headings h1-h4, paragraphs/list items with a `• ` bullet, images from any https host (`http:` and `//` links are upgraded by `asHttps`), `<video>` clips Steam uses for animated "gifs"), max 60 blocks / 1500 chars each; a bare bullet waits for its text. `reqRows()` turns `<li><strong>Key:</strong> value` into `{Key: value}`.
 
-> **Price:** the script adds a `Price` fact row from `price_overview` on the full page. That contradicts the kit's "free games only, no prices" rule (docs/04). It is a script-side decision that has not been revisited; see AGENTS.md "Open decisions".
+> **No prices.** Steam's `price_overview` is deliberately not stored or shown (v0.11.16 removed the last place it appeared); the kit has no price concept (docs/04).
 
 ## 5 · Trailers and screenshots (media)
 

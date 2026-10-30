@@ -8,7 +8,7 @@ This is **the** interface between a scraper and the UI. A scraper only has to re
 
 **Only `games` is required, and per game only `id` and `title`.** Everything else is optional and derived or omitted gracefully: no hero → the first 5 games with art; no categories → the most common genres; no shelves → "All games" plus genre shelves; no description → the About section disappears. Start with `games`, then add richness.
 
-**No prices.** Every game is free. There is deliberately no price, discount or cart field. Do not add one. *(Note: the Online-Fix userscript's full page currently shows a Steam "Price" fact row, a script-side decision outside the contract; see AGENTS.md "Known issues and open decisions".)*
+**No prices.** Every game is free. There is deliberately no price, discount or cart field. Do not add one.
 
 ## Top level
 

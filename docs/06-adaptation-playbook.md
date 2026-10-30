@@ -43,7 +43,7 @@ Check where the site's links to Steam/stores really go. online-fix.me routes **e
 
 ## Step 4 · Copy and fill the template
 1. Copy `userscripts/template.user.js` → `userscripts/<site>.user.js`.
-2. Fill the header: `@name`, `@match` (every page type you redesign, **including list pages that live outside the obvious prefix**, e.g. `/coop/`), `@connect` (every host you fetch from), `@require`/`@resource` URLs (**the kit commit SHA**; localhost URLs while developing; add `dashjs@4.7.4` only if you play Steam DASH trailers).
+2. Fill the header: `@name`, `@match` (simplest: the whole site, e.g. `https://site.tld/*`, and let your routes decide; pages with no route stay original and your script must skip background work on them, as the reference script does with `ROUTED()`), `@connect` (every host you fetch from), `@require`/`@resource` URLs (**the kit commit SHA**; localhost URLs while developing; add `dashjs@4.7.4` only if you play Steam DASH trailers).
 3. Write `scrapeListPage` → returns `{ site, games }`. Use `S.game({...})` for every record. **Make `id` stable.**
 4. Add a detail route only if the user wants one: it returns the same shape, merging into `ctx.store.games`, with `view: d => ({ open: id })`.
 5. Set `ready` selectors that exist **only when the data has rendered**.

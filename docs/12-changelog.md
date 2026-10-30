@@ -4,7 +4,7 @@ Condensed from the version notes at the top of `userscripts/online-fix.user.js` 
 
 ## How script and kit versions relate
 
-- The kit's `package.json` is **0.6.0**; the script is **0.11.15**. They are independent numbers. The README badge (0.1.0) and the old docs' `@v0.1.0` tag advice are stale: nothing is tagged.
+- The kit's `package.json` is **0.6.0**; the script is **0.11.16**. They are independent numbers. The README badge (0.1.0) and the old docs' `@v0.1.0` tag advice are stale: nothing is tagged.
 - Since script 0.9.4 the kit is **pinned to a commit SHA** in the four `@require`/`@resource` URLs. The current pin is `a31f82acba9d274bfc789373d595592b35ec810f` (= `HEAD` at the time of writing, "improve performance", 2026-10-30) and contains everything through "page-19".
 - The script's version notes say "NEEDS hearth-kit-page-N.patch … replace `REPLACE_WITH_NEW_KIT_SHA`". That was the author's workflow: the kit change was delivered as a patch file, applied and pushed, `git rev-parse HEAD`, and the SHA pasted into the URLs. The `.patch` files are **not in the repo** (they are the kit commits). `REPLACE_WITH_NEW_KIT_SHA` no longer appears in the URLs; it survives only in old comments.
 - Kit commits that the script notes name explicitly: `e3f746a` = page-12, `82c4145` = page-14, `a1e178c` = page-15. Other patch numbers are not individually mapped to commits; their effects are all present in `a31f82a` (verified by code markers: idle picker rebuild = page-19, same-step skeleton removal = page-18, release-sort-only settle = page-17, `releaseSort` flag = page-16).
@@ -24,6 +24,12 @@ Condensed from the version notes at the top of `userscripts/online-fix.user.js` 
 | 10-30 | "revamp game tab", minor fixes, idle-time work ("improve performance", `a31f82a`) |
 
 ## Script history
+
+### 0.11.16 (this documentation pass)
+- `@match` is the whole site; routes decide what is redesigned (this also makes `/coop/` and `/multi/` work on direct visits).
+- Steam "Price" row removed from the full page (no prices anywhere).
+- **Bug fixed:** the category warm-up never ran: `warmCategories` declared `const quiet = !!FEAT.quietAdd`, shadowing the `quiet()` idle helper, so `await quiet(1000)` threw "quiet is not a function" in an unobserved promise. Warm-up now actually runs.
+- Dead code for older kits removed (see docs/08 §11); stale `REPLACE_WITH_NEW_KIT_SHA` sentences removed from old notes. Pin unchanged (`a31f82a`).
 
 ### 0.11.x: Games = the site's own lists; speed (kit page-6 … page-19)
 - **0.11.15**: background work (silent refresh of the cached home/updates pages, category warm-up, page-2 prefetch) waits until the reader has been still for a moment *and* the browser is idle, instead of 1.5-2.5 s after load. Page 2 is fetched while idle so the first visit to Games finds it ready. The cached home snapshot is written through the idle writer. *(kit page-19: category picker refreshes in idle time)*

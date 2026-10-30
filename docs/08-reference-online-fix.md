@@ -1,6 +1,6 @@
 # 8 · Reference implementation: the online-fix.me userscript
 
-`userscripts/online-fix.user.js` (v0.11.15, ~1,660 lines, pinned to kit commit `a31f82a`) is the real, in-use adaptation and by far the most complete example in the repo. `example-fixture.user.js` shows the *minimum*; this shows what a production site needs. It is a single file on purpose (Tampermonkey has no build step); this document is its map. Line numbers are from v0.11.15 and will drift: search for the function names.
+`userscripts/online-fix.user.js` (v0.11.16, ~1,640 lines, pinned to kit commit `a31f82a`) is the real, in-use adaptation and by far the most complete example in the repo. `example-fixture.user.js` shows the *minimum*; this shows what a production site needs. It is a single file on purpose (Tampermonkey has no build step); this document is its map. Line numbers are from v0.11.15 and will drift: search for the function names.
 
 Companion docs: [09 Steam integration](09-steam-integration.md) · [10 Full game page](10-game-page.md) · [11 Caching & performance](11-performance-and-caching.md) · [12 Changelog](12-changelog.md).
 
@@ -52,7 +52,7 @@ Order matters: `game` first (its path also matches the `/games/` prefix of `cate
 
 `feedReady`: the cards exist, **or** the document is `complete` and `#dle-content` exists but has no cards (an empty category / a page past the last). In that case the scrape throws "no games" immediately and the original site is shown, instead of a hidden page for the whole timeout (0.10.8). A slow page (challenge page) gets 15 s.
 
-`@match` is `/`, `/page/*`, `/games/*`, `/guides_upd.html`. **It does not include `/coop/` or `/multi/`** even though `P.category` handles them: those lists are reachable in-app (the Co-op / Multiplayer tiles load them through `loadMore`), but typing the URL directly shows the original site. Add `@match https://online-fix.me/coop/*` and `/multi/*` if direct landing should be redesigned too (untested; the route code is already there).
+`@match` is the **whole site** (`https://online-fix.me/*`, since v0.11.16). The script therefore runs on every page, and **the routes alone decide** what is redesigned: if no route matches, glue does not hide anything (or restores the original) and the script's background work is skipped (`ROUTED()` guards the page-2 prefetch; `warmCategories` has its own path check). Pages without a route (profiles `/user/…`, search results `index.php?do=search…`, forum/other pages) keep the original look. Direct visits to `/coop/` and `/multi/` are redesigned since this change (before, only in-app navigation reached them). Redesigning a further page type = a new route with its own `ready`/`scrape`, nothing else.
 
 ## 3 · Data flow: raw → game → contract
 
@@ -83,8 +83,8 @@ The site's own order **is** the order. Nothing is re-sorted.
 
 - **Labels** are English: `catLabel()` uses `CAT_EN` (Russian sidebar text → English), then `SLUG_EN` (slug → English, including `coop`, `multi`, `vr`/`virtual-reality`, `officialservers`), then `CAT_RU_RE` regexes ("виртуальн" → Virtual reality …), else the text as is. Never leaves Russian for a label it knows. The list of categories comes from the **sidebar of whatever page is open** (`readChrome` → `site.cats`, cached with the home snapshot).
 - **Membership ≠ URL folder.** A game is filed under *one* folder (`/games/sandbox/…`) but listed on several category pages (Happy Wheels is `/games/sandbox/` yet on `/games/racing/`). So whenever a game is seen on a category page the script remembers "id ∈ slug" (`rememberCat`, store `hf_catmap_v1`, **30 days**, whole map resets after that) and `toGame` merges it into `categories`; the kit's `addGames` merges categories into games it already has. Debug: `__hearthOnlineFix.catmap()` (slug → count).
-- **Category tiles** (Steam-style tilted 3D brick wall, kit `genres.js`) need games per category. The home feed only covers a few, so after the app is up **`warmCategories()`** reads page 1 of each category with < 6 known games: one request at a time, 700 ms apart, waits for `document.hidden === false` and for the reader to be idle (`quiet(1000)`), merges in groups of 3 with `app.add(list, {quiet:true})` (the kit refreshes only the picker, never repaints Browse), once per visit, and keeps trying for ~1 minute if Browse is open. Runs on home, category and updates pages. `WARM_CATS = false` turns it off. Needs the kit flag `quietAdd` (otherwise it only merges while on Home).
-- **Page-2 prefetch** (`LOAD_MORE`): 2 s after load and after `quiet(1200)`, `/page/2/` is fetched and parsed so the first visit to Games (grid shows 24; page 1 has 21) finds it ready.
+- **Category tiles** (Steam-style tilted 3D brick wall, kit `genres.js`) need games per category. The home feed only covers a few, so after the app is up **`warmCategories()`** reads page 1 of each category with < 6 known games: one request at a time, 700 ms apart, waits for `document.hidden === false` and for the reader to be idle (`quiet(1000)`), merges in groups of 3 with `app.add(list, {quiet:true})` (the kit refreshes only the picker, never repaints Browse), once per visit. Runs on home, category and updates pages. (Before v0.11.16 it silently never ran: a local `quiet` flag shadowed the `quiet()` helper.) `WARM_CATS = false` turns it off. 
+- **Page-2 prefetch** (`ROUTED` pages only): 2 s after load and after `quiet(1200)`, `/page/2/` is fetched and parsed so the first visit to Games (grid shows 24; page 1 has 21) finds it ready.
 - The pseudo category `updated` is kept on games (so the Sort works with a mark) but is **not** a category tile any more.
 
 ## 6 · The game sheet (popup) detail pipeline: `resolveDetail`
@@ -128,13 +128,13 @@ The kit owns the sheet (flag `profile`). `resolveProfile(user)` fetches `/user/<
 
 `DEBUG` (console log) · `WARM_CATS` · `PAGE_ON_GAME_URL` (landing on a game URL opens the full page instead of the popup) · `COMMENTS_AUTO_TRANSLATE` · `STALE_MS` (20 min: age after which a cached snapshot section is refreshed silently) · `ART_WAIT_MS` 2500 · `HERO_ART_MS` 1500 · `MEDIA_WAIT_MS` 1000 · `GUIDE_GATE_MS` 1500 · `MISS_TTL` 3 d · `STORE_TTL` 24 h · `STORY_TTL` 6 h · `STORE_SHAPE` / `STORY_V` (bump to invalidate) · `limiter` sizes (search 6, translation 2, SteamGridDB 2).
 
-## 11 · Feature gating and legacy paths
+## 11 · Kit requirements (no old-kit fallbacks)
 
-The script reads `HearthUI.features` (`lazyArt`, `loadMore`, `lazyGrid`, `richDetail`, `profile`, `page`, `quietAdd`) and degrades on older kits (e.g. `LAZY_ART` false → resolve art before first paint with a 4 s budget; `app.add` missing → rebuild everything on search). **The pinned kit has every flag**, so these branches are dead code kept for old pins; delete them if the pin is never lowered. Also effectively dead with the current kit: the `extra` snapshot section (`EXTRA_PAGES` is `0` when `loadMore` exists), and the stores `hf9:pmiss` / `hf9:media` (declared, persisted, never read).
+Since v0.11.16 the script **requires** a kit with the flags `loadMore, lazyArt, addGames, quietAdd, richDetail, profile, page, ranks` (all present at `a31f82a`) and warns at start-up if one is missing. The branches that served older kits (generated-art era art resolution, the `extra` page 2-3 prefetch section, rebuild-everything search for kits without `app.add`, the non-quiet warm-up path) and the unused `hf9:pmiss` / `hf9:media` stores were deleted. Don't re-add fallbacks for old pins; raise the pin instead.
 
 ## 12 · Console API: `window.__hearthOnlineFix`
 
-Exported to the **page** via `unsafeWindow`, so it works from the normal console. `openPage(id)`, `pageDiag()`, `netDiag()` (last 80 requests), `trDiag()`, `sgdbDiag()`, `linkDiag()`, `kitDiag()` (which kit files are really loaded: version, `.dp-pgb` rule present), `misses()` (logo misses), `catmap()`, `steam()` (per game app id), `story(id)` (parsed story + detail patch for one game), `build()`, `raw`, `lists`, `ids`, `meta`, `sid`, `links`, `mediaCache`, `parse{…}` (the parsers), `storeInfo`, `commentsOf`, `lastSearch`, `flush()` (write caches now). Tampermonkey menu: "Set SteamGridDB API key" and the kit's "Toggle Hearth UI / original page"; keyboard `Alt+Shift+H`.
+Exported to the **page** via `unsafeWindow`, so it works from the normal console. `openPage(id)`, `pageDiag()`, `netDiag()` (last 80 requests), `trDiag()`, `sgdbDiag()`, `linkDiag()`, `kitDiag()` (which kit files are really loaded: version, `.dp-pgb` rule present), `misses()` (logo misses), `catmap()`, `steam()` (per game app id), `story(id)` (parsed story + detail patch for one game), `build()`, `raw`, `lists`, `ids`, `meta`, `sid`, `links`, `parse{…}` (the parsers), `storeInfo`, `commentsOf`, `lastSearch`, `flush()` (write caches now). Tampermonkey menu: "Set SteamGridDB API key" and the kit's "Toggle Hearth UI / original page"; keyboard `Alt+Shift+H`.
 
 ## 13 · If you are adapting another site from this
 

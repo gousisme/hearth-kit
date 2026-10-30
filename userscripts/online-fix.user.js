@@ -1,12 +1,9 @@
 // ==UserScript==
 // @name         Hearth — Online-Fix
 // @namespace    hearth-kit
-// @version      0.11.15
-// @description  Cinematic storefront redesign of online-fix.me (home, categories, updates, game pages) built on hearth-kit. Alt+Shift+H toggles the original site.
-// @match        https://online-fix.me/
-// @match        https://online-fix.me/page/*
-// @match        https://online-fix.me/games/*
-// @match        https://online-fix.me/guides_upd.html
+// @version      0.11.16
+// @description  Cinematic storefront redesign of online-fix.me (home, categories, updates, game pages) built on hearth-kit (runs on the whole site; pages without a route show the original). Alt+Shift+H toggles the original site.
+// @match        https://online-fix.me/*
 // @run-at       document-start
 // @grant        GM_getResourceText
 // @grant        unsafeWindow
@@ -33,47 +30,53 @@
 // @resource     hearthCss https://cdn.jsdelivr.net/gh/gousisme/hearth-kit@a31f82acba9d274bfc789373d595592b35ec810f/dist/hearth.css
 // ==/UserScript==
 //
+// v0.11.16: · Runs on the whole site (@match https://online-fix.me/*): the routes below decide which pages are redesigned (home, /page/N/, categories incl. /coop/ and /multi/, game pages, /guides_upd.html);
+//             every other page (profiles, search results, ...) is left as the original site. Direct visits to /coop/ and /multi/ are redesigned now.
+//           · The Steam "Price" row is gone from the full page's facts (the kit shows no prices).
+//           · Fixed: the category warm-up never ran (a local `quiet` flag shadowed the quiet() helper, so it threw on its first call).
+//           · Removed code that only served older kits (lazyArt / loadMore / addGames / quietAdd fallbacks, the unused "extra" pages section, the unused hf9:pmiss / hf9:media stores).
+//             Needs the kit at a31f82a or later (checked at start-up; it warns if a needed feature is missing).
 // v0.11.15: · Smoother first seconds after a reload: background work (the silent refresh of the cached home / updates pages, the category warm-up, the page-2 prefetch) now waits until you have not touched
 //             the page for a moment and the browser is idle, instead of running 1.5-2.5 s after load, which is when you tend to open Games. Page 2 of the site is fetched while idle, so the first visit
 //             to Games (page 1 has 21 games, the grid shows 24) finds it ready instead of downloading and parsing it on the spot. The cached home snapshot is saved through the same idle writer as the other caches.
-//             NEEDS hearth-kit-page-19.patch on top of page-18 (the category picker refreshes in idle time). Replace REPLACE_WITH_NEW_KIT_SHA in the @require / @resource lines with the new kit HEAD.
+//             NEEDS hearth-kit-page-19.patch on top of page-18 (the category picker refreshes in idle time).
 // v0.11.14: · The special handling of pinned posts is gone: "All games" and every category follow the site's order exactly (the pinned post stays on top of page 1, as on the site).
 //           · Scrolling to a page that was not cached no longer pushes you up when it finishes loading (kit: the loading placeholders are replaced by the new cards in one step).
-//             NEEDS hearth-kit-page-18.patch on top of page-17. Replace REPLACE_WITH_NEW_KIT_SHA in the @require / @resource lines with the new kit HEAD.
+//             NEEDS hearth-kit-page-18.patch on top of page-17.
 // v0.11.13: · "All games" / categories follow the site's order exactly again (page 1, 2, 3 …); only the posts the site PINS to the top of page 1 (DayZ …) are moved, to where their last UPDATE date puts them
 //             (a post never updated: its publish date). Such a post appears once the pages loaded reach back that far, so nothing already on screen moves when a page loads.
 //           · Cards reorder after a page loads only in the "Release date" sort (kit).
-//             NEEDS hearth-kit-page-17.patch on top of page-16. Replace REPLACE_WITH_NEW_KIT_SHA in the @require / @resource lines with the new kit HEAD.
+//             NEEDS hearth-kit-page-17.patch on top of page-16.
 // v0.11.12: · New sort "Release date": the game's own release date (the "Релиз игры: 23.10.2026" line, the full date), newest first, among the games loaded so far (it keeps loading pages as you scroll).
 //           · The posts the site pins to the top of the home page (DayZ …) no longer sit on top of "All games": every list is ordered by publish date, the site's page order breaking ties.
-//             NEEDS hearth-kit-page-16.patch on top of page-15. Replace REPLACE_WITH_NEW_KIT_SHA in the @require / @resource lines with the new kit HEAD.
+//             NEEDS hearth-kit-page-16.patch on top of page-15.
 // v0.11.11: · Games / "All" is now the site's own list: / and /page/2/, /page/3/ … in the site's order (newest added first), loaded page by page as you scroll (the count reads "21+ games" until the site runs out).
 //           · The same for every category (each shows ITS page's list, in the site's order), and two categories were missing: Co-op (/coop/) and Multiplayer (/multi/).
 //           · Sort: Default (the above) and Recently updated (the site's /guides_upd.html list, 50 games, in its order). "New" is gone: the default list already is "newest added first".
 //           · /page/N/ no longer counts as "the home page" (its cards used to replace the home lists and the cached home).
-//             NEEDS hearth-kit-page-15.patch on top of page-14 (already in the kit as a1e178c). Replace REPLACE_WITH_NEW_KIT_SHA in the @require / @resource lines with the new kit HEAD.
+//             NEEDS hearth-kit-page-15.patch on top of page-14 (already in the kit as a1e178c).
 // v0.11.10: · Sort uses the site's real dates. New = the card's publish date (<time datetime>), Recently updated = the date in its "Обновлено …" line (a game never updated counts from its publish date). Was: the release YEAR / the old "updated" mark.
 //           · Games' category strip now sits ABOVE the heading row (title, count, Sort), so the Sort button is next to the games it sorts.
 //             Games already in the cache from older versions have no date until their card is read again (a visit to the home / category page does it): they sort after the dated ones.
-//             NEEDS hearth-kit-page-14.patch on top of page-13 (already in the kit as 82c4145). Replace REPLACE_WITH_NEW_KIT_SHA in the @require / @resource lines with the new kit HEAD.
+//             NEEDS hearth-kit-page-14.patch on top of page-13 (already in the kit as 82c4145).
 // v0.11.9: · Tabs: Discover / Games / Library only. "New" and "Updates" are gone, and so is the "Recently updated" category tile: Games has a Sort button (Default / New / Recently updated) next to the title instead.
 //          · Choosing a category, a sort or a search word only replaces the title, count and grid: the page no longer fades, and the category strip is not rebuilt, does not blink and does not jump.
 //          · The search box's X closes the search (it emptied the box and repainted the whole page); closing returns to where you were (category included).
-//            NEEDS hearth-kit-page-13.patch on top of page-12 (page-12 is already in the kit as e3f746a). Replace REPLACE_WITH_NEW_KIT_SHA in the @require / @resource lines with the new kit HEAD.
+//            NEEDS hearth-kit-page-13.patch on top of page-12 (page-12 is already in the kit as e3f746a).
 // v0.11.8: · Category pickers (home + Browse) build a tile's artwork only when the tile nears the visible part of the strip, instead of every category at once (40+ tiles x 7 images in 3D layers was most of the cost).
 //          · Fixed blank category tiles / images that stayed grey: the Browse picker was kept from the first visit (built while most categories still had no game), and slots dropped while a kept page was detached were never loaded again.
 //          · The edge fades of the strips work again (the previous speed-up made them invisible); they are real overlay elements now.
 //          · Category warm-up runs on category / updates pages too (it only ran when the site was opened on the home page), merges in groups of 3 and never repaints Browse: only the picker updates itself (kit app.add(list, { quiet: true })).
-//            NEEDS hearth-kit-page-12.patch on top of page-11. Replace REPLACE_WITH_NEW_KIT_SHA in the @require / @resource lines with the new kit HEAD.
+//            NEEDS hearth-kit-page-12.patch on top of page-11.
 // v0.11.7: · Smoother category strips: tiles only load the wall bricks that are actually visible, and the edge fades no longer restyle every tile on each scroll frame. NEEDS hearth-kit-page-11.patch on top of page-10.
 // v0.11.6: · Browse picker is built once and kept while you switch categories (no rebuild, its artwork does not fade in again); only the chosen tile changes. NEEDS hearth-kit-page-10.patch on top of page-9.
 // v0.11.5: · Browse picker: the edge fades sit exactly at the strip edge again (no gap or dark bar); the selection ring is drawn inside the tile. NEEDS hearth-kit-page-9.patch on top of page-8.
 // v0.11.4: · Browse category picker: the "All" tile has the same brick-wall background (library games, accent tint), the first tile's selection ring is no longer clipped, and tiles no longer slide up one by one (the tapped tile sat lower than the rest while loading).
-//            NEEDS hearth-kit-page-8.patch on top of page-7. Replace REPLACE_WITH_NEW_KIT_SHA in the @require / @resource lines with the new kit HEAD.
+//            NEEDS hearth-kit-page-8.patch on top of page-7.
 // v0.11.3: · Home strips: Shift+wheel (and the arrows) glide continuously instead of stopping at every card, and the strip settles on a card edge when you stop.
 //          · Game page: "Read more" turns into "Read less" (About and long reviews), so an expanded text can be folded again.
 //          · Browse (Games / News / Updates / categories): the category picker is the same tile strip as "Browse by category" on the home page, the chosen one highlighted (plus an "All" tile).
-//            NEEDS hearth-kit-page-7.patch (all three are kit changes). Replace REPLACE_WITH_NEW_KIT_SHA in the @require / @resource lines with the new kit HEAD.
+//            NEEDS hearth-kit-page-7.patch (all three are kit changes).
 // v0.11.1: · The popup's viewer plays Steam's trailers too (same dash.js streams as the page; poster + "Watch it on Steam" when a stream cannot play).
 //          · The site mark and the avatar slide in beside the pill when the page is scrolled (spring, with a little overshoot) and slide back out to their corners at the top.
 //            NEEDS hearth-kit-page-6.patch.
@@ -98,7 +101,7 @@
 //          · The hero's "Details" button opens the full game page (the popup stays for the cards).
 //          · Game page media comes straight from Steam (trailers, then screenshots; one store request shared with the popup); the site's own media only where Steam has none of that kind,
 //            and it waits for Steam's answer (skeleton) instead of showing the site's first and swapping. "About this game" keeps Steam's section images.
-//            NEEDS the kit patch hearth-kit-page-2.patch on top of page.patch: replace REPLACE_WITH_NEW_KIT_SHA with the new HEAD.
+//            NEEDS the kit patch hearth-kit-page-2.patch on top of page.patch.
 // v0.10.3: · Game page, round 3. Every visual (markup, CSS, icons, motion) is now the kit's: the script no longer writes any CSS, inline style or icon - the page, its rating card, reviews, comments, tabs, pager,
 //            skeletons, the sheet's "Full page" button, the search status line and the loading screen all come from the kit (HearthUI.parts.page, ui.onPage, HearthGlue splash). ~300 lines gone.
 //          · The empty box under "Open in Steam" was a loading skeleton for the rating card. Gone: the card now fades in when the numbers arrive, nothing is drawn before.
@@ -106,10 +109,10 @@
 //            cross-fade (skeleton -> content no longer blinks), "Full page" has the close button's kind of hover. Cause of the instant hover: the page's own <style> lost to the kit's rules.
 //          · Steam reviews: requests to Steam are now sent WITHOUT the browser's Steam cookies and with explicit JSON headers; a non-JSON answer is reported with status / redirect target / page title
 //            (__hearthOnlineFix.netDiag()); if Steam still answers with a web page, the list is read from steamcommunity.com's review page and the rating from the store page's own summary line.
-//            NEEDS the kit patch hearth-kit-page.patch: apply + push it, `git rev-parse HEAD`, replace REPLACE_WITH_NEW_KIT_SHA in the four @require / @resource URLs.
+//            NEEDS the kit patch hearth-kit-page.patch.
 // v0.10.2: · Side panel and install guide are now the kit's own blocks (HearthUI.parts: Get box, Save + Open in Steam with the Steam logo, facts, guide) - no hand-drawn copies, no \"Original page\" button.
 //            Comment pager also sits above the list. Steam reviews: cursor sent URL-encoded, a second URL shape is tried, BOM-safe parse, and a non-JSON answer is reported with its first characters in netDiag().
-//            NEEDS the kit patch hearth-kit-parts.patch: push it, `git rev-parse HEAD`, replace REPLACE_WITH_NEW_KIT_SHA in the four @require / @resource URLs.
+//            NEEDS the kit patch hearth-kit-parts.patch.
 // v0.10.1: · Game page, round 2. Side panel is the popup's (Get box that unfolds, Save + Open in Steam, facts) - no capsule / description / price card repeating the page. The top banner with the logo is back
 //            (same art slots as the popup: hero under a gradient, the logo bottom-left replacing the title text). The media strip fades at both ends (and its hover / selected outline is no longer clipped).
 //            "How to install & play online" uses the popup's numbered cards instead of drop-downs. Comments have real page switching (the site's own pages, cached, numbered pager) instead of "load more".
@@ -136,7 +139,6 @@
 //            next card off hard. Kit change only (kit 0.5.9).
 //          · The category chips on the home page are replaced by Steam-style "Browse by category" tiles: a tilted 3D wall of bricks (gaps, offset rows) made of that category's games under a colour tint, with the name in a pill. Click opens Browse
 //            filtered to it (the chips are still there in Browse). Kit change only; the script's data is unchanged.
-//          Needs the kit commit that goes with this version: replace REPLACE_WITH_NEW_KIT_SHA in the four @require/@resource URLs (see the patch notes).
 // v0.9.11: · "Open in Steam" is taken from the redirect page itself: the /ext/ page ("Вы собираетесь перейти на: store.steampowered.com", button onclick="location.href='…/app/<id>/…'") is parsed for its target
 //            (also a real redirect / meta refresh / s.team / steam://), and the button always opens https://store.steampowered.com/app/<id>/. The request now sends a Referer, and a "not Steam" verdict is only
 //            remembered when the redirect page was really read (HTTP 200 + a target); a blocked / rate-limited / failed request used to be remembered for 24 h and silently hid the button. Old cache key dropped.
@@ -146,7 +148,6 @@
 //            could be read, else the title-search match used for the artwork); the redirect is never shown. Still no button when the page names another store (Microsoft Store ...) or no id is found.
 //          · Get buttons: no Lottie any more. The kit's own download icon is back, but only the ARROW slides down and loops on hover (the line below it stays). Kit change only.
 //          · Modes with notes ("Кооператив (local co-op) Мультиплеер", "29.09.2026 (local co-op)") read "Co-op (local), Multiplayer"; cached sheets rebuilt (STORY_V 5).
-//          Needs the kit commit that goes with this version: replace REPLACE_WITH_NEW_KIT_SHA in the four @require/@resource URLs (see the patch notes).
 // v0.9.9: (superseded — its Lottie download icon and its Steam-link handling were replaced in 0.9.10)
 // v0.9.8: · "Open in Steam" no longer shows for games that are not on Steam (e.g. Minecraft Bedrock). Cause: the first online-fix.me/ext/ link on the page (title="xbox.com" there) was taken for the Steam link.
 //           Now only a link announced as the Steam page / titled steampowered counts, and the button needs a URL the script KNOWS is Steam's (a title-search match used for art no longer enables it).
@@ -262,18 +263,15 @@
   };
   // feed pages 2 and 3 (≈ 40 more games for Browse). Only when the loaded kit renders the grid lazily (HearthUI.features.lazyGrid), otherwise tab changes stutter.
   const FEAT = (typeof HearthUI !== 'undefined' && HearthUI.features) || {};
-  const LOAD_MORE = !!FEAT.loadMore;                          // kit asks us for more games when the grid runs out → pages load on demand, no prefetch needed
-  const EXTRA_PAGES = FEAT.lazyGrid && !LOAD_MORE ? 2 : 0;
-  const LAZY_ART = !!FEAT.lazyArt;                           // kit >= 0.2: pulls art per card (resolveArt) and has no generated art
   const HERO_ART_MS = 1500;                                  // max wait for the few games the hero carousel is picked from
-  if (!FEAT.page) console.warn('[hearth:online-fix] the loaded hearth-kit has no game page (HearthUI.features.page): put the new kit commit in the four @require / @resource URLs.');
-  if (!LAZY_ART) console.warn('[hearth:online-fix] the loaded hearth-kit is older than 0.2.0 (still has generated art). Purge the jsDelivr cache and re-save this script.');
+  { const need = ['loadMore', 'lazyArt', 'addGames', 'quietAdd', 'richDetail', 'profile', 'page', 'ranks'].filter(k => !FEAT[k]); if (need.length) console.warn('[hearth:online-fix] the loaded hearth-kit lacks: ' + need.join(', ') + '. Put kit commit a31f82a (or later) in the four @require / @resource URLs and re-install the script.'); }
   const STALE_MS = 20 * 60e3;
 
   /** A list page is ready when its cards are there; a finished page that has the content area but NO cards (an empty category, a page past the last one) is "ready" too: the scrape then reports
       "no usable games" at once and the original page is shown, instead of the page staying hidden for the whole timeout. */
   const feedReady = () => document.querySelector(SEL.feed) || (document.readyState === 'complete' && document.querySelector('#dle-content') ? document.body : null);
   const P = { game: p => GAME_RE_PATH.test(p), updates: p => p === '/guides_upd.html', category: p => /^\/(?:games\/[^/]+|coop|multi)\/(page\/\d+\/)?$/.test(p), home: p => /^\/(page\/\d+\/)?$/.test(p) };
+  const ROUTED = p => P.game(p) || P.updates(p) || P.category(p) || P.home(p);                // the pages the script redesigns (@match covers the whole site; any other page stays original)
 
   /* ═══ helpers ═══════════════════════════════════════════════════════════════════════════════ */
   const GAME_RE = /\/games\/([^/]+)\/(\d+)-[^/]*\.html/;
@@ -357,9 +355,9 @@
 
   /* ═══ state + persistent snapshot ═══════════════════════════════════════════════════════════ */
   const raw = new Map();                                      // id → compact raw record
-  const lists = { pop: [], fresh: [], feed: [], upd: [], updPage: [], extra: [] };
+  const lists = { pop: [], fresh: [], feed: [], upd: [], updPage: [] };
   const site = { cats: [], user: null };
-  const snap = jget('hf3:snap', {});                          // { home:{…,t}, extra:{…,t}, upd:{…,t} }
+  const snap = jget('hf3:snap', {});                          // { home:{…,t}, upd:{…,t} }
   let handle = null;
   const searchTag = new Map();                                // game id → queries it was returned for by the SITE search
 
@@ -429,10 +427,6 @@
       fetch: async () => readHome(await getDoc(ORIGIN + '/')),
       save: h => ({ pop: pack(h.pop), upd: pack(h.upd), fresh: pack(h.fresh), feed: pack(h.feed), cats: site.cats, user: site.user }),
       apply: h => { if (h.cats && !site.cats.length) site.cats = h.cats; if (h.user && !site.user && !site.chromeRead) site.user = h.user; lists.pop = putAll(h.pop); lists.upd = putAll(h.upd); lists.fresh = putAll(h.fresh); lists.feed = putAll(h.feed); setRank(rank.feed, 1, lists.feed); },
-    },
-    extra: {
-      fetch: async () => ({ list: (await S.mapLimit(Array.from({ length: EXTRA_PAGES }, (_, i) => `${ORIGIN}/page/${i + 2}/`), 2, getDoc)).filter(Boolean).flatMap(feedOf) }),
-      save: h => ({ list: pack(h.list) }), apply: h => { lists.extra = putAll(h.list); },
     },
     upd: {
       fetch: async () => ({ list: updOf(await getDoc(ORIGIN + '/guides_upd.html')) }),
@@ -505,8 +499,8 @@
 
   /* ═══ the game page's own Steam link ("Страница игры в Steam:" → online-fix.me/ext/<token> → a 3 s redirect page → store.steampowered.com/app/<id>) ═══
      It is exact, so it wins over the title search; and for a game the title search could not find it is the fallback source of the app id. */
-  const SID_KEY = 'hf9:sid', LINK_KEY = 'hf9:links2', PMISS_KEY = 'hf9:pmiss', MEDIA_KEY = 'hf9:media';
-  const sid = jget(SID_KEY, {}), links = jget(LINK_KEY, {}), pmiss = jget(PMISS_KEY, {}), mediaCache = jget(MEDIA_KEY, {});   // sid: game id → {app,url}; links: /ext/ url → {app,url} | {miss:t}; pmiss: game id → t (its page had no usable link); mediaCache: app → Steam details
+  const SID_KEY = 'hf9:sid', LINK_KEY = 'hf9:links2';
+  const sid = jget(SID_KEY, {}), links = jget(LINK_KEY, {});   // sid: game id → {app,url}; links: /ext/ url → {app,url} | {miss:t}
   const steamStore = app => `https://store.steampowered.com/app/${app}/`;
   const STEAM_APP_RE = /(?:store\.steampowered\.com|steamcommunity\.com)(?:\\?\/)+app(?:\\?\/)+(\d+)/i;
   const appOf = r => (sid[r.id] && sid[r.id].app) || r.steam || steamOf(r) || 0;
@@ -556,7 +550,7 @@
   const searchLimit = limiter(6), prio = r => () => (r._hi ? 2 : r._wait ? 1 : 0);   // 2 = the open sheet, 1 = a card still waiting for its art, 0 = leftovers that only fill the cache for the next visit
   /* what changed since the last write: persist('meta') marks one store, persist() (no argument) marks all of them. Only changed stores are serialised, one per idle slice, 2.5 s after the first change
      (before, every change rewrote all nine stores 1.5 s later in a single task: meta, trMem and storyCache can be large, and that landed right after switching to Discover, while its art was resolving) */
-  const STORES = { snap: () => ['hf3:snap', snap], ids: () => [IDS_KEY, ids], miss: () => [MISS_KEY, miss], meta: () => [META_KEY, meta], tr: () => [TR_KEY, trMem], story: () => [STORY_KEY, storyCache], sid: () => [SID_KEY, sid], links: () => [LINK_KEY, links], pmiss: () => [PMISS_KEY, pmiss], media: () => [MEDIA_KEY, mediaCache] };   // functions: several keys / stores are declared further down the file
+  const STORES = { snap: () => ['hf3:snap', snap], ids: () => [IDS_KEY, ids], miss: () => [MISS_KEY, miss], meta: () => [META_KEY, meta], tr: () => [TR_KEY, trMem], story: () => [STORY_KEY, storyCache], sid: () => [SID_KEY, sid], links: () => [LINK_KEY, links] };   // functions: several keys / stores are declared further down the file
   const ART_KEYS = ['ids', 'miss', 'sid', 'meta', 'links'];
   const dirty = new Set(); let storeT = 0, storeI = 0;
   const idle = fn => (typeof requestIdleCallback === 'function' ? requestIdleCallback(fn, { timeout: 4000 }) : setTimeout(fn, 250));
@@ -639,7 +633,7 @@
     { id: 'library', label: 'Library', view: 'browse', filter: { saved: true } },
   ];
   function build() {
-    const order = [...new Set([...lists.updPage, ...lists.upd, ...lists.feed, ...lists.fresh, ...lists.pop, ...lists.extra, ...raw.keys()])].filter(id => raw.has(id) && raw.get(id).title);
+    const order = [...new Set([...lists.updPage, ...lists.upd, ...lists.feed, ...lists.fresh, ...lists.pop, ...raw.keys()])].filter(id => raw.has(id) && raw.get(id).title);
     const games = order.map(id => toGame(raw.get(id))), has = new Set(order), only = a => a.filter(id => has.has(id));
     const byId = new Map(games.map(g => [g.id, g])), hasHero = id => byId.get(id) && byId.get(id).art.hero;
 
@@ -650,7 +644,7 @@
     add('top', 'Popular right now', lists.pop.slice(0, 10), { style: 'ranked' });
     add('fresh', 'New releases', lists.fresh, { filter: { sort: 'new' } });
     add('upd', 'Recently updated', lists.updPage.length ? lists.updPage : lists.upd, { filter: { sort: 'updated' } });
-    add('latest', 'Latest additions', lists.feed.concat(lists.extra), { filter: {} });
+    add('latest', 'Latest additions', lists.feed, { filter: {} });
     const cats = site.cats.map(s => ({ id: s, label: catName(s) }));          // no "Recently updated" category any more: it is a sort (the kit's Sort button) and the games keep their 'updated' mark for it
     cats.forEach(c => { const g = games.filter(x => x.categories.includes(S.slug(c.id))).map(x => x.id); if (g.length >= 5 && shelves.filter(s => s.id.startsWith('cat-')).length < 2) shelves.push({ id: 'cat-' + c.id, title: c.label, gameIds: g.slice(0, 24), filter: { category: c.id } }); });
 
@@ -669,10 +663,9 @@
   }
 
   /* ═══ routes ════════════════════════════════════════════════════════════════════════════════ */
-  const world = opts => Promise.all([opts.home ? 0 : ensure('home'), EXTRA_PAGES ? ensure('extra') : 0, opts.upd ? 0 : ensure('upd')]);   // everything around the current page, cached-first
-  async function finish(extraFirst = []) {
-    if (LAZY_ART) await prepareHero();                                     // the rest of the art is pulled per card while it shows a skeleton
-    else await budget(resolveSteam([...new Set([...extraFirst, ...lists.pop, ...lists.fresh, ...lists.feed, ...lists.updPage.slice(0, 12), ...lists.upd])].slice(0, 28).map(id => raw.get(id))), 4000);   // old kit: art must be ready at first paint
+  const world = opts => Promise.all([opts.home ? 0 : ensure('home'), opts.upd ? 0 : ensure('upd')]);   // everything around the current page, cached-first
+  async function finish() {
+    await prepareHero();                                                   // the rest of the art is pulled per card while it shows a skeleton
     return build();
   }
   async function scrapeHome() {
@@ -687,7 +680,7 @@
     readChrome(document);
     await ensure('upd', { list: updOf(document) });
     await world({ upd: true });
-    return finish(lists.updPage.slice(0, 24));
+    return finish();
   }
   async function scrapeCategory() {
     const live = readHome(document); putAll(live.feed);
@@ -1064,7 +1057,7 @@
     readChrome(document);
     put(r); if (r.opts && r.opts.length) dlOpts.set(r.id, r.opts);
     await world({});
-    return finish([r.id]);
+    return finish();
   }
 
   /* ═══ "Get": a dropdown with every download option the game page offers ═══════════════════ */
@@ -1103,9 +1096,8 @@
       const n = st.next++;
       let rs = []; try { rs = feedOf(await getDoc(src.url(n))); } catch (e) { log('load more failed', e); }
       if (!rs.length) { st.done = true; return false; }
-      const fresh = rs.filter(r => !raw.has(r.id)); putAll(rs); setRank(src.rank, n, rs.map(r => r.id));
+      putAll(rs); setRank(src.rank, n, rs.map(r => r.id));
       if (src.key.startsWith('cat:')) rememberCat(src.key.slice(4), rs.map(r => r.id));                  // listed on /games/<slug>/ → in <slug>, whatever folder its own url is in
-      if (!LAZY_ART) await budget(resolveSteam(fresh), 2500);              // old kit only: art had to be ready when the cards appear. Newer kits show skeletons and pull the art themselves
       return rs.map(r => toGame(raw.get(r.id)));
     })().finally(() => { st.busy = null; });
     return st.busy;
@@ -1163,15 +1155,7 @@
     if (!hit.rs.length) { console.warn('[hearth:online-fix] site search found nothing for "' + q + '"', hit.errors); searchStatus(app, hit.errors.some(e => /HTTP|network|timeout/.test(e)) ? 'Couldn’t reach the site’s search — showing games already loaded' : 'Nothing found on online-fix.me', false); return; }
     console.info('[hearth:online-fix] site search "' + q + '": ' + hit.rs.length + ' results via ' + hit.via);
     hit.ids.forEach(id => { const t = searchTag.get(id) || new Set(); t.add(q.toLowerCase()); searchTag.set(id, t); });
-    if (typeof app.add === 'function') await app.add(hit.ids.map(id => toGame(raw.get(id))));          // kit >= 0.2: the new games join the running app; the search box is never touched, art is pulled per card
-    else {                                                                                       // old kit: rebuild everything and put the search box back
-      await budget(resolveSteam(hit.ids.map(id => raw.get(id))), 1500);
-      if (stale()) return;
-      const before = input().value, caret = [input().selectionStart, input().selectionEnd];
-      await app.update(build());
-      const sb = app.root.querySelector('.searchbox'), ni = sb && sb.querySelector('input');
-      if (ni) { sb.classList.add('open'); ni.value = before; ni.focus(); try { ni.setSelectionRange(...caret); } catch (e) { /* ignore */ } const t = app.root.querySelector('[data-search-toggle]'); t && t.setAttribute('aria-expanded', 'true'); }
-    }
+    await app.add(hit.ids.map(id => toGame(raw.get(id))));                                  // the new games join the running app; the search box is never touched, art is pulled per card
     searchStatus(app, `${hit.rs.length} result${hit.rs.length === 1 ? '' : 's'} from online-fix.me`, false);
   }
   let hookedApp = null;
@@ -1294,12 +1278,12 @@
       theme: { ac: '#1ea7e0', ink: '#04141c' },
       saved: [...saved],
       onSave: (g, on) => { on ? saved.add(g.id) : saved.delete(g.id); jset('hf3:saved', [...saved]); },
-      resolveProfile: FEAT.profile ? resolveProfile : undefined,      // the avatar opens the kit's own account sheet (kit >= 0.3); nothing navigates away
+      resolveProfile,      // the avatar opens the kit's own account sheet (kit >= 0.3); nothing navigates away
       onArtMiss, resolveLogo,
-      onPage: FEAT.page ? g => openPage(g.id) : undefined,          // the sheet's "Full page" button (the kit draws it)
+      onPage: g => openPage(g.id),          // the sheet's "Full page" button (the kit draws it)
       onGet, onOpen, loadMore,
-      resolveArt: LAZY_ART ? resolveArt : undefined,
-      resolveDetail: FEAT.richDetail ? resolveDetail : undefined,     // downloads / how-to-connect / update info for the sheet (kit >= 0.3)         // art is pulled per card (skeleton until it arrives); nothing is re-rendered when it does
+      resolveArt,
+      resolveDetail,     // downloads / how-to-connect / update info for the sheet (kit >= 0.3)         // art is pulled per card (skeleton until it arrives); nothing is re-rendered when it does
       onRoute: () => { attach(); },
     },
   });
@@ -1309,11 +1293,11 @@
   let warmStarted = false;
   function warmCategories() {
     if (!WARM_CATS || warmStarted || !(P.home(location.pathname) || P.category(location.pathname) || P.updates(location.pathname))) return;
-    const app = handle && handle.app; if (!app || typeof app.add !== 'function' || !site.cats.length) { setTimeout(warmCategories, 1500); return; }
+    const app = handle && handle.app; if (!app || !site.cats.length) { setTimeout(warmCategories, 1500); return; }
     warmStarted = true;
-    const pend = [], onHome = () => { try { return !app.getRoute || app.getRoute().view === 'home'; } catch (e) { return false; } };
-    const quiet = !!FEAT.quietAdd;                              // kit >= page-12: a quiet add never repaints Browse (no grid reset), it only refreshes the category picker, so it is safe on any page
-    const flush = () => { if (pend.length && (quiet || onHome())) app.add(pend.splice(0).map(id => raw.get(id)).filter(Boolean).map(toGame), quiet ? { quiet: true } : undefined); };
+    const pend = [];
+                                 // kit >= page-12: a quiet add never repaints Browse (no grid reset), it only refreshes the category picker, so it is safe on any page
+    const flush = () => { if (pend.length) app.add(pend.splice(0).map(id => raw.get(id)).filter(Boolean).map(toGame), { quiet: true }); };
     const known = slug => { const k = S.slug(slug); let n = 0; raw.forEach(r => { if (r.cat === slug || (catOf.get(String(r.id)) || new Set()).has(k)) n++; }); return n; };
     (async () => {
       await sleep(2500); let got = 0;                            // flushed every 3 categories (each merge may rebuild the picker) and once more at the end
@@ -1333,7 +1317,7 @@
   }
   warmCategories();
   /** The first visit to Games asks for page 2 at once (page 1 holds 21 games, the grid shows 24 per step): fetch and parse it while idle so that visit finds it ready. */
-  if (LOAD_MORE) (async () => { await sleep(2000); await quiet(1200); try { await getDoc(`${ORIGIN}/page/2/`); } catch (e) { log('page 2 prefetch failed', e); } })();
+  if (ROUTED(location.pathname) && !location.search) (async () => { await sleep(2000); await quiet(1200); try { await getDoc(`${ORIGIN}/page/2/`); } catch (e) { log('page 2 prefetch failed', e); } })();
 
   /* ═══ full game page (v0.10.0) ═══════════════════════════════════════════════════════════════
      A store-style page next to the popup sheet: gallery, about, Steam rating + reviews, the site's own comments, requirements, install guide, downloads.
@@ -1401,7 +1385,6 @@
     const d = {
       v: STORE_SHAPE, blocks: aboutBlocks(x.about_the_game || x.detailed_description), media: steamMedia(x), short: x.short_description || '', header: httpsOnly(x.header_image), capsule: httpsOnly(x.capsule_image),
       release: (x.release_date && x.release_date.date) || '', soon: !!(x.release_date && x.release_date.coming_soon), free: !!x.is_free,
-      price: x.price_overview ? { final: x.price_overview.final_formatted, off: x.price_overview.discount_percent || 0 } : null,
       devs: x.developers || [], pubs: x.publishers || [], genres: names(x.genres), cats: names(x.categories),
       meta: x.metacritic ? { score: x.metacritic.score, url: httpsOnly(x.metacritic.url) } : null, recs: x.recommendations ? x.recommendations.total : 0,
       ach: x.achievements ? x.achievements.total : 0, age: x.required_age ? String(x.required_age) : '', web: httpsOnly(x.website),
@@ -1534,7 +1517,7 @@
     const kg = { id: String(g.id), downloads: vm.downloads || [], size: vm.size || g.size || '', password: vm.password || '', steamUrl: httpsOnly(vm.steamUrl || g.steamUrl), guide: vm.guide || [] };
     const facts = (vm.facts || g.facts || []).map(f => [f.label, f.value]);
     const add = (k, v) => { if (v && !facts.some(([a]) => a === k)) facts.push([k, v]); };
-    if (st) { add('Developer', st.devs.join(', ')); add('Publisher', st.pubs.join(', ')); add('Released', st.release); add('Genre', st.genres[0]); add('Price', st.free ? 'Free to play' : st.price ? st.price.final + (st.price.off ? ` (−${st.price.off}%)` : '') : ''); if (st.meta) add('Metacritic', String(st.meta.score)); if (st.recs) add('Recommendations', fmtN(st.recs)); if (st.ach) add('Achievements', fmtN(st.ach)); if (st.age) add('Age', st.age + '+'); if (st.langs.length) add('Languages', st.langs.length > 4 ? st.langs.length + ' supported' : st.langs.join(', ')); }
+    if (st) { add('Developer', st.devs.join(', ')); add('Publisher', st.pubs.join(', ')); add('Released', st.release); add('Genre', st.genres[0]); if (st.meta) add('Metacritic', String(st.meta.score)); if (st.recs) add('Recommendations', fmtN(st.recs)); if (st.ach) add('Achievements', fmtN(st.ach)); if (st.age) add('Age', st.age + '+'); if (st.langs.length) add('Languages', st.langs.length > 4 ? st.langs.length + ' supported' : st.langs.join(', ')); }
     else { add('Developer', vm.developer || g.developer); add('Publisher', vm.publisher || g.publisher); add('Released', g.releaseYear); add('Genre', (g.genres || [])[0]); }
     const rate = PK.rating(PG.sum);
     sect('side', rg('get', KP.getBox(kg, { pending: !PG.doneDetail, dlOpen: false })) + rg('acts', KP.actsHtml(kg, saved.has(g.id))) + (rate ? rg('rate', rate) : '') + KP.factsHtml(facts));
@@ -1658,5 +1641,5 @@
     landed = true;
   }
 
-  (typeof unsafeWindow !== 'undefined' ? unsafeWindow : window).__hearthOnlineFix = { openPage, pageDiag: () => (PG ? console.table({ 'steam app': PG.app, 'store answered': PG.storeDone, 'store ok': !!PG.store, 'steam media items': PG.store ? PG.store.media.length : '-', 'steam trailers (streams)': PG.store ? PG.store.media.filter(m => m.stream).length : '-', 'dash.js loaded': typeof dashjs !== 'undefined', 'about blocks': PG.store ? PG.store.blocks.length : '-', 'images / clips in about': PG.store ? PG.store.blocks.filter(b => b.img || b.vid).length : '-', 'site media items': (PG.vm.siteMedia || []).length, 'store error': storeWhy[PG.app] || '' }) : console.log('no game page is open')), storeInfo, commentsOf, catmap: () => Object.fromEntries(catSeen.v.map(([slug, ids]) => [slug, ids.length])), linkDiag: () => linkLog.slice(), kitDiag: () => { let css = ''; try { css = GM_getResourceText('hearthCss') || ''; } catch (e) { /* none */ } const d = { 'kit version loaded (hearth-ui.js)': (typeof HearthUI !== 'undefined' && HearthUI.version) || '?', 'game page in the script bundle': !!FEAT.page, 'game page rules in hearth.css': css.includes('.dp-pgb') }; console.table(d); return d; }, sgdbDiag: () => console.table(sgdbLog), netDiag: () => console.table(netLog), build, raw, lists, ids, meta, parse: { playersOf, steamLinkOf, pageMedia, localTr, versionOf, parseUpdate, plainUpdate, modesOf, parseStory, buildStory, parseProfile, profileLinks, readChrome, site }, misses: () => console.table(artMisses), trDiag: () => { console.table(trLog); return trLog; }, sid, links, mediaCache, flush: flushStore, story: async id => { const r = raw.get(String(id)); const doc = await getDoc(r.url); return { parsed: buildStory(doc, r.url), patch: await resolveDetail({ id: String(id), description: '' }) }; }, steam: () => console.table([...raw.values()].map(r => ({ game: r.title, appId: appOf(r) || (known(r) ? '— none —' : 'pending'), hero: !!(meta[appOf(r)] && meta[appOf(r)].hero) }))) };
+  (typeof unsafeWindow !== 'undefined' ? unsafeWindow : window).__hearthOnlineFix = { openPage, pageDiag: () => (PG ? console.table({ 'steam app': PG.app, 'store answered': PG.storeDone, 'store ok': !!PG.store, 'steam media items': PG.store ? PG.store.media.length : '-', 'steam trailers (streams)': PG.store ? PG.store.media.filter(m => m.stream).length : '-', 'dash.js loaded': typeof dashjs !== 'undefined', 'about blocks': PG.store ? PG.store.blocks.length : '-', 'images / clips in about': PG.store ? PG.store.blocks.filter(b => b.img || b.vid).length : '-', 'site media items': (PG.vm.siteMedia || []).length, 'store error': storeWhy[PG.app] || '' }) : console.log('no game page is open')), storeInfo, commentsOf, catmap: () => Object.fromEntries(catSeen.v.map(([slug, ids]) => [slug, ids.length])), linkDiag: () => linkLog.slice(), kitDiag: () => { let css = ''; try { css = GM_getResourceText('hearthCss') || ''; } catch (e) { /* none */ } const d = { 'kit version loaded (hearth-ui.js)': (typeof HearthUI !== 'undefined' && HearthUI.version) || '?', 'game page in the script bundle': !!FEAT.page, 'game page rules in hearth.css': css.includes('.dp-pgb') }; console.table(d); return d; }, sgdbDiag: () => console.table(sgdbLog), netDiag: () => console.table(netLog), build, raw, lists, ids, meta, parse: { playersOf, steamLinkOf, pageMedia, localTr, versionOf, parseUpdate, plainUpdate, modesOf, parseStory, buildStory, parseProfile, profileLinks, readChrome, site }, misses: () => console.table(artMisses), trDiag: () => { console.table(trLog); return trLog; }, sid, links, flush: flushStore, story: async id => { const r = raw.get(String(id)); const doc = await getDoc(r.url); return { parsed: buildStory(doc, r.url), patch: await resolveDetail({ id: String(id), description: '' }) }; }, steam: () => console.table([...raw.values()].map(r => ({ game: r.title, appId: appOf(r) || (known(r) ? '— none —' : 'pending'), hero: !!(meta[appOf(r)] && meta[appOf(r)].hero) }))) };
 })();

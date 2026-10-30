@@ -53,7 +53,7 @@ hearth-kit/
 │  └─ hearth-data.schema.json JSON Schema for the contract
 ├─ mockup/index.html          standalone demo: dist + sample.json (open the file directly)
 ├─ userscripts/
-│  ├─ online-fix.user.js      THE REAL ADAPTATION (v0.11.15, ~1,660 lines): see docs/08-12
+│  ├─ online-fix.user.js      THE REAL ADAPTATION (v0.11.16, ~1,640 lines): see docs/08-12
 │  ├─ example-fixture.user.js WORKING minimal example against fixtures/example-site
 │  ├─ template.user.js        skeleton with TODOs for a new site
 │  └─ site_skeleton.user.js   run on ANY page (Alt+Shift+S): dumps its structure/tokens as Markdown/JSON for the agent

@@ -30,7 +30,7 @@ Versions 0.6 → 0.11.15 of the script, and kit patches 7-19, were mostly about 
 
 | Key | Content | Lifetime / cap |
 |---|---|---|
-| `hf3:snap` | cached `home` / `extra` / `upd` list sections `{…, t}` | used at any age; refreshed silently after 20 min |
+| `hf3:snap` | cached `home` / `upd` list sections `{…, t}` | used at any age; refreshed silently after 20 min |
 | `hf4:ids` | normalised title → Steam app id | no expiry |
 | `hf4:miss` | normalised title → time of last failed title search | 3 days |
 | `hf5:meta` | app id → `{poster, hero, logo, header, desc, dev, year}` or `0` | no expiry |
@@ -43,7 +43,7 @@ Versions 0.6 → 0.11.15 of the script, and kit patches 7-19, were mostly about 
 | `hf3:saved` | saved game ids (Library) | until cleared |
 | `hf:sgdbKey` | SteamGridDB API key | until changed |
 | `hf:sgdbLogos2` | game/app → `{u: logo url, t}` | hits 365 d, misses 3 d |
-| `hf9:pmiss`, `hf9:media` | **legacy**: declared and persisted, never read | — |
+| `hf9:pmiss`, `hf9:media`, and `extra` inside `hf3:snap` | **orphaned** by v0.11.16 (no longer read or written); harmless leftovers in storage | — |
 
 **Changing what a cached value means** (adding a field to a store, fixing a parser that produced bad cached data): bump `STORE_SHAPE` / `STORY_V` or use a new key (`hf9:links` → `hf9:links2`, `hf:sgdbLogos` → `hf:sgdbLogos2`). Otherwise users keep the old shape until it expires (this hid Steam trailers for 24 h in 0.10.7).
 
