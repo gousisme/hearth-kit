@@ -87,8 +87,11 @@ export function initGrid(root, D, route, savedIds, art, loadMore) {
       else if (!done) {
         const clear = skeletons(6); let got = false;
         try { got = await loadMore({ view: route.view, filter: { ...f } }); } catch (e) { console.error('[hearth] loadMore failed', e); }
-        clear(); if (dead) return;
-        if (Array.isArray(got) && got.length) { addGames(D, got); setCount(); } else { done = true; setCount(); }
+        if (dead) { clear(); return; }
+        // The skeletons go in the SAME synchronous step that appends the new cards: removing them first and adding the cards on the next step left the page shorter for a moment, and a reader
+        // who had scrolled to the bottom was pushed up (the browser clamps the scroll position) every time a page that was not cached finished loading.
+        if (Array.isArray(got) && got.length) { addGames(D, got); setCount(); const p2 = pending(); if (p2.length) add(p2.slice(0, GRID_CHUNK)); clear(); }
+        else { clear(); done = true; setCount(); }
       }
     } finally { busy = false; }
     if (dead) return;
