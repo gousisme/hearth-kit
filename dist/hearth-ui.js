@@ -1340,6 +1340,10 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
    *  categories were still empty is not kept for good (its walls stayed blank). */
   const pickSigOf = () => { const n = {}; D.games.forEach(g => (g.categories || []).forEach(c => { n[c] = (n[c] || 0) + 1; })); return D.categories.map(c => c.id + ':' + Math.min(n[c.id] || 0, 6)).join('|') + '|' + Math.min(D.games.length, 6); };
   /** The picker only (no page repaint, no scroll reset, the grid untouched): rebuilt in place when the games it is made from changed. */
+  /** Rebuilding the picker is not urgent: several quiet add()s are merged into one rebuild, which waits for an idle moment (a rebuild lands as a layout + a few image registrations,
+   *  and the games usually arrive while the reader has just opened Browse). */
+  let pickT = 0;
+  const pickLater = ms => { if (pickT) return; pickT = setTimeout(() => { pickT = 0; typeof requestIdleCallback === 'function' ? requestIdleCallback(refreshPicker, { timeout: 1500 }) : refreshPicker(); }, ms || 120); };
   function refreshPicker() {
     if (destroyed || live !== 'browse' || route.view !== 'browse' || !pickKeep || !pickKeep.isConnected) return;
     const sig = pickSigOf(); if (sig === pickSig) return;
@@ -1771,13 +1775,13 @@ function mount({ target = document.body, data, css = null, shadow, options = {} 
     /** Add games to the running app without a full re-render (e.g. search results). Existing games only gain new search tags. */
     add(list, o) {
       const { added, merged } = addGames(D, list), changed = added.length || merged; if (changed) stale = true;
-      if (o && o.quiet) { if (changed) swapping ? setTimeout(refreshPicker, 450) : refreshPicker(); return Promise.resolve(); }     // quiet: never repaints the page (so never resets the grid); only the Browse picker updates itself
+      if (o && o.quiet) { if (changed) pickLater(swapping ? 450 : 120); return Promise.resolve(); }     // quiet: never repaints the page (so never resets the grid); only the Browse picker updates itself
       return changed && route.view === 'browse' ? refresh(true) : Promise.resolve();
     },
     navigate(view, filter) { return go(view, filter); },
     open: openGame, close: closeGame,
     getRoute: () => ({ view: route.view, filter: { ...route.filter } }),
-    destroy() { destroyed = true; pickKeep = null; stopGenres && stopGenres(); indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); stopDefer(); homeKeep && dropHome(homeKeep); document.removeEventListener('keydown', onKey); host.remove(); },
+    destroy() { destroyed = true; clearTimeout(pickT); pickKeep = null; stopGenres && stopGenres(); indRO && indRO.disconnect(); art.destroy(); heroCtl && heroCtl.destroy(); stopReveal && stopReveal(); stopShelves && stopShelves(); stopGrid && stopGrid(); stopDefer(); homeKeep && dropHome(homeKeep); document.removeEventListener('keydown', onKey); host.remove(); },
   };
 }
 
