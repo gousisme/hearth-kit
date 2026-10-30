@@ -77,6 +77,8 @@
               },
               "sort": {
                 "enum": [
+                  "updated",
+                  "release",
                   "new",
                   "title"
                 ]
@@ -197,6 +199,8 @@
               },
               "sort": {
                 "enum": [
+                  "updated",
+                  "release",
                   "new",
                   "title"
                 ]
@@ -252,6 +256,9 @@
               "header": {
                 "type": "string",
                 "format": "uri"
+              },
+              "fallback": {
+                "type": "string"
               }
             }
           },
@@ -328,6 +335,164 @@
           "sourceUrl": {
             "type": "string",
             "pattern": "^https?://"
+          },
+          "ranks": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 0
+            },
+            "description": "Positions in lists the site orders: feed, 'cat:<id>', upd. Lower = earlier."
+          },
+          "addedAt": {
+            "type": "number",
+            "minimum": 0,
+            "description": "ms since epoch; site publish date"
+          },
+          "updatedAt": {
+            "type": "number",
+            "minimum": 0,
+            "description": "ms; last site update (0 = never)"
+          },
+          "releasedAt": {
+            "type": "number",
+            "minimum": 0,
+            "description": "ms; the game's own release date"
+          },
+          "steamUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "media": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "enum": [
+                    "image",
+                    "video",
+                    "embed"
+                  ]
+                },
+                "thumb": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "src": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "src": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "type": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "stream": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "DASH .mpd; needs dash.js on the page"
+                },
+                "page": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "title": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "downloads": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "label",
+                "href"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "href": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "hint": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "password": {
+            "type": "string"
+          },
+          "guide": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "update": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "closed": {
+                "type": "boolean"
+              }
+            }
+          },
+          "facts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "label",
+                "value"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "additionalProperties": true

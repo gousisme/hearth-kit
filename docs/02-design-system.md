@@ -56,3 +56,18 @@ Every image slot is a **skeleton** (a quiet sheen that only runs while the slot 
 
 ## Isolation
 The UI renders in a **Shadow DOM** when `css` is passed to `mount()` (the userscript path), so the original site's CSS cannot affect it and ours cannot leak. Resets use `:where()` (zero specificity) so any component rule beats them. Fonts are the exception: `@font-face` does not work in a shadow root, so glue injects them into the main document.
+
+## Components added since 0.1
+
+| Component | Notes |
+|---|---|
+| **Category tiles** (`genres.js`, `55-genres.css`) | Steam-style "Browse by category": a tilted 3D wall of 3 rows × 4 bricks made of the category's games under a hue tint (stable hue per category id), name in a pill. Filled from the centre outwards, looping when games are few; bricks are built only when the tile nears the visible strip. The Browse page uses the same strip as its category picker (plus an "All" tile). |
+| **Sort control** (`browse.js`) | Button next to the title and count: Default / Recently updated / Release date. |
+| **Full game page** (`page.js`, `66-page.css`) | Gallery, About with Read more/less, side panel, rating card, reviews, comments, pager. See [10](10-game-page.md). |
+| **Rating card** | Flat tinted tier per Steam verdict (lime/amber/red); sparkles for overwhelmingly positive, rising embers for overwhelmingly negative. No glow. |
+| **Media viewer / streams** (`media.js`, `stream.js`) | Strip fades at both ends, fading viewer, DASH trailers with poster fallback. |
+| **Account sheet** (`profile.js`) | Opened by the avatar; filled by `resolveProfile`. |
+| **Loading splash** (`glue/splash.js`) | On-brand screen in its own shadow root until the first paint. |
+| **Mark + avatar dock** | When the page scrolls, the site mark and avatar slide in beside the nav pill (spring) and slide back at the top. |
+
+Per-site accent: pass `theme: { ac, ink }` (the Online-Fix script uses `#1ea7e0` / `#04141c`). Keep one accent.

@@ -12,13 +12,13 @@
 // @connect      cdn.cloudflare.steamstatic.com              // only if gmImages: true
 // @connect      fonts.googleapis.com
 // @connect      fonts.gstatic.com
-// @require      https://cdn.jsdelivr.net/gh/<GITHUB-USER>/hearth-kit@v0.1.0/dist/hearth-ui.js
-// @require      https://cdn.jsdelivr.net/gh/<GITHUB-USER>/hearth-kit@v0.1.0/dist/hearth-scrape.js
-// @require      https://cdn.jsdelivr.net/gh/<GITHUB-USER>/hearth-kit@v0.1.0/dist/hearth-glue.js
-// @resource     hearthCss https://cdn.jsdelivr.net/gh/<GITHUB-USER>/hearth-kit@v0.1.0/dist/hearth.css
+// @require      https://cdn.jsdelivr.net/gh/<GITHUB-USER>/hearth-kit@<KIT-COMMIT-SHA>/dist/hearth-ui.js
+// @require      https://cdn.jsdelivr.net/gh/<GITHUB-USER>/hearth-kit@<KIT-COMMIT-SHA>/dist/hearth-scrape.js
+// @require      https://cdn.jsdelivr.net/gh/<GITHUB-USER>/hearth-kit@<KIT-COMMIT-SHA>/dist/hearth-glue.js
+// @resource     hearthCss https://cdn.jsdelivr.net/gh/<GITHUB-USER>/hearth-kit@<KIT-COMMIT-SHA>/dist/hearth.css
 // ==/UserScript==
 //
-// Pin the @v0.1.0 tag (never @main): Tampermonkey caches @require/@resource by URL.
+// Pin the full kit COMMIT SHA (git rev-parse HEAD; this repo has no tags; never @main): Tampermonkey caches @require/@resource by URL.
 // For local development use http://localhost:5173/repo/dist/... (npm run serve) instead of jsDelivr.
 
 (function () {

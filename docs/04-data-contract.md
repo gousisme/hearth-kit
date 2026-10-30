@@ -8,7 +8,7 @@ This is **the** interface between a scraper and the UI. A scraper only has to re
 
 **Only `games` is required, and per game only `id` and `title`.** Everything else is optional and derived or omitted gracefully: no hero → the first 5 games with art; no categories → the most common genres; no shelves → "All games" plus genre shelves; no description → the About section disappears. Start with `games`, then add richness.
 
-**No prices.** Every game is free. There is deliberately no price, discount or cart field. Do not add one.
+**No prices.** Every game is free. There is deliberately no price, discount or cart field. Do not add one. *(Note: the Online-Fix userscript's full page currently shows a Steam "Price" fact row, a script-side decision outside the contract; see AGENTS.md "Known issues and open decisions".)*
 
 ## Top level
 
@@ -34,7 +34,7 @@ This is **the** interface between a scraper and the UI. A scraper only has to re
 | `featured` | none. 1–3 editorial tiles. `image`: `"hero"`/`"poster"`; `size`: `"wide"`/`"narrow"` (first defaults wide). |
 | `shelves` | "All games" + up to 3 category shelves with ≥ 4 games. `style`: `"poster"` or `"ranked"` (max 10). `filter` is where "See all" goes (omit → no See all). |
 
-**Browse filter** (used by `nav[].filter`, `shelves[].filter`, `app.navigate`): `{ category?: id, query?: string, sort?: "new"\|"title", saved?: true }`.
+**Browse filter** (used by `nav[].filter`, `shelves[].filter`, `app.navigate`): `{ category?: id, query?: string, sort?: "updated"\|"release"\|"new"\|"title", saved?: true }`. The Sort button offers **Default / Recently updated / Release date** (`SORTS` in `components/browse.js`); `"new"` (by `addedAt`) and `"title"` are still honoured when passed in a filter but have no button. How each sort orders games, and how `ranks` override the plain rules, is in "`ranks`" below.
 
 ## Game
 
@@ -50,7 +50,10 @@ This is **the** interface between a scraper and the UI. A scraper only has to re
   "categories": ["open-world", "souls-like", "action"],   // category ids; default = slug(genres)
   "developer": "FromSoftware",  "publisher": "",
   "releaseYear": 2022,
-  "ranks": { "feed": 3, "cat:racing": 1007, "upd": 12 },
+  "ranks": { "feed": 3, "cat:racing": 1007, "upd": 12 },   // positions in lists the SITE orders (see "ranks" below)
+  "addedAt": 1761000000000,            // ms since epoch, 0/omitted = unknown. When the site published it ("New" sort fallback)
+  "updatedAt": 1761300000000,          // ms. When the site last updated it (0 = never). "Recently updated" sort fallback
+  "releasedAt": 1760400000000,         // ms. The game's OWN release date (not the year). "Release date" sort; undated games sort last
   "size": "60 GB",                     // display string, already formatted
   "rating": "Very Positive",           // display string
   "requirements": { "minimum": { "OS": "Windows 10", "RAM": "8 GB" }, "recommended": { } },   // free-form key → value
@@ -58,7 +61,7 @@ This is **the** interface between a scraper and the UI. A scraper only has to re
   "similarIds": ["bg3"],               // optional; otherwise computed from shared genres
   "downloadUrl": "https://…",          // absolute http(s). What "Get" opens (new tab) unless options.onGet handles it
   "sourceUrl": "https://…",            // the game's page on the original site
-  "art.fallback": "https://…"          // optional last-resort image (e.g. the site's own thumbnail), tried after Steam; never used for logos
+  "art.fallback": "https://…"          // shorthand for art: { fallback }: optional last-resort image (e.g. the site's own thumbnail), tried after Steam; never used for logos
 }
 ```
 
@@ -79,7 +82,7 @@ Given an app id, artwork URLs are built from Steam's CDN. `HearthUI.steam` expos
 
 **Fallback chain per slot** (`candidates()` in `core/art.js`): `art.<slot>` override → Steam URL → (hero only) header → `art.fallback`. While loading the slot is a skeleton; if everything fails it is a flat tile (posters show the title). Logos never show a skeleton: a logo slot starts as the game's title in plain text and is swapped for the image if and when one loads (if none does, the text stays). Optional `options.resolveArt(game)` lets the userscript find Steam ids / art lazily, per card, right before its image loads. A failed image never breaks layout.
 
-**Caveats (verify against the real CDN during development):** Steam has been moving some apps' library assets to hashed sub-paths, so the plain URL above may 404 for certain (typically newer) apps. The fallback chain hides this, but for such a game set `art.poster/hero/logo` explicitly if the site provides art or you can resolve the real URLs. Also, a host page's CSP may block the Steam CDN; see [07-gotchas.md](07-gotchas.md).
+**Caveats (verify against the real CDN during development):** Steam has been moving some apps' library assets to hashed sub-paths, so the plain URL above may 404 for certain (typically newer) apps. The fallback chain hides this, but for such a game set `art.poster/hero/logo` explicitly. **The Online-Fix script does exactly that for every game**: it asks Steam's `IStoreBrowseService/GetItems` for the real asset filenames, in batches, and passes them as `art.*` ([docs/09 §3](09-steam-integration.md)). Copy that approach for any Steam-art site; the plain URLs then only matter as a last resort. A logo that no Steam URL provides can come from `options.resolveLogo` (SteamGridDB in the reference script). Also, a host page's CSP may block the Steam CDN; see [07-gotchas.md](07-gotchas.md).
 
 
 ## Rich detail (optional)
@@ -90,22 +93,24 @@ All optional; usually supplied lazily through `options.resolveDetail(game)` so t
 "downloads": [{ "label": "Online-Fix Hosters", "href": "https://…", "kind": "hosters|drive|fix|torrent", "hint": "Game + fix · direct download" }],
 "password": "online-fix.me",                       // shown under the download list with a Copy button
 "guide": [{ "title": "Join a game", "steps": ["Open the lobby list", "Enter your friend's code"] }],   // "How to connect"
-"update": { "date": "17 Sep 2026, 18:27", "version": "1.5.1.2608", "text": "Game updated to version 1.5.1.2608" },
+"update": { "date": "17 Sep 2026, 18:27", "version": "1.5.1.2608", "text": "Game updated to version 1.5.1.2608", "closed": false },   // closed:true = the guide is closed: red "Guide closed" label on the card, red block in the sheet; version may also be "Build 16102"
 "facts": [{ "label": "Released", "value": "4 Aug 2026" }]  // replaces the base fact with the same label, others are appended
 ```
 With 2+ `downloads` the Get button in the sheet unfolds them directly beneath itself (one card); with one it opens it; with none it falls back to `options.onGet` / `downloadUrl`.
 
-### Media, Steam link, late art (optional, v0.4)
+### Media, Steam link, late art (optional, v0.4; streams v0.5)
 
 ```jsonc
 "steamUrl": "https://store.steampowered.com/app/2054970/",   // when set, the sheet shows an "Open Steam" button next to "Save"
 "media": [                                                    // the strip under the sheet header (max 16); click opens a viewer (←/→/Esc)
   { "type": "video", "thumb": "https://…jpg", "sources": [{ "src": "https://…mp4", "type": "video/mp4" }], "title": "Launch trailer" },
   { "type": "embed", "thumb": "https://i.ytimg.com/vi/ID/hqdefault.jpg", "src": "https://www.youtube-nocookie.com/embed/ID" },
-  { "type": "image", "thumb": "https://…600x338.jpg", "src": "https://…1920x1080.jpg" }
+  { "type": "image", "thumb": "https://…600x338.jpg", "src": "https://…1920x1080.jpg" },
+  { "type": "video", "thumb": "https://…jpg", "stream": "https://…/dash_h264.mpd", "page": "https://store.steampowered.com/app/2054970/", "title": "Trailer" }   // a DASH stream
 ]
 ```
-`resolveDetail(game, push)` may call `push(partialPatch)` any number of times (the sheet updates region by region: a region whose HTML did not change keeps its DOM, so nothing that is already on screen is created or loaded a second time; new / changed regions fade in) before returning the final patch. A patch may also carry `steamAppId` and `art{poster,hero,logo,header,fallback}`: they are merged into the game, so a Steam id found late (e.g. from the page's own Steam link) fixes the sheet's hero/logo. Feature flags: `HearthUI.features.media / steamLink / detailPush`.
+**Streams.** Steam no longer serves mp4/webm trailers; they are DASH (`.mpd`). A `video` item with `stream` is drawn as a `<video data-dash>` and attached to **dash.js when the host page has it** (`window.dashjs`, so the userscript must `@require` it; the reference script pins `dashjs@4.7.4`). If dash.js is missing or the stream errors, the slide keeps its poster and shows "This trailer can't play here" plus a "Watch it on Steam" link to `page`. A script should only emit stream items when `typeof dashjs !== 'undefined'`. Used by the full page's gallery and the popup's viewer (`core/stream.js`).
+`resolveDetail(game, push)` may call `push(partialPatch)` any number of times (the sheet updates region by region: a region whose HTML did not change keeps its DOM, so nothing that is already on screen is created or loaded a second time; new / changed regions fade in) before returning the final patch. A patch may also carry any other field the script wants to forward to *its own* code (the reference script's `siteMedia`, the page's own media, is read by the script's full-page painters and ignored by the kit). A patch may also carry `steamAppId` and `art{poster,hero,logo,header,fallback}`: they are merged into the game, so a Steam id found late (e.g. from the page's own Steam link) fixes the sheet's hero/logo. Feature flags: `HearthUI.features.media / steamLink / detailPush`.
 
 
 ### `ranks` (optional): lists the site itself orders
@@ -114,3 +119,7 @@ A scraper whose site already has the right order (an "all games" feed that is ne
 dates. `ranks.feed` is the position in the site's main list, `ranks["cat:<category id>"]` in a category's own list, `ranks.upd` in the "recently updated" list; lower = earlier (a scraper
 typically uses `(page - 1) * 1000 + index`). With `options.loadMore` the Browse grid then shows exactly those lists, in the site's order, and asks `loadMore` for the next page when it runs out
 (the count reads "N+ games" until the site has no more). Sort "Release date" orders those same lists by `releasedAt` (ms, the game's own release date; undated games last). Sort "Recently updated" uses `ranks.upd` (or, without it, `updatedAt` / `addedAt`, both ms timestamps). A game with no rank for a list is not in it.
+
+**Exact rules** (`filterGames` in `core/data.js`; `ranked` = the app was given a `loadMore` hook): with `ranked` and no search word and not the Library, the list is `ranks.feed` ("All games") or `ranks['cat:<id>']` (a category), ordered by that rank, **whatever order the games reached the data in**, and a game appears once the page that lists it has been read. `sort:"updated"` uses `ranks.upd` whenever any game carries it. `sort:"release"` re-orders the same list by `releasedAt` desc (ties by rank). With no rank available the older rules apply: category by membership, `new` by `addedAt`, `updated` by `updatedAt` (never updated: `addedAt`), undated games after dated ones. Cards re-order on screen after a page loads **only** for the release sort. The count reads "N+ games" until `loadMore` reports no more (and never "+" for the fixed "updated" list).
+
+**`loadMore({view, filter}) → Promise<game[] | false>`** (an `options` hook): called when the grid has shown every local game; return the next page of games (with their `ranks`) or `false`/`[]` when there is nothing left. One call at a time per source is the script's job. A category nobody has loaded yet gets a skeleton grid and an immediate `loadMore`.
