@@ -56,6 +56,8 @@ function coerceMedia(v) {
 
 const stamp = v => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.round(n) : 0; };
 
+const ranks = o => { const out = {}; if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) { const n = Number(v); if (Number.isFinite(n) && n >= 0) out[String(k)] = n; } return out; };
+
 function coerceGame(g) {
   const art = g.art && typeof g.art === 'object' ? g.art : {};
   const appId = parseInt(g.steamAppId, 10);
@@ -74,6 +76,7 @@ function coerceGame(g) {
     developer: str(g.developer),
     publisher: str(g.publisher),
     releaseYear: Number.isFinite(year) ? year : null,
+    ranks: ranks(g.ranks),                            // position in a list the SITE orders (feed, a category, updates): { feed: 3, 'cat:racing': 1007, upd: 12 }, lower = earlier. See docs/04-data-contract.md
     addedAt: stamp(g.addedAt),                        // when the site published it (ms since epoch, 0 = unknown): the "New" sort
     updatedAt: stamp(g.updatedAt),                    // when the site last updated it (ms, 0 = never / unknown): the "Recently updated" sort
     size: str(g.size),
@@ -182,15 +185,25 @@ function normalize(raw) {
   return { site, nav, categories, hero, featured, shelves, games, byId };
 }
 
-/** Games matching a browse filter: { category, query, sort: 'new'|'updated'|'title', saved } */
-function filterGames(D, filter = {}, savedIds = new Set()) {
+/**
+ * Games matching a browse filter: { category, query, sort: 'updated'|'new'|'title', saved }.
+ * `ranked` = the app's own site feeds the grid page by page (it has a loadMore hook). Then the plain lists are the SITE's lists, in the site's order:
+ * "all games" = ranks.feed, a category = ranks['cat:<id>'] (a game is shown once the site's page for it has been read, not before), and the order is the rank, whatever order
+ * the games reached the data in. Sort "updated" = ranks.upd (the site's own "recently updated" list) whenever the data carries it. Without ranks the old rules apply
+ * (membership + the data's order; "new" / "updated" by addedAt / updatedAt).
+ */
+function filterGames(D, filter = {}, savedIds = new Set(), { ranked = false } = {}) {
+  const q = (filter.query || '').trim().toLowerCase(), has = k => D.games.some(g => g.ranks && g.ranks[k] != null);
+  let key = '';
+  if (filter.sort === 'updated') key = has('upd') ? 'upd' : '';
+  else if (ranked && !q && !filter.saved) key = filter.category ? 'cat:' + filter.category : 'feed';
   let list = D.games.slice();
-  if (filter.category) list = list.filter(g => g.categories.includes(filter.category));
+  if (filter.category && !key.startsWith('cat:')) list = list.filter(g => g.categories.includes(filter.category));
   if (filter.saved) list = list.filter(g => savedIds.has(g.id));
-  const q = (filter.query || '').trim().toLowerCase();
   if (q) list = list.filter(g => [g.title, g.developer, g.publisher, g.tagline, ...g.genres].join(' ').toLowerCase().includes(q));
-  // New = newest publish date first. Recently updated = latest update (for a game never updated: its publish date) first. Games with no date keep the data's order, after the dated ones.
-  const by = key => { const at = new Map(D.games.map((g, i) => [g.id, i])); list.sort((a, b) => (key(b) > 0) - (key(a) > 0) || key(b) - key(a) || at.get(a.id) - at.get(b.id)); };
+  if (key) { list = list.filter(g => g.ranks && g.ranks[key] != null); list.sort((a, b) => a.ranks[key] - b.ranks[key]); return list; }
+  // no site order available: New = newest publish date first, Recently updated = latest update (a game never updated: its publish date) first; undated games keep the data's order, after the dated ones
+  const by = k => { const at = new Map(D.games.map((g, i) => [g.id, i])); list.sort((a, b) => (k(b) > 0) - (k(a) > 0) || k(b) - k(a) || at.get(a.id) - at.get(b.id)); };
   if (filter.sort === 'new') by(g => g.addedAt || 0);
   else if (filter.sort === 'updated') by(g => g.updatedAt || g.addedAt || 0);
   else if (filter.sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
@@ -216,6 +229,7 @@ function addGames(D, list) {
     if (!ex) { D.games.push(g); D.byId.set(g.id, g); added.push(g); return; }
     const more = g.genres.filter(t => !ex.genres.includes(t));
     if (more.length) { ex.genres.push(...more); merged++; }
+    if (g.ranks) ex.ranks = { ...(ex.ranks || {}), ...g.ranks };                      // list positions are refreshed silently (they only matter to the next grid that is built)
     if (g.addedAt && !ex.addedAt) { ex.addedAt = g.addedAt; merged++; }
     if (g.updatedAt > (ex.updatedAt || 0)) { ex.updatedAt = g.updatedAt; merged++; }
     const cats = g.categories.filter(c => !ex.categories.includes(c));
@@ -1136,7 +1150,7 @@ function profileHtml(u, p, { pending = false } = {}) {
 
 /* ── src/js/ui/components/browse.js ── */
 /** The ways a grid can be ordered (filter.sort). '' = the order the data comes in. */
-const SORTS = [{ id: '', label: 'Default' }, { id: 'new', label: 'New' }, { id: 'updated', label: 'Recently updated' }];
+const SORTS = [{ id: '', label: 'Default' }, { id: 'updated', label: 'Recently updated' }];
 function sortHtml(f) {
   const cur = SORTS.find(o => o.id === (f.sort || '')) || SORTS[0];
   return `<div class="sortbox"><button type="button" class="sortbtn" data-sort-toggle aria-haspopup="menu" aria-expanded="false"><span>Sort</span><b>${esc(cur.label)}</b>${ic(ICON.chev, 14, 2.4)}</button>
@@ -1159,13 +1173,13 @@ function emptyHtml(f, savedIds) {
  */
 function browseHtml(D, route, savedIds, canMore = false, { slot = false } = {}) {   // slot: leave an empty <div class="pick-slot"> for a picker the caller keeps alive (mount.js), instead of building it
   const f = route.filter || {};
-  const list = filterGames(D, f, savedIds);
+  const list = filterGames(D, f, savedIds, { ranked: canMore });
   const cat = D.categories.find(c => c.id === f.category);
   const title = f.query ? `Results for “${f.query}”` : f.saved ? 'Your library' : cat ? cat.label : 'All games';
   const lazy = !list.length && canMore && !f.saved && !f.query;
   return `<div class="browse">
     ${f.saved || !D.categories.length ? '' : slot ? '<div class="pick-slot"></div>' : genresHtml(D, { title: '', max: Infinity, active: f.category || '', all: true })}
-    <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span>${sortHtml(f)}</div>
+    <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length}${canMore && !f.saved && !f.query && f.sort !== 'updated' ? '+' : ''} ${list.length === 1 && !canMore ? 'game' : 'games'}</span>${sortHtml(f)}</div>
     ${list.length
       ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
       : lazy ? '<div class="grid"></div><div class="more" aria-hidden="true"></div>' : emptyHtml(f, savedIds)}
@@ -1183,7 +1197,7 @@ function initGrid(root, D, route, savedIds, art, loadMore) {
   const grid = root.querySelector('.browse .grid'); if (!grid) return () => {};
   const f = route.filter || {}, shown = new Set([...grid.querySelectorAll('.card')].map(c => c.dataset.open)), stops = [];
   let busy = false, done = typeof loadMore !== 'function', dead = false;
-  const list = () => filterGames(D, f, savedIds), pending = () => list().filter(g => !shown.has(g.id));
+  const list = () => filterGames(D, f, savedIds, { ranked: typeof loadMore === 'function' }), pending = () => list().filter(g => !shown.has(g.id));
   let more = root.querySelector('.browse .more');
   if (!more) { more = document.createElement('div'); more.className = 'more'; more.setAttribute('aria-hidden', 'true'); grid.after(more); }
   const add = batch => {
@@ -1198,7 +1212,7 @@ function initGrid(root, D, route, savedIds, art, loadMore) {
     const els = [...tmp.children]; grid.append(...els); return () => els.forEach(e => e.remove());
   };
   const settleEmpty = () => { if (!grid.isConnected || grid.querySelector('.card')) return; grid.insertAdjacentHTML('afterend', emptyHtml(f, savedIds)); grid.remove(); };   // the lazy grid found nothing at all
-  const setCount = () => { const c = root.querySelector('.browse .count'); if (c) { const n = list().length; c.textContent = `${n} ${n === 1 ? 'game' : 'games'}`; } };
+  const setCount = () => { const c = root.querySelector('.browse .count'); if (c) { const n = list().length, more = !done && !f.saved && !f.query && f.sort !== 'updated'; c.textContent = `${n}${more ? '+' : ''} ${n === 1 && !more ? 'game' : 'games'}`; } };   // "N+" while the site may still have more pages
   const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) step(); }, { rootMargin: '700px 0px' }) : null;
   async function step() {
     if (busy || dead) return; busy = true;
@@ -1209,7 +1223,7 @@ function initGrid(root, D, route, savedIds, art, loadMore) {
         const clear = skeletons(6); let got = false;
         try { got = await loadMore({ view: route.view, filter: { ...f } }); } catch (e) { console.error('[hearth] loadMore failed', e); }
         clear(); if (dead) return;
-        if (Array.isArray(got) && got.length) { addGames(D, got); setCount(); } else done = true;
+        if (Array.isArray(got) && got.length) { addGames(D, got); setCount(); } else { done = true; setCount(); }
       }
     } finally { busy = false; }
     if (dead) return;
@@ -1933,7 +1947,7 @@ const moreHtml = (label, busy) => `<button class="dp-ghost" data-k="more" data-l
 /* ── src/js/ui/index.js ── */
 const version = '0.6.0';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true, parts: true, page: true, lazyWalls: true, quietAdd: true, sorts: true, softBrowse: true };
+const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true, parts: true, page: true, lazyWalls: true, quietAdd: true, sorts: true, softBrowse: true, ranks: true };
 
 /** The sheet's own building blocks, for pages a userscript draws next to the sheet (so they look exactly like it and never re-implement it). */
 const parts = { getBox, guideHtml, actsHtml, factsHtml, reqHtml, updHtml, logoSlot, layer, morphInto, swapRegion, ic, icf, ICON, LOGO,

@@ -50,6 +50,7 @@ This is **the** interface between a scraper and the UI. A scraper only has to re
   "categories": ["open-world", "souls-like", "action"],   // category ids; default = slug(genres)
   "developer": "FromSoftware",  "publisher": "",
   "releaseYear": 2022,
+  "ranks": { "feed": 3, "cat:racing": 1007, "upd": 12 },
   "size": "60 GB",                     // display string, already formatted
   "rating": "Very Positive",           // display string
   "requirements": { "minimum": { "OS": "Windows 10", "RAM": "8 GB" }, "recommended": { } },   // free-form key → value
@@ -106,3 +107,10 @@ With 2+ `downloads` the Get button in the sheet unfolds them directly beneath it
 ```
 `resolveDetail(game, push)` may call `push(partialPatch)` any number of times (the sheet updates region by region: a region whose HTML did not change keeps its DOM, so nothing that is already on screen is created or loaded a second time; new / changed regions fade in) before returning the final patch. A patch may also carry `steamAppId` and `art{poster,hero,logo,header,fallback}`: they are merged into the game, so a Steam id found late (e.g. from the page's own Steam link) fixes the sheet's hero/logo. Feature flags: `HearthUI.features.media / steamLink / detailPush`.
 
+
+### `ranks` (optional): lists the site itself orders
+
+A scraper whose site already has the right order (an "all games" feed that is newest-first, a page per category, a "recently updated" page) can pass each game's position in those lists instead of
+dates. `ranks.feed` is the position in the site's main list, `ranks["cat:<category id>"]` in a category's own list, `ranks.upd` in the "recently updated" list; lower = earlier (a scraper
+typically uses `(page - 1) * 1000 + index`). With `options.loadMore` the Browse grid then shows exactly those lists, in the site's order, and asks `loadMore` for the next page when it runs out
+(the count reads "N+ games" until the site has no more). Sort "Recently updated" uses `ranks.upd` (or, without it, `updatedAt` / `addedAt`, both ms timestamps). A game with no rank for a list is not in it.

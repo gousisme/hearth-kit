@@ -78,6 +78,8 @@ function coerceMedia(v) {
 
 const stamp = v => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.round(n) : 0; };
 
+const ranks = o => { const out = {}; if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) { const n = Number(v); if (Number.isFinite(n) && n >= 0) out[String(k)] = n; } return out; };
+
 function coerceGame(g) {
   const art = g.art && typeof g.art === 'object' ? g.art : {};
   const appId = parseInt(g.steamAppId, 10);
@@ -96,6 +98,7 @@ function coerceGame(g) {
     developer: str(g.developer),
     publisher: str(g.publisher),
     releaseYear: Number.isFinite(year) ? year : null,
+    ranks: ranks(g.ranks),                            // position in a list the SITE orders (feed, a category, updates): { feed: 3, 'cat:racing': 1007, upd: 12 }, lower = earlier. See docs/04-data-contract.md
     addedAt: stamp(g.addedAt),                        // when the site published it (ms since epoch, 0 = unknown): the "New" sort
     updatedAt: stamp(g.updatedAt),                    // when the site last updated it (ms, 0 = never / unknown): the "Recently updated" sort
     size: str(g.size),

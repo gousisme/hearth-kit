@@ -6,7 +6,7 @@ import { reveal } from '../core/motion.js';
 import { ic, ICON } from '../core/icons.js';
 
 /** The ways a grid can be ordered (filter.sort). '' = the order the data comes in. */
-export const SORTS = [{ id: '', label: 'Default' }, { id: 'new', label: 'New' }, { id: 'updated', label: 'Recently updated' }];
+export const SORTS = [{ id: '', label: 'Default' }, { id: 'updated', label: 'Recently updated' }];
 export function sortHtml(f) {
   const cur = SORTS.find(o => o.id === (f.sort || '')) || SORTS[0];
   return `<div class="sortbox"><button type="button" class="sortbtn" data-sort-toggle aria-haspopup="menu" aria-expanded="false"><span>Sort</span><b>${esc(cur.label)}</b>${ic(ICON.chev, 14, 2.4)}</button>
@@ -29,13 +29,13 @@ export function emptyHtml(f, savedIds) {
  */
 export function browseHtml(D, route, savedIds, canMore = false, { slot = false } = {}) {   // slot: leave an empty <div class="pick-slot"> for a picker the caller keeps alive (mount.js), instead of building it
   const f = route.filter || {};
-  const list = filterGames(D, f, savedIds);
+  const list = filterGames(D, f, savedIds, { ranked: canMore });
   const cat = D.categories.find(c => c.id === f.category);
   const title = f.query ? `Results for “${f.query}”` : f.saved ? 'Your library' : cat ? cat.label : 'All games';
   const lazy = !list.length && canMore && !f.saved && !f.query;
   return `<div class="browse">
     ${f.saved || !D.categories.length ? '' : slot ? '<div class="pick-slot"></div>' : genresHtml(D, { title: '', max: Infinity, active: f.category || '', all: true })}
-    <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length} ${list.length === 1 ? 'game' : 'games'}</span>${sortHtml(f)}</div>
+    <div class="bh"><h1>${esc(title)}</h1><span class="count">${list.length}${canMore && !f.saved && !f.query && f.sort !== 'updated' ? '+' : ''} ${list.length === 1 && !canMore ? 'game' : 'games'}</span>${sortHtml(f)}</div>
     ${list.length
       ? `<div class="grid">${list.slice(0, GRID_CHUNK).map(g => card(g)).join('')}</div>${list.length > GRID_CHUNK ? '<div class="more" aria-hidden="true"></div>' : ''}`
       : lazy ? '<div class="grid"></div><div class="more" aria-hidden="true"></div>' : emptyHtml(f, savedIds)}
@@ -53,7 +53,7 @@ export function initGrid(root, D, route, savedIds, art, loadMore) {
   const grid = root.querySelector('.browse .grid'); if (!grid) return () => {};
   const f = route.filter || {}, shown = new Set([...grid.querySelectorAll('.card')].map(c => c.dataset.open)), stops = [];
   let busy = false, done = typeof loadMore !== 'function', dead = false;
-  const list = () => filterGames(D, f, savedIds), pending = () => list().filter(g => !shown.has(g.id));
+  const list = () => filterGames(D, f, savedIds, { ranked: typeof loadMore === 'function' }), pending = () => list().filter(g => !shown.has(g.id));
   let more = root.querySelector('.browse .more');
   if (!more) { more = document.createElement('div'); more.className = 'more'; more.setAttribute('aria-hidden', 'true'); grid.after(more); }
   const add = batch => {
@@ -68,7 +68,7 @@ export function initGrid(root, D, route, savedIds, art, loadMore) {
     const els = [...tmp.children]; grid.append(...els); return () => els.forEach(e => e.remove());
   };
   const settleEmpty = () => { if (!grid.isConnected || grid.querySelector('.card')) return; grid.insertAdjacentHTML('afterend', emptyHtml(f, savedIds)); grid.remove(); };   // the lazy grid found nothing at all
-  const setCount = () => { const c = root.querySelector('.browse .count'); if (c) { const n = list().length; c.textContent = `${n} ${n === 1 ? 'game' : 'games'}`; } };
+  const setCount = () => { const c = root.querySelector('.browse .count'); if (c) { const n = list().length, more = !done && !f.saved && !f.query && f.sort !== 'updated'; c.textContent = `${n}${more ? '+' : ''} ${n === 1 && !more ? 'game' : 'games'}`; } };   // "N+" while the site may still have more pages
   const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) step(); }, { rootMargin: '700px 0px' }) : null;
   async function step() {
     if (busy || dead) return; busy = true;
@@ -79,7 +79,7 @@ export function initGrid(root, D, route, savedIds, art, loadMore) {
         const clear = skeletons(6); let got = false;
         try { got = await loadMore({ view: route.view, filter: { ...f } }); } catch (e) { console.error('[hearth] loadMore failed', e); }
         clear(); if (dead) return;
-        if (Array.isArray(got) && got.length) { addGames(D, got); setCount(); } else done = true;
+        if (Array.isArray(got) && got.length) { addGames(D, got); setCount(); } else { done = true; setCount(); }
       }
     } finally { busy = false; }
     if (dead) return;

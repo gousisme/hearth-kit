@@ -52,15 +52,25 @@ export function normalize(raw) {
   return { site, nav, categories, hero, featured, shelves, games, byId };
 }
 
-/** Games matching a browse filter: { category, query, sort: 'new'|'updated'|'title', saved } */
-export function filterGames(D, filter = {}, savedIds = new Set()) {
+/**
+ * Games matching a browse filter: { category, query, sort: 'updated'|'new'|'title', saved }.
+ * `ranked` = the app's own site feeds the grid page by page (it has a loadMore hook). Then the plain lists are the SITE's lists, in the site's order:
+ * "all games" = ranks.feed, a category = ranks['cat:<id>'] (a game is shown once the site's page for it has been read, not before), and the order is the rank, whatever order
+ * the games reached the data in. Sort "updated" = ranks.upd (the site's own "recently updated" list) whenever the data carries it. Without ranks the old rules apply
+ * (membership + the data's order; "new" / "updated" by addedAt / updatedAt).
+ */
+export function filterGames(D, filter = {}, savedIds = new Set(), { ranked = false } = {}) {
+  const q = (filter.query || '').trim().toLowerCase(), has = k => D.games.some(g => g.ranks && g.ranks[k] != null);
+  let key = '';
+  if (filter.sort === 'updated') key = has('upd') ? 'upd' : '';
+  else if (ranked && !q && !filter.saved) key = filter.category ? 'cat:' + filter.category : 'feed';
   let list = D.games.slice();
-  if (filter.category) list = list.filter(g => g.categories.includes(filter.category));
+  if (filter.category && !key.startsWith('cat:')) list = list.filter(g => g.categories.includes(filter.category));
   if (filter.saved) list = list.filter(g => savedIds.has(g.id));
-  const q = (filter.query || '').trim().toLowerCase();
   if (q) list = list.filter(g => [g.title, g.developer, g.publisher, g.tagline, ...g.genres].join(' ').toLowerCase().includes(q));
-  // New = newest publish date first. Recently updated = latest update (for a game never updated: its publish date) first. Games with no date keep the data's order, after the dated ones.
-  const by = key => { const at = new Map(D.games.map((g, i) => [g.id, i])); list.sort((a, b) => (key(b) > 0) - (key(a) > 0) || key(b) - key(a) || at.get(a.id) - at.get(b.id)); };
+  if (key) { list = list.filter(g => g.ranks && g.ranks[key] != null); list.sort((a, b) => a.ranks[key] - b.ranks[key]); return list; }
+  // no site order available: New = newest publish date first, Recently updated = latest update (a game never updated: its publish date) first; undated games keep the data's order, after the dated ones
+  const by = k => { const at = new Map(D.games.map((g, i) => [g.id, i])); list.sort((a, b) => (k(b) > 0) - (k(a) > 0) || k(b) - k(a) || at.get(a.id) - at.get(b.id)); };
   if (filter.sort === 'new') by(g => g.addedAt || 0);
   else if (filter.sort === 'updated') by(g => g.updatedAt || g.addedAt || 0);
   else if (filter.sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
@@ -86,6 +96,7 @@ export function addGames(D, list) {
     if (!ex) { D.games.push(g); D.byId.set(g.id, g); added.push(g); return; }
     const more = g.genres.filter(t => !ex.genres.includes(t));
     if (more.length) { ex.genres.push(...more); merged++; }
+    if (g.ranks) ex.ranks = { ...(ex.ranks || {}), ...g.ranks };                      // list positions are refreshed silently (they only matter to the next grid that is built)
     if (g.addedAt && !ex.addedAt) { ex.addedAt = g.addedAt; merged++; }
     if (g.updatedAt > (ex.updatedAt || 0)) { ex.updatedAt = g.updatedAt; merged++; }
     const cats = g.categories.filter(c => !ex.categories.includes(c));
