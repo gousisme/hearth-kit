@@ -53,7 +53,7 @@ export function normalize(raw) {
 }
 
 /**
- * Games matching a browse filter: { category, query, sort: 'updated'|'new'|'title', saved }.
+ * Games matching a browse filter: { category, query, sort: 'updated'|'release'|'new'|'title', saved }.
  * `ranked` = the app's own site feeds the grid page by page (it has a loadMore hook). Then the plain lists are the SITE's lists, in the site's order:
  * "all games" = ranks.feed, a category = ranks['cat:<id>'] (a game is shown once the site's page for it has been read, not before), and the order is the rank, whatever order
  * the games reached the data in. Sort "updated" = ranks.upd (the site's own "recently updated" list) whenever the data carries it. Without ranks the old rules apply
@@ -68,11 +68,17 @@ export function filterGames(D, filter = {}, savedIds = new Set(), { ranked = fal
   if (filter.category && !key.startsWith('cat:')) list = list.filter(g => g.categories.includes(filter.category));
   if (filter.saved) list = list.filter(g => savedIds.has(g.id));
   if (q) list = list.filter(g => [g.title, g.developer, g.publisher, g.tagline, ...g.genres].join(' ').toLowerCase().includes(q));
-  if (key) { list = list.filter(g => g.ranks && g.ranks[key] != null); list.sort((a, b) => a.ranks[key] - b.ranks[key]); return list; }
+  if (key) {
+    list = list.filter(g => g.ranks && g.ranks[key] != null);
+    // "release": the games of that list by their own release date (newest first, undated last), the list's order breaking ties
+    list.sort(filter.sort === 'release' ? (a, b) => (b.releasedAt || 0) - (a.releasedAt || 0) || a.ranks[key] - b.ranks[key] : (a, b) => a.ranks[key] - b.ranks[key]);
+    return list;
+  }
   // no site order available: New = newest publish date first, Recently updated = latest update (a game never updated: its publish date) first; undated games keep the data's order, after the dated ones
   const by = k => { const at = new Map(D.games.map((g, i) => [g.id, i])); list.sort((a, b) => (k(b) > 0) - (k(a) > 0) || k(b) - k(a) || at.get(a.id) - at.get(b.id)); };
   if (filter.sort === 'new') by(g => g.addedAt || 0);
   else if (filter.sort === 'updated') by(g => g.updatedAt || g.addedAt || 0);
+  else if (filter.sort === 'release') by(g => g.releasedAt || 0);
   else if (filter.sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
   return list;
 }

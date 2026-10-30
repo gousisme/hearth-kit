@@ -6,7 +6,7 @@ import { reveal } from '../core/motion.js';
 import { ic, ICON } from '../core/icons.js';
 
 /** The ways a grid can be ordered (filter.sort). '' = the order the data comes in. */
-export const SORTS = [{ id: '', label: 'Default' }, { id: 'updated', label: 'Recently updated' }];
+export const SORTS = [{ id: '', label: 'Default' }, { id: 'updated', label: 'Recently updated' }, { id: 'release', label: 'Release date' }];
 export function sortHtml(f) {
   const cur = SORTS.find(o => o.id === (f.sort || '')) || SORTS[0];
   return `<div class="sortbox"><button type="button" class="sortbtn" data-sort-toggle aria-haspopup="menu" aria-expanded="false"><span>Sort</span><b>${esc(cur.label)}</b>${ic(ICON.chev, 14, 2.4)}</button>
@@ -56,10 +56,17 @@ export function initGrid(root, D, route, savedIds, art, loadMore) {
   const list = () => filterGames(D, f, savedIds, { ranked: typeof loadMore === 'function' }), pending = () => list().filter(g => !shown.has(g.id));
   let more = root.querySelector('.browse .more');
   if (!more) { more = document.createElement('div'); more.className = 'more'; more.setAttribute('aria-hidden', 'true'); grid.after(more); }
+  /** Keep the cards in the list's order: a game that arrives later can belong above ones already shown (a release-date sort, a post the site pinned whose date is far back). Moving a card keeps its image. */
+  const settle = () => {
+    const want = list().filter(g => shown.has(g.id)).map(g => g.id), have = [...grid.querySelectorAll('.card:not(.skc)')];
+    if (want.length === have.length && want.every((id, i) => have[i].dataset.open === id)) return;
+    const by = new Map(have.map(c => [c.dataset.open, c])); want.forEach(id => by.get(id) && grid.append(by.get(id)));
+  };
   const add = batch => {
     const tmp = document.createElement('div');
     tmp.innerHTML = batch.map(g => card(g)).join('');
     const nodes = [...tmp.children]; grid.append(...nodes); batch.forEach(g => shown.add(g.id));
+    settle();
     art.hydrate(grid); stops.push(reveal(grid));                   // observed once attached, so the cascade starts from what is really on screen
   };
   const skeletons = n => {

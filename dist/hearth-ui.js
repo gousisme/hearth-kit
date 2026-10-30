@@ -78,6 +78,7 @@ function coerceGame(g) {
     releaseYear: Number.isFinite(year) ? year : null,
     ranks: ranks(g.ranks),                            // position in a list the SITE orders (feed, a category, updates): { feed: 3, 'cat:racing': 1007, upd: 12 }, lower = earlier. See docs/04-data-contract.md
     addedAt: stamp(g.addedAt),                        // when the site published it (ms since epoch, 0 = unknown): the "New" sort
+    releasedAt: stamp(g.releasedAt),                  // the game's own release date (ms, 0 = unknown): the "Release date" sort
     updatedAt: stamp(g.updatedAt),                    // when the site last updated it (ms, 0 = never / unknown): the "Recently updated" sort
     size: str(g.size),
     rating: str(g.rating),
@@ -186,7 +187,7 @@ function normalize(raw) {
 }
 
 /**
- * Games matching a browse filter: { category, query, sort: 'updated'|'new'|'title', saved }.
+ * Games matching a browse filter: { category, query, sort: 'updated'|'release'|'new'|'title', saved }.
  * `ranked` = the app's own site feeds the grid page by page (it has a loadMore hook). Then the plain lists are the SITE's lists, in the site's order:
  * "all games" = ranks.feed, a category = ranks['cat:<id>'] (a game is shown once the site's page for it has been read, not before), and the order is the rank, whatever order
  * the games reached the data in. Sort "updated" = ranks.upd (the site's own "recently updated" list) whenever the data carries it. Without ranks the old rules apply
@@ -201,11 +202,17 @@ function filterGames(D, filter = {}, savedIds = new Set(), { ranked = false } = 
   if (filter.category && !key.startsWith('cat:')) list = list.filter(g => g.categories.includes(filter.category));
   if (filter.saved) list = list.filter(g => savedIds.has(g.id));
   if (q) list = list.filter(g => [g.title, g.developer, g.publisher, g.tagline, ...g.genres].join(' ').toLowerCase().includes(q));
-  if (key) { list = list.filter(g => g.ranks && g.ranks[key] != null); list.sort((a, b) => a.ranks[key] - b.ranks[key]); return list; }
+  if (key) {
+    list = list.filter(g => g.ranks && g.ranks[key] != null);
+    // "release": the games of that list by their own release date (newest first, undated last), the list's order breaking ties
+    list.sort(filter.sort === 'release' ? (a, b) => (b.releasedAt || 0) - (a.releasedAt || 0) || a.ranks[key] - b.ranks[key] : (a, b) => a.ranks[key] - b.ranks[key]);
+    return list;
+  }
   // no site order available: New = newest publish date first, Recently updated = latest update (a game never updated: its publish date) first; undated games keep the data's order, after the dated ones
   const by = k => { const at = new Map(D.games.map((g, i) => [g.id, i])); list.sort((a, b) => (k(b) > 0) - (k(a) > 0) || k(b) - k(a) || at.get(a.id) - at.get(b.id)); };
   if (filter.sort === 'new') by(g => g.addedAt || 0);
   else if (filter.sort === 'updated') by(g => g.updatedAt || g.addedAt || 0);
+  else if (filter.sort === 'release') by(g => g.releasedAt || 0);
   else if (filter.sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
   return list;
 }
@@ -1150,7 +1157,7 @@ function profileHtml(u, p, { pending = false } = {}) {
 
 /* ── src/js/ui/components/browse.js ── */
 /** The ways a grid can be ordered (filter.sort). '' = the order the data comes in. */
-const SORTS = [{ id: '', label: 'Default' }, { id: 'updated', label: 'Recently updated' }];
+const SORTS = [{ id: '', label: 'Default' }, { id: 'updated', label: 'Recently updated' }, { id: 'release', label: 'Release date' }];
 function sortHtml(f) {
   const cur = SORTS.find(o => o.id === (f.sort || '')) || SORTS[0];
   return `<div class="sortbox"><button type="button" class="sortbtn" data-sort-toggle aria-haspopup="menu" aria-expanded="false"><span>Sort</span><b>${esc(cur.label)}</b>${ic(ICON.chev, 14, 2.4)}</button>
@@ -1200,10 +1207,17 @@ function initGrid(root, D, route, savedIds, art, loadMore) {
   const list = () => filterGames(D, f, savedIds, { ranked: typeof loadMore === 'function' }), pending = () => list().filter(g => !shown.has(g.id));
   let more = root.querySelector('.browse .more');
   if (!more) { more = document.createElement('div'); more.className = 'more'; more.setAttribute('aria-hidden', 'true'); grid.after(more); }
+  /** Keep the cards in the list's order: a game that arrives later can belong above ones already shown (a release-date sort, a post the site pinned whose date is far back). Moving a card keeps its image. */
+  const settle = () => {
+    const want = list().filter(g => shown.has(g.id)).map(g => g.id), have = [...grid.querySelectorAll('.card:not(.skc)')];
+    if (want.length === have.length && want.every((id, i) => have[i].dataset.open === id)) return;
+    const by = new Map(have.map(c => [c.dataset.open, c])); want.forEach(id => by.get(id) && grid.append(by.get(id)));
+  };
   const add = batch => {
     const tmp = document.createElement('div');
     tmp.innerHTML = batch.map(g => card(g)).join('');
     const nodes = [...tmp.children]; grid.append(...nodes); batch.forEach(g => shown.add(g.id));
+    settle();
     art.hydrate(grid); stops.push(reveal(grid));                   // observed once attached, so the cascade starts from what is really on screen
   };
   const skeletons = n => {
@@ -1947,7 +1961,7 @@ const moreHtml = (label, busy) => `<button class="dp-ghost" data-k="more" data-l
 /* ── src/js/ui/index.js ── */
 const version = '0.6.0';
 /** Capability flags, so userscripts can adapt to the kit they were loaded with. */
-const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true, parts: true, page: true, lazyWalls: true, quietAdd: true, sorts: true, softBrowse: true, ranks: true };
+const features = { downloadLoop: true, lazyGrid: true, skeletons: true, loadMore: true, lazyArt: true, addGames: true, noGeneratedArt: true, richDetail: true, profile: true, logoText: true, media: true, steamLink: true, detailPush: true, artDeadline: true, smoothMedia: true, siteLogo: true, sheetMorph: true, parts: true, page: true, lazyWalls: true, quietAdd: true, sorts: true, softBrowse: true, ranks: true, releaseSort: true };
 
 /** The sheet's own building blocks, for pages a userscript draws next to the sheet (so they look exactly like it and never re-implement it). */
 const parts = { getBox, guideHtml, actsHtml, factsHtml, reqHtml, updHtml, logoSlot, layer, morphInto, swapRegion, ic, icf, ICON, LOGO,

@@ -199,6 +199,7 @@ function coerceGame(g) {
     releaseYear: Number.isFinite(year) ? year : null,
     ranks: ranks(g.ranks),                            // position in a list the SITE orders (feed, a category, updates): { feed: 3, 'cat:racing': 1007, upd: 12 }, lower = earlier. See docs/04-data-contract.md
     addedAt: stamp(g.addedAt),                        // when the site published it (ms since epoch, 0 = unknown): the "New" sort
+    releasedAt: stamp(g.releasedAt),                  // the game's own release date (ms, 0 = unknown): the "Release date" sort
     updatedAt: stamp(g.updatedAt),                    // when the site last updated it (ms, 0 = never / unknown): the "Recently updated" sort
     size: str(g.size),
     rating: str(g.rating),
