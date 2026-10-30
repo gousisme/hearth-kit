@@ -56,8 +56,10 @@ export function initGrid(root, D, route, savedIds, art, loadMore) {
   const list = () => filterGames(D, f, savedIds, { ranked: typeof loadMore === 'function' }), pending = () => list().filter(g => !shown.has(g.id));
   let more = root.querySelector('.browse .more');
   if (!more) { more = document.createElement('div'); more.className = 'more'; more.setAttribute('aria-hidden', 'true'); grid.after(more); }
-  /** Keep the cards in the list's order: a game that arrives later can belong above ones already shown (a release-date sort, a post the site pinned whose date is far back). Moving a card keeps its image. */
+  /** Release-date sort only: a game that arrives with a page can belong above ones already shown, so the cards are put back in the list's order (a card that moves keeps its image).
+   *  Every other list keeps what is on screen exactly as it is and only appends. */
   const settle = () => {
+    if (f.sort !== 'release') return;
     const want = list().filter(g => shown.has(g.id)).map(g => g.id), have = [...grid.querySelectorAll('.card:not(.skc)')];
     if (want.length === have.length && want.every((id, i) => have[i].dataset.open === id)) return;
     const by = new Map(have.map(c => [c.dataset.open, c])); want.forEach(id => by.get(id) && grid.append(by.get(id)));
